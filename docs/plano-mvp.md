@@ -1,25 +1,26 @@
 # Estúdio Mágico — plano MVP (resumo)
 
 ## Fases
-1. **Infra** — Next.js, Shadcn, schema SQL ✅ (**aplicado** em `zlzgkivktvnyvehjwcjw`)
-2. **Auth + onboarding** ✅
+1. **Infra** — Next.js, Shadcn, schema SQL ✅ (`zlzgkivktvnyvehjwcjw`)
+2. **Auth + onboarding avatar** ✅ — wizard obrigatório: PIN → filho (12 fotos) → melhor amigo (12 fotos) → preview LoRA → painel
 3. **Dashboards** — tracker, personagens upsell, Kids + PIN ✅
-4. **Gerador** — Nova História (texto/imagens mock 4 páginas) ✅
+4. **Gerador** — Nova História (OpenAI texto + Unsplash) ✅
 5. **Kids reader + Quiz Therapy** ✅
 6. **Share público + persistência real** ✅
-   - `/story/[shareToken]` mobile + CTA fixo
-   - `stories` / `story_images` / `games` / `subscription_limits` (+ template cache)
-   - mock só como fallback se REST falhar
-7. Stripe / LoRA real / IA (futuro)
+7. **Stripe** — código pronto; aguarda `sk_test_/pk_/whsec_` (chave `mk_` = ID, não secret)
+8. LoRA real / pipeline de treino (futuro)
+
+## Feeling
+Login → onboarding de avatar **antes** de qualquer “criar história”. Parent home destaca o avatar da criança.
 
 ## Porta
-`5050` — usar Try Live na VM cloud
+`5050` — Try Live na VM cloud
 
 ## Supabase
 - Projeto: `zlzgkivktvnyvehjwcjw` (nunca Best Piece)
-- Keys + `SUPABASE_ACCESS_TOKEN` em `.env.local` (não commitadas)
-- Schema: 8 tabelas + RLS aplicados
-- Smoke: `node scripts/smoke-persist.mjs`
+- Keys em `.env.local` (não commitadas)
+- Storage bucket `avatars`
+- Smoke: `node scripts/smoke-persist.mjs` · `node scripts/seed-users.mjs`
 
 ## GitHub
-https://github.com/euzimgeral/euzim — branch `cursor/estudio-magico-fase-6-d189`
+https://github.com/euzimgeral/euzim — branch `cursor/estudio-magico-onboarding-avatar-d189`

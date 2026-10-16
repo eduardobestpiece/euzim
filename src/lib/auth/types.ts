@@ -11,20 +11,37 @@ export type AuthUser = {
 
 export type OnboardingChildDraft = {
   displayName: string;
+  /** Idade em anos (MVP) */
+  ageYears?: number;
   birthDate?: string;
+};
+
+export type FriendKind = "pet" | "toy";
+
+export type OnboardingFriendDraft = {
+  kind: FriendKind;
+  displayName: string;
 };
 
 export type OnboardingPhotoDraft = {
   id: string;
+  slotId: string;
   name: string;
-  /** data URL local (mock) ou path futuro no Storage */
+  /** data URL local (preview) */
   previewUrl: string;
   storagePath: string;
+  publicUrl?: string;
 };
 
 export type OnboardingState = {
   securityPin: string;
   child: OnboardingChildDraft | null;
-  photos: OnboardingPhotoDraft[];
+  childPhotos: OnboardingPhotoDraft[];
+  friend: OnboardingFriendDraft | null;
+  friendPhotos: OnboardingPhotoDraft[];
+  childAvatarUrl?: string | null;
+  friendAvatarUrl?: string | null;
+  /** @deprecated legado — preferir childPhotos */
+  photos?: OnboardingPhotoDraft[];
   completed: boolean;
 };

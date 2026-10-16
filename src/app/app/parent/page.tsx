@@ -30,8 +30,14 @@ export default async function ParentPage() {
     };
   }
 
-  let characters: { id: string; name: string; isPrimary?: boolean }[] = [];
+  let characters: {
+    id: string;
+    name: string;
+    isPrimary?: boolean;
+    avatarUrl?: string | null;
+  }[] = [];
   let childName: string | null = null;
+  let childAvatarUrl: string | null = null;
   let billing: BillingSnapshot = {
     subscriptionStatus: "none",
     planId: null,
@@ -53,7 +59,7 @@ export default async function ParentPage() {
     if (db) {
       const { data: chars } = await db
         .from("characters")
-        .select("id, name, is_primary")
+        .select("id, name, is_primary, avatar_url")
         .eq("parent_id", user.id)
         .order("created_at", { ascending: true });
 
@@ -62,17 +68,19 @@ export default async function ParentPage() {
           id: c.id,
           name: c.name,
           isPrimary: Boolean(c.is_primary),
+          avatarUrl: c.avatar_url,
         }));
       }
 
       const { data: children } = await db
         .from("children")
-        .select("display_name")
+        .select("display_name, avatar_url")
         .eq("parent_id", user.id)
         .order("created_at", { ascending: true })
         .limit(1);
 
       childName = children?.[0]?.display_name ?? null;
+      childAvatarUrl = children?.[0]?.avatar_url ?? null;
 
       const { data: profile } = await db
         .from("users")
@@ -112,6 +120,7 @@ export default async function ParentPage() {
         usage={usage}
         characters={characters}
         childName={childName}
+        childAvatarUrl={childAvatarUrl}
         stories={stories}
         billing={billing}
       />

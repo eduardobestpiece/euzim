@@ -11,7 +11,8 @@ import {
   writeMockOnboarding,
   writeMockSession,
 } from "@/lib/auth/mock-session";
-import type { OnboardingPhotoDraft, OnboardingState } from "@/lib/auth/types";
+import type { OnboardingPhotoDraft } from "@/lib/auth/types";
+import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
 
 export type AuthActionResult = {
   error?: string;
@@ -45,7 +46,9 @@ export async function signUpAction(
     await writeMockOnboarding({
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     });
     redirect("/onboarding");
@@ -151,7 +154,9 @@ export async function saveSecurityPinAction(
     const current = (await readMockOnboarding()) ?? {
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     };
     await writeMockOnboarding({ ...current, securityPin: pin });
@@ -193,7 +198,9 @@ export async function saveChildProfileAction(
     const current = (await readMockOnboarding()) ?? {
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     };
     await writeMockOnboarding({
@@ -235,17 +242,24 @@ export async function savePhotosMockAction(
     const current = (await readMockOnboarding()) ?? {
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     };
     // Não persistir data URLs em cookies (limite de tamanho) — só metadados.
-    const lightPhotos = photos.map(({ id, name, storagePath }) => ({
+    const lightPhotos = photos.map(({ id, name, storagePath, slotId }) => ({
       id,
+      slotId: slotId || id,
       name,
       storagePath,
       previewUrl: "",
     }));
-    await writeMockOnboarding({ ...current, photos: lightPhotos });
+    await writeMockOnboarding({
+      ...current,
+      childPhotos: lightPhotos,
+      photos: lightPhotos,
+    });
     return { success: true };
   }
 
@@ -283,41 +297,9 @@ export async function savePhotosMockAction(
   return { success: true };
 }
 
+/** @deprecated Use finishAvatarOnboardingAction — mantido para compat. */
 export async function completeOnboardingAction(): Promise<AuthActionResult> {
-  if (!isSupabaseConfigured()) {
-    const session = await readMockSession();
-    if (!session) return { error: "Sessão expirada." };
-
-    const onboarding = await readMockOnboarding();
-    if (!onboarding?.securityPin) {
-      return { error: "Defina o PIN de segurança." };
-    }
-    if (!onboarding.child?.displayName) {
-      return { error: "Complete o perfil da criança." };
-    }
-    if (!onboarding.photos.length) {
-      return { error: "Adicione fotos para o avatar." };
-    }
-
-    const next: OnboardingState = { ...onboarding, completed: true };
-    await writeMockOnboarding(next);
-    await writeMockSession({ ...session, onboardingCompleted: true });
-    redirect("/app/parent");
-  }
-
-  const supabase = await createClient();
-  if (!supabase) return { error: "Supabase indisponível." };
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const { error } = await supabase
-    .from("users")
-    .update({ onboarding_completed: true })
-    .eq("id", user.id);
-
-  if (error) return { error: error.message };
-  redirect("/app/parent");
+  const result = await finishAvatarOnboardingAction();
+  if (result.error) return { error: result.error };
+  return { success: true };
 }
