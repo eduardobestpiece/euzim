@@ -1,6 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { isAvatarRefreshDue } from "@/lib/onboarding/child-profile";
 
 export type AvatarRefreshStatus = {
   due: boolean;
@@ -10,9 +9,14 @@ export type AvatarRefreshStatus = {
   capturedAt?: string | null;
 };
 
-/** Gate básico: fotos de avatar com mais de ~12 meses. */
+/**
+ * Gate: fotos de avatar com mais de ~12 meses.
+ * `nowMs` deve vir da page DEPOIS de `await connection()` — evita Date.now()
+ * dentro deste módulo (cacheComponents / prerender).
+ */
 export async function getAvatarRefreshStatus(
   parentId: string,
+  nowMs: number,
 ): Promise<AvatarRefreshStatus> {
   const db = createAdminClient() ?? (await createClient());
   if (!db) return { due: false };
@@ -27,8 +31,10 @@ export async function getAvatarRefreshStatus(
 
   if (!data) return { due: false };
 
-  // Agora explícito (cacheComponents / connection()) em vez do default new Date()
-  const due = isAvatarRefreshDue(data.avatar_refresh_due_at, new Date());
+  const dueAt = data.avatar_refresh_due_at as string | null;
+  const dueMs = dueAt ? Date.parse(dueAt) : NaN;
+  const due = Number.isFinite(dueMs) && dueMs <= nowMs;
+
   return {
     due,
     childId: data.id,

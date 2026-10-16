@@ -27,10 +27,6 @@ export async function loadOnboardingBootstrap(
       ? profile.onboarding_reset_mode
       : null;
 
-  if (resetMode !== "reuse") {
-    return { resetMode, initialState: null };
-  }
-
   const { data: children } = await db
     .from("children")
     .select("id, display_name, avatar_url, birth_date, gender, preferences")
@@ -42,7 +38,13 @@ export async function loadOnboardingBootstrap(
   const prefs = (child?.preferences ?? {}) as {
     age_years?: number;
     photo_paths?: { slotId?: string; path?: string; url?: string }[];
+    onboarding_wizard_step?: string;
   };
+  const savedStep =
+    typeof prefs.onboarding_wizard_step === "string"
+      ? prefs.onboarding_wizard_step
+      : null;
+
   const gender =
     child?.gender === "boy" || child?.gender === "girl" || child?.gender === "other"
       ? child.gender
@@ -61,6 +63,30 @@ export async function loadOnboardingBootstrap(
         publicUrl: found.url,
       });
     }
+  }
+
+  if (resetMode !== "reuse") {
+    if (!savedStep && !child) return { resetMode, initialState: null };
+    return {
+      resetMode,
+      initialState: {
+        securityPin: profile?.security_pin || "",
+        child: child
+          ? {
+              displayName: child.display_name,
+              birthDate: child.birth_date || "",
+              gender,
+              ageYears: prefs.age_years,
+            }
+          : null,
+        childPhotos,
+        friend: null,
+        friendPhotos: [],
+        childAvatarUrl: child?.avatar_url || null,
+        wizardStep: savedStep,
+        completed: false,
+      },
+    };
   }
 
   const { data: characters } = await db
@@ -93,6 +119,7 @@ export async function loadOnboardingBootstrap(
     friendPhotos: [],
     childAvatarUrl: child?.avatar_url || primary?.avatar_url || null,
     friendAvatarUrl: friend?.avatar_url || null,
+    wizardStep: savedStep,
     completed: false,
   };
 

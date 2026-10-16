@@ -11,7 +11,6 @@ import {
   type PhotoSubject,
 } from "@/lib/onboarding/photo-slots";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
-import { uploadAvatarPhotoAction } from "@/lib/onboarding/actions";
 import { compressImageForUpload } from "@/lib/onboarding/compress-image";
 import {
   guideSrc,
@@ -52,9 +51,19 @@ export function PhotoSlotGrid({
       fd.set("slotId", slotId);
       fd.set("subject", subject);
       fd.set("file", compressed);
-      const result = await uploadAvatarPhotoAction(fd);
-      if (result.error && !result.storagePath && !result.publicUrl) {
-        setError(result.error);
+      // Route Handler — evita limite 1 MB das Server Actions
+      const res = await fetch("/api/onboarding/upload-photo", {
+        method: "POST",
+        body: fd,
+      });
+      const result = (await res.json()) as {
+        error?: string;
+        storagePath?: string;
+        publicUrl?: string;
+        previewUrl?: string;
+      };
+      if (!res.ok || (result.error && !result.storagePath && !result.publicUrl)) {
+        setError(result.error || `Falha no upload (${res.status}).`);
         return;
       }
       const draft: OnboardingPhotoDraft = {
@@ -69,7 +78,7 @@ export function PhotoSlotGrid({
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Não foi possível enviar a foto.";
-      if (/Body exceeded|1 MB|body size/i.test(message)) {
+      if (/Body exceeded|1 MB|body size|413/i.test(message)) {
         setError(
           "A foto é grande demais. Tente outra da galeria ou tire de novo com menos zoom.",
         );

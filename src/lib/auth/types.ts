@@ -44,6 +44,8 @@ export type OnboardingState = {
   friendPhotos: OnboardingPhotoDraft[];
   childAvatarUrl?: string | null;
   friendAvatarUrl?: string | null;
+  /** Passo atual do wizard — retoma de onde parou */
+  wizardStep?: string | null;
   /** @deprecated legado — preferir childPhotos */
   photos?: OnboardingPhotoDraft[];
   completed: boolean;

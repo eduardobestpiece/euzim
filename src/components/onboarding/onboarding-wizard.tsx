@@ -32,6 +32,7 @@ import {
   saveFriendProfileAction,
   saveOnboardingPinAction,
   saveSubjectPhotosAction,
+  saveWizardStepAction,
 } from "@/lib/onboarding/actions";
 import { REQUIRED_PHOTO_COUNT } from "@/lib/onboarding/photo-slots";
 import {
@@ -39,6 +40,7 @@ import {
   ageYearsFromBirthDate,
   type ChildGender,
 } from "@/lib/onboarding/child-profile";
+import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import type { OnboardingState } from "@/lib/auth/types";
 
 type Step =
@@ -63,6 +65,8 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "pin", label: "PIN" },
 ];
 
+const STEP_IDS = new Set(STEPS.map((s) => s.id));
+
 function photosToMap(
   photos: OnboardingState["childPhotos"] | undefined,
 ): SlotPhotos {
@@ -71,6 +75,36 @@ function photosToMap(
     if (p.slotId) map[p.slotId] = p;
   }
   return map;
+}
+
+function resolveInitialStep(
+  initialState: OnboardingState | null,
+  isReuse: boolean,
+): Step {
+  const saved = initialState?.wizardStep;
+  if (saved && STEP_IDS.has(saved as Step) && saved !== "generating") {
+    return saved as Step;
+  }
+  if (
+    isReuse &&
+    initialState?.childAvatarUrl &&
+    initialState?.friendAvatarUrl
+  ) {
+    return "preview";
+  }
+  if (initialState?.childAvatarUrl && initialState?.friendAvatarUrl) {
+    return "preview";
+  }
+  if (initialState?.friend?.displayName) return "friend-photos";
+  if (
+    (initialState?.childPhotos?.length ?? 0) >= REQUIRED_PHOTO_COUNT ||
+    (initialState?.photos?.length ?? 0) >= REQUIRED_PHOTO_COUNT
+  ) {
+    return "friend";
+  }
+  if (initialState?.child?.displayName) return "child-photos";
+  if (isReuse && initialState?.child?.displayName) return "child";
+  return "welcome";
 }
 
 export function OnboardingWizard({
@@ -83,17 +117,9 @@ export function OnboardingWizard({
   resetMode?: "full" | "reuse" | null;
 }) {
   const isReuse = resetMode === "reuse";
-  const [step, setStep] = useState<Step>(() => {
-    if (
-      isReuse &&
-      initialState?.childAvatarUrl &&
-      initialState?.friendAvatarUrl
-    ) {
-      return "preview";
-    }
-    if (isReuse && initialState?.child?.displayName) return "child";
-    return "welcome";
-  });
+  const [step, setStep] = useState<Step>(() =>
+    resolveInitialStep(initialState, isReuse),
+  );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [childPhotos, setChildPhotos] = useState<SlotPhotos>(() =>
@@ -142,6 +168,8 @@ export function OnboardingWizard({
   function go(next: Step) {
     setError(null);
     setStep(next);
+    // Persiste progresso (fire-and-forget) — retoma ao reabrir
+    void saveWizardStepAction(next);
   }
 
   function submitPin(formData: FormData) {
@@ -255,9 +283,14 @@ export function OnboardingWizard({
   return (
     <div className="mx-auto w-full max-w-lg space-y-6 pb-10">
       <header className="space-y-2 text-center sm:text-left">
-        <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-900">
-          <Sparkles className="size-3.5" />
-          Estúdio Mágico
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+          <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-900">
+            <Sparkles className="size-3.5" />
+            Estúdio Mágico
+          </div>
+          <span className="rounded-full bg-emerald-600/15 px-2.5 py-1 font-mono text-[10px] font-semibold text-emerald-900">
+            {ONBOARDING_BUILD}
+          </span>
         </div>
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {isReuse

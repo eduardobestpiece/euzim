@@ -46,8 +46,61 @@ function emptyState(): OnboardingState {
     childPhotos: [],
     friend: null,
     friendPhotos: [],
+    wizardStep: "welcome",
     completed: false,
   };
+}
+
+const WIZARD_STEPS = new Set([
+  "welcome",
+  "child",
+  "child-photos",
+  "friend",
+  "friend-photos",
+  "generating",
+  "preview",
+  "pin",
+]);
+
+/** Persiste o passo atual (cookie) para retomar de onde parou. */
+export async function saveWizardStepAction(
+  step: string,
+): Promise<OnboardingActionResult> {
+  if (!WIZARD_STEPS.has(step)) return { error: "Passo inválido." };
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const state = await loadState();
+  state.wizardStep = step;
+  await writeMockOnboarding(state);
+
+  // Também grava em children.preferences quando houver filho
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const { data: children } = await db
+        .from("children")
+        .select("id, preferences")
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const child = children?.[0];
+      if (child?.id) {
+        const prefs =
+          child.preferences && typeof child.preferences === "object"
+            ? (child.preferences as Record<string, unknown>)
+            : {};
+        await db
+          .from("children")
+          .update({
+            preferences: { ...prefs, onboarding_wizard_step: step },
+          })
+          .eq("id", child.id);
+      }
+    }
+  }
+
+  return { success: true };
 }
 
 async function loadState(): Promise<OnboardingState> {

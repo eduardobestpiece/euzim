@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { AppShell } from "@/components/app/app-shell";
 import { ParentDashboard } from "@/components/parent/parent-dashboard";
 import { AvatarRefreshBanner } from "@/components/parent/avatar-refresh-banner";
@@ -19,6 +20,8 @@ import {
 } from "@/lib/stripe/config";
 
 export default async function ParentPage() {
+  await connection();
+  const nowMs = Date.now();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -115,7 +118,7 @@ export default async function ParentPage() {
   }
 
   const stories = await listStoriesForParent(user.id);
-  const refreshStatus = await getAvatarRefreshStatus(user.id);
+  const refreshStatus = await getAvatarRefreshStatus(user.id, nowMs);
 
   return (
     <AppShell user={user} title="Área dos pais">

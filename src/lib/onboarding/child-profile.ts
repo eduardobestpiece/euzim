@@ -7,7 +7,7 @@ export const GENDER_LABELS: Record<ChildGender, string> = {
 };
 
 /** Cache-bust quando as guias 3D mudam (evita SVG flat antigo no browser). */
-export const GUIDE_ASSET_VERSION = "2";
+export const GUIDE_ASSET_VERSION = "4";
 
 export function guideFolderForGender(
   gender: ChildGender | null | undefined,
