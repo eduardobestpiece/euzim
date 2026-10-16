@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { generateMockStory } from "@/lib/stories/generate-mock";
+import { generateStoryText } from "@/lib/stories/generate-openai";
 import { ensureParentChildContext } from "@/lib/stories/ensure-profile";
 import {
   countMockStoriesThisMonth,
@@ -23,6 +23,7 @@ export type GenerateStoryResult = {
   storyId?: string;
   shareToken?: string;
   persistedTo?: "supabase" | "mock";
+  engine?: "openai-gpt-4o-mini" | "mock-v1";
   title?: string;
 };
 
@@ -64,7 +65,7 @@ export async function generateStoryAction(
     };
   }
 
-  const generated = generateMockStory({
+  const { story: generated, engine } = await generateStoryText({
     childName: childCtx.childName,
     theme,
   });
@@ -124,7 +125,7 @@ export async function generateStoryAction(
           questions_data: [],
           cover_image_url: generated.coverImageUrl,
           generation_meta: {
-            engine: "mock-v1",
+            engine,
             theme,
             pages: 4,
           },
@@ -140,7 +141,7 @@ export async function generateStoryAction(
           page_index: p.pageIndex,
           image_url: p.imageUrl,
           alt_text: p.altText,
-          prompt_used: `mock:${theme}:page:${p.pageIndex}`,
+          prompt_used: `${engine}:${theme}:page:${p.pageIndex}`,
         }));
 
         const { error: imagesError } = await db
@@ -160,6 +161,7 @@ export async function generateStoryAction(
             storyId: story.id,
             shareToken: story.share_token ?? undefined,
             persistedTo: "supabase",
+            engine,
             title: generated.title,
           };
         }
@@ -199,6 +201,7 @@ export async function generateStoryAction(
     storyId: record.id,
     shareToken: record.id,
     persistedTo: "mock",
+    engine,
     title: generated.title,
   };
 }

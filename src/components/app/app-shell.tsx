@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Baby, Shield, Sparkles, Users } from "lucide-react";
+import { Baby, KeyRound, Shield, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PinGuardButton } from "@/components/kids/pin-guard";
 import { signOutAction } from "@/lib/auth/actions";
@@ -56,11 +56,26 @@ export function AppShell({
             ))
           )}
           {!kidsMode ? (
-            <form action={signOutAction}>
-              <Button type="submit" variant="outline" size="sm">
-                Sair
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link
+                  href={
+                    user.role === "admin"
+                      ? "/app/admin/settings"
+                      : "/app/parent/settings"
+                  }
+                  className="gap-1.5"
+                >
+                  <KeyRound className="size-3.5" />
+                  Alterar senha
+                </Link>
               </Button>
-            </form>
+              <form action={signOutAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  Sair
+                </Button>
+              </form>
+            </>
           ) : null}
         </nav>
       </header>

@@ -106,11 +106,14 @@ export async function signInAction(
   if (user) {
     const { data: profile } = await supabase
       .from("users")
-      .select("onboarding_completed")
+      .select("onboarding_completed, role")
       .eq("id", user.id)
       .maybeSingle();
 
-    redirect(profile?.onboarding_completed ? "/app/parent" : "/onboarding");
+    if (!profile?.onboarding_completed) {
+      redirect("/onboarding");
+    }
+    redirect(profile?.role === "admin" ? "/app/admin" : "/app/parent");
   }
 
   redirect("/app/parent");
