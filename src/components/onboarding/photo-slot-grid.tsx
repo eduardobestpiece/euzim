@@ -157,11 +157,13 @@ export function PhotoSlotGrid({
   }
 
   function openCamera(slotId: string) {
+    activeSlotRef.current = slotId;
     setActiveSlot(slotId);
     cameraRef.current?.click();
   }
 
   function openUpload(slotId: string) {
+    activeSlotRef.current = slotId;
     setActiveSlot(slotId);
     uploadRef.current?.click();
   }
@@ -192,7 +194,8 @@ export function PhotoSlotGrid({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file && activeSlot) void applyFile(activeSlot, file);
+          const slot = activeSlotRef.current || activeSlot;
+          if (file && slot) void applyFile(slot, file);
         }}
       />
       <input
@@ -203,7 +206,8 @@ export function PhotoSlotGrid({
         onChange={(e) => {
           const file = e.target.files?.[0];
           e.target.value = "";
-          if (file && activeSlot) void applyFile(activeSlot, file);
+          const slot = activeSlotRef.current || activeSlot;
+          if (file && slot) void applyFile(slot, file);
         }}
       />
 
