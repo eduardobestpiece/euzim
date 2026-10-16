@@ -72,6 +72,11 @@ CREATE TABLE public.users (
   subscription_status public.subscription_status NOT NULL DEFAULT 'none',
   subscription_plan_id text,
   extra_characters_available integer NOT NULL DEFAULT 0,
+  last_active_at timestamptz,
+  last_story_at timestamptz,
+  complimentary_until timestamptz,
+  onboarding_reset_mode text,
+  admin_notes text,
   avatar_url text,
   locale text NOT NULL DEFAULT 'pt-BR',
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -79,7 +84,11 @@ CREATE TABLE public.users (
   CONSTRAINT users_security_pin_format CHECK (
     security_pin IS NULL OR security_pin ~ '^[0-9]{4,6}$'
   ),
-  CONSTRAINT users_extra_characters_nonneg CHECK (extra_characters_available >= 0)
+  CONSTRAINT users_extra_characters_nonneg CHECK (extra_characters_available >= 0),
+  CONSTRAINT users_onboarding_reset_mode_check CHECK (
+    onboarding_reset_mode IS NULL
+    OR onboarding_reset_mode IN ('full', 'reuse')
+  )
 );
 
 CREATE INDEX users_subscription_status_idx ON public.users (subscription_status);
@@ -537,3 +546,36 @@ GRANT SELECT ON public.games TO anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- analytics_sessions — heartbeat PLG
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.analytics_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  duration_seconds integer NOT NULL DEFAULT 0,
+  path_sample text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT analytics_sessions_duration_nonneg CHECK (duration_seconds >= 0)
+);
+
+CREATE INDEX analytics_sessions_user_last_seen_idx
+  ON public.analytics_sessions (user_id, last_seen_at DESC);
+
+ALTER TABLE public.analytics_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY analytics_sessions_insert_own
+  ON public.analytics_sessions FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY analytics_sessions_update_own
+  ON public.analytics_sessions FOR UPDATE TO authenticated
+  USING (user_id = auth.uid() OR private.is_admin())
+  WITH CHECK (user_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY analytics_sessions_select_own_or_admin
+  ON public.analytics_sessions FOR SELECT TO authenticated
+  USING (user_id = auth.uid() OR private.is_admin());

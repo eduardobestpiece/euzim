@@ -149,6 +149,11 @@ export async function generateStoryAction(
           .insert(imageRows);
 
         if (!imagesError) {
+          await db
+            .from("users")
+            .update({ last_story_at: new Date().toISOString() })
+            .eq("id", user.id);
+
           revalidatePath("/app/parent");
           revalidatePath("/app/kids");
           revalidatePath(`/app/parent/stories/${story.id}`);

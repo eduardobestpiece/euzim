@@ -70,11 +70,24 @@ function photosToMap(
 export function OnboardingWizard({
   initialState,
   mockMode,
+  resetMode = null,
 }: {
   initialState: OnboardingState | null;
   mockMode: boolean;
+  resetMode?: "full" | "reuse" | null;
 }) {
-  const [step, setStep] = useState<Step>("welcome");
+  const isReuse = resetMode === "reuse";
+  const [step, setStep] = useState<Step>(() => {
+    if (
+      isReuse &&
+      initialState?.childAvatarUrl &&
+      initialState?.friendAvatarUrl
+    ) {
+      return "preview";
+    }
+    if (isReuse && initialState?.child?.displayName) return "child";
+    return "welcome";
+  });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [childPhotos, setChildPhotos] = useState<SlotPhotos>(() =>
@@ -98,7 +111,9 @@ export function OnboardingWizard({
   const [friendAvatarUrl, setFriendAvatarUrl] = useState<string | null>(
     initialState?.friendAvatarUrl ?? null,
   );
-  const [engine, setEngine] = useState<string | null>(null);
+  const [engine, setEngine] = useState<string | null>(
+    isReuse ? "reuse" : null,
+  );
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
@@ -143,20 +158,23 @@ export function OnboardingWizard({
 
   function persistChildPhotos() {
     setError(null);
-    if (childFilled < REQUIRED_PHOTO_COUNT) {
+    if (!isReuse && childFilled < REQUIRED_PHOTO_COUNT) {
       setError(
         `Preencha todos os ${REQUIRED_PHOTO_COUNT} slots da criança (${REQUIRED_PHOTO_COUNT - childFilled} faltando).`,
       );
       return;
     }
     startTransition(async () => {
-      const result = await saveSubjectPhotosAction({
-        subject: "child",
-        photos: Object.values(childPhotos),
-      });
-      if (result.error) {
-        setError(result.error);
-        return;
+      if (childFilled > 0) {
+        const result = await saveSubjectPhotosAction({
+          subject: "child",
+          photos: Object.values(childPhotos),
+          allowPartial: isReuse,
+        });
+        if (result.error && !isReuse) {
+          setError(result.error);
+          return;
+        }
       }
       go("friend");
     });
@@ -180,19 +198,26 @@ export function OnboardingWizard({
 
   function persistFriendPhotos() {
     setError(null);
-    if (friendFilled < REQUIRED_PHOTO_COUNT) {
+    if (!isReuse && friendFilled < REQUIRED_PHOTO_COUNT) {
       setError(
         `Preencha todos os ${REQUIRED_PHOTO_COUNT} slots do amigo (${REQUIRED_PHOTO_COUNT - friendFilled} faltando).`,
       );
       return;
     }
     startTransition(async () => {
-      const result = await saveSubjectPhotosAction({
-        subject: "friend",
-        photos: Object.values(friendPhotos),
-      });
-      if (result.error) {
-        setError(result.error);
+      if (friendFilled > 0) {
+        const result = await saveSubjectPhotosAction({
+          subject: "friend",
+          photos: Object.values(friendPhotos),
+          allowPartial: isReuse,
+        });
+        if (result.error && !isReuse) {
+          setError(result.error);
+          return;
+        }
+      }
+      if (isReuse && childAvatarUrl && friendAvatarUrl) {
+        go("preview");
         return;
       }
       go("generating");
@@ -225,11 +250,14 @@ export function OnboardingWizard({
           Estúdio Mágico
         </div>
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
-          Crie o avatar da sua criança
+          {isReuse
+            ? "Revisar experiência do avatar"
+            : "Crie o avatar da sua criança"}
         </h1>
         <p className="text-sm text-muted-foreground sm:text-base">
-          Antes das histórias, vamos construir os personagens mágicos com fotos
-          guiadas.
+          {isReuse
+            ? "Seus materiais foram mantidos. Confira fotos e preview — depois liberamos o painel de novo."
+            : "Antes das histórias, vamos construir os personagens mágicos com fotos guiadas."}
         </p>
         {mockMode ? (
           <p className="text-xs text-amber-800">
@@ -259,16 +287,26 @@ export function OnboardingWizard({
       {step === "welcome" ? (
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle>Bem-vindo</CardTitle>
+            <CardTitle>{isReuse ? "Bem-vindo de volta" : "Bem-vindo"}</CardTitle>
             <CardDescription>
-              Em poucos minutos você cria o avatar do seu filho e do melhor
-              amigo (pet ou brinquedo). Só depois liberamos a primeira história.
+              {isReuse
+                ? "Vamos revisar o avatar e o melhor amigo já criados."
+                : "Em poucos minutos você cria o avatar do seu filho e do melhor amigo (pet ou brinquedo). Só depois liberamos a primeira história."}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <Button className="w-full" size="lg" onClick={() => go("pin")}>
-              Começar
+              {isReuse ? "Revisar" : "Começar"}
             </Button>
+            {isReuse && childAvatarUrl && friendAvatarUrl ? (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => go("preview")}
+              >
+                Ir ao preview salvo
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -418,12 +456,15 @@ export function OnboardingWizard({
               <Button
                 type="button"
                 className="flex-1"
-                disabled={pending || childFilled < REQUIRED_PHOTO_COUNT}
+                disabled={
+                  pending ||
+                  (!isReuse && childFilled < REQUIRED_PHOTO_COUNT)
+                }
                 onClick={persistChildPhotos}
               >
                 {pending
                   ? "Salvando…"
-                  : childFilled < REQUIRED_PHOTO_COUNT
+                  : !isReuse && childFilled < REQUIRED_PHOTO_COUNT
                     ? `Faltam ${REQUIRED_PHOTO_COUNT - childFilled}`
                     : "Continuar"}
               </Button>
@@ -546,14 +587,19 @@ export function OnboardingWizard({
               <Button
                 type="button"
                 className="flex-1"
-                disabled={pending || friendFilled < REQUIRED_PHOTO_COUNT}
+                disabled={
+                  pending ||
+                  (!isReuse && friendFilled < REQUIRED_PHOTO_COUNT)
+                }
                 onClick={persistFriendPhotos}
               >
                 {pending
                   ? "Gerando avatares…"
-                  : friendFilled < REQUIRED_PHOTO_COUNT
+                  : !isReuse && friendFilled < REQUIRED_PHOTO_COUNT
                     ? `Faltam ${REQUIRED_PHOTO_COUNT - friendFilled}`
-                    : "Gerar personagens"}
+                    : isReuse && childAvatarUrl
+                      ? "Continuar com avatares salvos"
+                      : "Gerar personagens"}
               </Button>
             </div>
           </CardContent>

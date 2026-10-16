@@ -199,12 +199,17 @@ export async function saveFriendProfileAction(
 export async function saveSubjectPhotosAction(input: {
   subject: "child" | "friend";
   photos: OnboardingPhotoDraft[];
+  allowPartial?: boolean;
 }): Promise<OnboardingActionResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
 
-  const missing = assertCompletePhotos(input.photos);
-  if (missing) return { error: missing };
+  if (!input.allowPartial) {
+    const missing = assertCompletePhotos(input.photos);
+    if (missing) return { error: missing };
+  } else if (input.photos.length < 1) {
+    return { error: "Nenhuma foto para salvar." };
+  }
 
   const state = await loadState();
   // Não guardar data URLs grandes no cookie — só metadados + path
@@ -337,19 +342,37 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
   if (!state.friend?.displayName) {
     return { error: "Complete o melhor amigo." };
   }
-  const childMiss = assertCompletePhotos(state.childPhotos);
-  if (childMiss) return { error: `Fotos da criança: ${childMiss}` };
-  const friendMiss = assertCompletePhotos(state.friendPhotos);
-  if (friendMiss) return { error: `Fotos do amigo: ${friendMiss}` };
+  // Reuse: se já há avatares, não regenera
+  if (state.childAvatarUrl && state.friendAvatarUrl) {
+    return {
+      success: true,
+      childAvatarUrl: state.childAvatarUrl,
+      friendAvatarUrl: state.friendAvatarUrl,
+      engine: "reuse",
+    };
+  }
 
-  const childPreview = await generateAvatarPreview({
-    subjectName: state.child.displayName,
-    kind: "child",
-  });
-  const friendPreview = await generateAvatarPreview({
-    subjectName: state.friend.displayName,
-    kind: state.friend.kind,
-  });
+  const childMiss = assertCompletePhotos(state.childPhotos);
+  if (childMiss && !state.childAvatarUrl) {
+    return { error: `Fotos da criança: ${childMiss}` };
+  }
+  const friendMiss = assertCompletePhotos(state.friendPhotos);
+  if (friendMiss && !state.friendAvatarUrl) {
+    return { error: `Fotos do amigo: ${friendMiss}` };
+  }
+
+  const childPreview = state.childAvatarUrl
+    ? { url: state.childAvatarUrl, engine: "reuse" as const }
+    : await generateAvatarPreview({
+        subjectName: state.child.displayName,
+        kind: "child",
+      });
+  const friendPreview = state.friendAvatarUrl
+    ? { url: state.friendAvatarUrl, engine: "reuse" as const }
+    : await generateAvatarPreview({
+        subjectName: state.friend.displayName,
+        kind: state.friend.kind,
+      });
 
   state.childAvatarUrl = childPreview.url;
   state.friendAvatarUrl = friendPreview.url;
@@ -446,7 +469,9 @@ export async function finishAvatarOnboardingAction(): Promise<OnboardingActionRe
   const state = await loadState();
   if (!state.securityPin) return { error: "Defina o PIN de segurança." };
   if (!state.child?.displayName) return { error: "Complete o avatar da criança." };
-  if (!state.friend?.displayName) return { error: "Complete o melhor amigo." };
+  if (!state.friend?.displayName && !state.friendAvatarUrl) {
+    return { error: "Complete o melhor amigo." };
+  }
   if (!state.childAvatarUrl || !state.friendAvatarUrl) {
     return { error: "Gere os personagens antes de continuar." };
   }
@@ -471,6 +496,7 @@ export async function finishAvatarOnboardingAction(): Promise<OnboardingActionRe
     .update({
       onboarding_completed: true,
       security_pin: state.securityPin,
+      onboarding_reset_mode: null,
     })
     .eq("id", user.id);
 

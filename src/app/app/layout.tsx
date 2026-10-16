@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { SessionHeartbeat } from "@/components/app/session-heartbeat";
 import { getCurrentUser } from "@/lib/auth/get-user";
 
 export default async function AppAreaLayout({
@@ -9,5 +10,10 @@ export default async function AppAreaLayout({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (!user.onboardingCompleted) redirect("/onboarding");
-  return children;
+  return (
+    <>
+      <SessionHeartbeat />
+      {children}
+    </>
+  );
 }

@@ -8,7 +8,8 @@
 5. **Kids reader + Quiz Therapy** ✅
 6. **Share público + persistência real** ✅
 7. **Stripe** — código pronto; aguarda `sk_test_/pk_/whsec_` (chave `mk_` = ID, não secret)
-8. LoRA real / pipeline de treino (futuro)
+8. **Admin PLG** ✅ — KPIs, tabela contas, drawer (plano/dias/recovery/reset full|reuse), heartbeat
+9. LoRA real / pipeline de treino (futuro)
 
 ## Feeling
 Login → onboarding de avatar **antes** de qualquer “criar história”. Parent home destaca o avatar da criança.
