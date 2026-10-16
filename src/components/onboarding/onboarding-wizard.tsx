@@ -43,23 +43,24 @@ import type { OnboardingState } from "@/lib/auth/types";
 
 type Step =
   | "welcome"
-  | "pin"
   | "child"
   | "child-photos"
   | "friend"
   | "friend-photos"
   | "generating"
-  | "preview";
+  | "preview"
+  | "pin";
 
+/** PIN por último — só então onboarding_completed. */
 const STEPS: { id: Step; label: string }[] = [
   { id: "welcome", label: "Olá" },
-  { id: "pin", label: "PIN" },
   { id: "child", label: "Filho" },
   { id: "child-photos", label: "Fotos" },
   { id: "friend", label: "Amigo" },
   { id: "friend-photos", label: "Fotos" },
   { id: "generating", label: "Magia" },
   { id: "preview", label: "Pronto" },
+  { id: "pin", label: "PIN" },
 ];
 
 function photosToMap(
@@ -151,7 +152,9 @@ export function OnboardingWizard({
         setError(result.error);
         return;
       }
-      go("child");
+      // Último passo: PIN salvo → completa onboarding e abre o painel
+      const done = await finishAvatarOnboardingAction();
+      if (done?.error) setError(done.error);
     });
   }
 
@@ -249,14 +252,6 @@ export function OnboardingWizard({
     });
   }
 
-  function finish() {
-    setError(null);
-    startTransition(async () => {
-      const result = await finishAvatarOnboardingAction();
-      if (result?.error) setError(result.error);
-    });
-  }
-
   return (
     <div className="mx-auto w-full max-w-lg space-y-6 pb-10">
       <header className="space-y-2 text-center sm:text-left">
@@ -271,8 +266,8 @@ export function OnboardingWizard({
         </h1>
         <p className="text-sm text-muted-foreground sm:text-base">
           {isReuse
-            ? "Seus materiais foram mantidos. Confira fotos e preview — depois liberamos o painel de novo."
-            : "Antes das histórias, vamos construir os personagens mágicos com fotos guiadas."}
+            ? "Seus materiais foram mantidos. Confira fotos e preview — o PIN fecha o fluxo e libera o painel."
+            : "Primeiro o avatar e o melhor amigo; o PIN dos pais fica por último, antes do painel."}
         </p>
         {mockMode ? (
           <p className="text-xs text-amber-800">
@@ -305,12 +300,12 @@ export function OnboardingWizard({
             <CardTitle>{isReuse ? "Bem-vindo de volta" : "Bem-vindo"}</CardTitle>
             <CardDescription>
               {isReuse
-                ? "Vamos revisar o avatar e o melhor amigo já criados."
-                : "Em poucos minutos você cria o avatar do seu filho e do melhor amigo (pet ou brinquedo). Só depois liberamos a primeira história."}
+                ? "Vamos revisar o avatar e o melhor amigo já criados. O PIN fica por último."
+                : "Avatar da criança → melhor amigo → preview → PIN dos pais. Só então liberamos o painel."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button className="w-full" size="lg" onClick={() => go("pin")}>
+            <Button className="w-full" size="lg" onClick={() => go("child")}>
               {isReuse ? "Revisar" : "Começar"}
             </Button>
             {isReuse && childAvatarUrl && friendAvatarUrl ? (
@@ -323,62 +318,6 @@ export function OnboardingWizard({
               </Button>
             ) : null}
           </CardContent>
-        </Card>
-      ) : null}
-
-      {step === "pin" ? (
-        <Card className="shadow-none">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="size-4" />
-              PIN dos pais
-            </CardTitle>
-            <CardDescription>
-              Protege a troca Kids ↔ Pais. Rápido — depois focamos no avatar.
-            </CardDescription>
-          </CardHeader>
-          <form action={submitPin}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="pin">PIN (4–6 dígitos)</Label>
-                <Input
-                  id="pin"
-                  name="pin"
-                  inputMode="numeric"
-                  pattern="[0-9]{4,6}"
-                  maxLength={6}
-                  required
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPin">Confirmar PIN</Label>
-                <Input
-                  id="confirmPin"
-                  name="confirmPin"
-                  inputMode="numeric"
-                  pattern="[0-9]{4,6}"
-                  maxLength={6}
-                  required
-                />
-              </div>
-              {error ? (
-                <p className="text-sm text-destructive">{error}</p>
-              ) : null}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => go("welcome")}
-                >
-                  Voltar
-                </Button>
-                <Button type="submit" disabled={pending} className="flex-1">
-                  {pending ? "Salvando…" : "Continuar"}
-                </Button>
-              </div>
-            </CardContent>
-          </form>
         </Card>
       ) : null}
 
@@ -456,7 +395,7 @@ export function OnboardingWizard({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => go("pin")}
+                  onClick={() => go("welcome")}
                 >
                   Voltar
                 </Button>
@@ -678,8 +617,8 @@ export function OnboardingWizard({
             </CardTitle>
             <CardDescription>
               Preview pronto
-              {engine ? ` (${engine})` : ""}. Agora sim — primeira história
-              liberada.
+              {engine ? ` (${engine})` : ""}. Falta só o PIN dos pais para
+              liberar o painel.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -721,15 +660,81 @@ export function OnboardingWizard({
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
             ) : null}
-            <Button
-              className="w-full"
-              size="lg"
-              disabled={pending}
-              onClick={finish}
-            >
-              {pending ? "Abrindo painel…" : "Criar primeira história"}
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="sm:flex-1"
+                onClick={() => go("friend-photos")}
+              >
+                Voltar
+              </Button>
+              <Button
+                className="w-full sm:flex-[2]"
+                size="lg"
+                onClick={() => go("pin")}
+              >
+                Definir PIN e abrir painel
+              </Button>
+            </div>
           </CardContent>
+        </Card>
+      ) : null}
+
+      {step === "pin" ? (
+        <Card className="shadow-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="size-4" />
+              PIN dos pais
+            </CardTitle>
+            <CardDescription>
+              Último passo — protege Kids ↔ Pais. Ao salvar, liberamos o
+              painel e a primeira história.
+            </CardDescription>
+          </CardHeader>
+          <form action={submitPin}>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="pin">PIN (4–6 dígitos)</Label>
+                <Input
+                  id="pin"
+                  name="pin"
+                  inputMode="numeric"
+                  pattern="[0-9]{4,6}"
+                  maxLength={6}
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPin">Confirmar PIN</Label>
+                <Input
+                  id="confirmPin"
+                  name="confirmPin"
+                  inputMode="numeric"
+                  pattern="[0-9]{4,6}"
+                  maxLength={6}
+                  required
+                />
+              </div>
+              {error ? (
+                <p className="text-sm text-destructive">{error}</p>
+              ) : null}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => go("preview")}
+                >
+                  Voltar
+                </Button>
+                <Button type="submit" disabled={pending} className="flex-1">
+                  {pending ? "Abrindo painel…" : "Salvar PIN e entrar"}
+                </Button>
+              </div>
+            </CardContent>
+          </form>
         </Card>
       ) : null}
     </div>
