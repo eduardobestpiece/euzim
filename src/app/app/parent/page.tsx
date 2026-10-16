@@ -1,48 +1,65 @@
-import { BookOpen } from "lucide-react";
 import { AppShell } from "@/components/app/app-shell";
+import { ParentDashboard } from "@/components/parent/parent-dashboard";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
+import { getStoryUsage } from "@/lib/stories/usage";
 
 export default async function ParentPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const onboarding = isSupabaseConfigured()
-    ? null
-    : await readMockOnboarding();
+  const usage = await getStoryUsage();
+  let characters: { id: string; name: string; isPrimary?: boolean }[] = [];
+  let childName: string | null = null;
+
+  if (!isSupabaseConfigured() || user.isMock) {
+    const onboarding = await readMockOnboarding();
+    childName = onboarding?.child?.displayName ?? null;
+    if (childName) {
+      characters = [
+        {
+          id: "mock-primary",
+          name: childName,
+          isPrimary: true,
+        },
+      ];
+    }
+  } else {
+    const supabase = await createClient();
+    if (supabase) {
+      const { data: chars } = await supabase
+        .from("characters")
+        .select("id, name, is_primary")
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true });
+
+      characters =
+        chars?.map((c) => ({
+          id: c.id,
+          name: c.name,
+          isPrimary: Boolean(c.is_primary),
+        })) ?? [];
+
+      const { data: children } = await supabase
+        .from("children")
+        .select("display_name")
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      childName = children?.[0]?.display_name ?? null;
+    }
+  }
 
   return (
     <AppShell user={user} title="Área dos pais">
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            Olá{user.fullName ? `, ${user.fullName}` : ""}
-          </h1>
-          <p className="max-w-xl text-muted-foreground">
-            Painel dos pais preparado na Fase 2. O gerador de histórias e o
-            dashboard completo chegam na Fase 3.
-          </p>
-        </div>
-
-        <div className="space-y-3 border-t border-border/60 pt-6">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <BookOpen className="size-4" />
-            Resumo do onboarding
-          </p>
-          <ul className="space-y-1 text-sm text-muted-foreground">
-            <li>
-              Criança:{" "}
-              {onboarding?.child?.displayName ??
-                "(conecte o Supabase para carregar do banco)"}
-            </li>
-            <li>PIN: {onboarding?.securityPin ? "definido" : "—"}</li>
-            <li>
-              Fotos avatar: {onboarding?.photos.length ?? 0} (simulação LoRA)
-            </li>
-          </ul>
-        </div>
-      </div>
+      <ParentDashboard
+        usage={usage}
+        characters={characters}
+        childName={childName}
+      />
     </AppShell>
   );
 }

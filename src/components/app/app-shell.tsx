@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Baby, Shield, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PinGuardButton } from "@/components/kids/pin-guard";
 import { signOutAction } from "@/lib/auth/actions";
 import type { AuthUser } from "@/lib/auth/types";
 
@@ -13,10 +14,12 @@ const links = [
 export function AppShell({
   user,
   title,
+  kidsMode = false,
   children,
 }: {
   user: AuthUser;
   title: string;
+  kidsMode?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -32,26 +35,42 @@ export function AppShell({
           </span>
         </div>
         <nav className="flex flex-wrap items-center gap-1">
-          {links.map(({ href, label, icon: Icon }) => (
-            <Button key={href} asChild variant="ghost" size="sm">
-              <Link href={href} className="gap-1.5">
-                <Icon className="size-3.5" />
-                {label}
-              </Link>
-            </Button>
-          ))}
-          <form action={signOutAction}>
-            <Button type="submit" variant="outline" size="sm">
-              Sair
-            </Button>
-          </form>
+          {kidsMode ? (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/app/kids" className="gap-1.5">
+                  <Baby className="size-3.5" />
+                  Kids
+                </Link>
+              </Button>
+              <PinGuardButton label="Pais" href="/app/parent" />
+            </>
+          ) : (
+            links.map(({ href, label, icon: Icon }) => (
+              <Button key={href} asChild variant="ghost" size="sm">
+                <Link href={href} className="gap-1.5">
+                  <Icon className="size-3.5" />
+                  {label}
+                </Link>
+              </Button>
+            ))
+          )}
+          {!kidsMode ? (
+            <form action={signOutAction}>
+              <Button type="submit" variant="outline" size="sm">
+                Sair
+              </Button>
+            </form>
+          ) : null}
         </nav>
       </header>
-      <div className="border-b border-border/50 bg-muted/30 px-4 py-2 text-xs text-muted-foreground md:px-8">
-        {user.email}
-        {user.isMock ? " · modo mock" : ""}
-        {user.role === "admin" ? " · admin" : ""}
-      </div>
+      {!kidsMode ? (
+        <div className="border-b border-border/50 bg-muted/30 px-4 py-2 text-xs text-muted-foreground md:px-8">
+          {user.email}
+          {user.isMock ? " · modo mock" : ""}
+          {user.role === "admin" ? " · admin" : ""}
+        </div>
+      ) : null}
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 md:px-8">
         {children}
       </main>

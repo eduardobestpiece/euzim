@@ -56,5 +56,10 @@ Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story
 ## Fases
 
 - **Fase 1** — infraestrutura (app + schema) ✅
-- **Fase 2** — Auth + onboarding + rotas protegidas
-- Fases 3+ — dashboards, gerador, quiz, share (ainda não)
+- **Fase 2** — Auth + onboarding + rotas protegidas ✅
+- **Fase 3** — Painel Pais (tracker 15), Personagens upsell, Kids + PIN Guard ✅
+- Fases 4+ — gerador IA, quiz, share, Stripe
+
+## GitHub
+
+https://github.com/euzimgeral/estudio-magico
