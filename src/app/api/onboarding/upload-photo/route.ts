@@ -3,8 +3,16 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { convertUploadToJpeg } from "@/lib/onboarding/convert-upload-image";
 
 const MAX_BYTES = 12 * 1024 * 1024;
+
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif|heic|heif|bmp|avif)$/i;
+
+function isImageFile(file: File): boolean {
+  if (file.type.startsWith("image/")) return true;
+  return IMAGE_EXT.test(file.name) || file.type === "";
+}
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -31,7 +39,7 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (!file.type.startsWith("image/")) {
+  if (!isImageFile(file)) {
     return NextResponse.json({ error: "Envie uma imagem." }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
@@ -41,39 +49,45 @@ export async function POST(request: Request) {
     );
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const safeExt = ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(ext)
-    ? ext === "jpeg"
-      ? "jpg"
-      : ext
-    : "jpg";
-  const storagePath = `${user.id}/${subject}/${slotId}.${safeExt}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
+  const raw = Buffer.from(await file.arrayBuffer());
+  const converted = await convertUploadToJpeg(raw);
+  const storagePath = `${user.id}/${subject}/${slotId}.${converted.ext}`;
 
   if (!isSupabaseConfigured() || user.isMock) {
     return NextResponse.json({
       storagePath: `mock/avatars/${storagePath}`,
       slotId,
+      converted: converted.converted,
+      bytes: converted.buffer.length,
     });
   }
 
   const db = createAdminClient() ?? (await createClient());
   if (!db) {
-    return NextResponse.json(
-      { error: "Supabase indisponível." },
-      { status: 503 },
-    );
+    // Ainda devolve path local — o cliente já mostrou o preview
+    return NextResponse.json({
+      storagePath: `local/${storagePath}`,
+      slotId,
+      warning: "Supabase indisponível; foto ficou só no aparelho.",
+      converted: converted.converted,
+      bytes: converted.buffer.length,
+    });
   }
 
-  const contentType = file.type.startsWith("image/") ? file.type : "image/jpeg";
   const { error: upErr } = await db.storage
     .from("avatars")
-    .upload(storagePath, bytes, { contentType, upsert: true });
+    .upload(storagePath, converted.buffer, {
+      contentType: converted.contentType,
+      upsert: true,
+    });
 
   if (upErr) {
     return NextResponse.json({
       storagePath: `local/${storagePath}`,
       slotId,
+      warning: upErr.message || "Storage falhou; preview local mantido.",
+      converted: converted.converted,
+      bytes: converted.buffer.length,
     });
   }
 
@@ -83,5 +97,7 @@ export async function POST(request: Request) {
     publicUrl: pub.publicUrl,
     previewUrl: pub.publicUrl,
     slotId,
+    converted: converted.converted,
+    bytes: converted.buffer.length,
   });
 }

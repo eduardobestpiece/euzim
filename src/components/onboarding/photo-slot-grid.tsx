@@ -37,6 +37,8 @@ export function PhotoSlotGrid({
   );
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   const filled = Object.keys(value).length;
   const missing = REQUIRED_PHOTO_COUNT - filled;
@@ -44,37 +46,101 @@ export function PhotoSlotGrid({
   async function applyFile(slotId: string, file: File) {
     setBusySlot(slotId);
     setError(null);
+
+    let localPreview = "";
+    try {
+      localPreview = URL.createObjectURL(file);
+    } catch {
+      localPreview = "";
+    }
+
     try {
       const compressed = await compressImageForUpload(file);
-      const localPreview = await readAsDataUrl(compressed);
-      const fd = new FormData();
-      fd.set("slotId", slotId);
-      fd.set("subject", subject);
-      fd.set("file", compressed);
-      // Route Handler — evita limite 1 MB das Server Actions
-      const res = await fetch("/api/onboarding/upload-photo", {
-        method: "POST",
-        body: fd,
-      });
-      const result = (await res.json()) as {
-        error?: string;
-        storagePath?: string;
-        publicUrl?: string;
-        previewUrl?: string;
-      };
-      if (!res.ok || (result.error && !result.storagePath && !result.publicUrl)) {
-        setError(result.error || `Falha no upload (${res.status}).`);
-        return;
+      // Preview do JPEG leve (melhor que o original HEIC)
+      let jpegPreview = localPreview;
+      const isHeic =
+        /heic|heif/i.test(compressed.type) ||
+        /\.(heic|heif)$/i.test(compressed.name);
+      if (!isHeic) {
+        try {
+          const dataUrl = await readAsDataUrl(compressed);
+          if (dataUrl) {
+            if (localPreview.startsWith("blob:")) {
+              URL.revokeObjectURL(localPreview);
+            }
+            jpegPreview = dataUrl;
+            localPreview = dataUrl;
+          }
+        } catch {
+          // mantém object URL do original
+        }
+      } else if (!jpegPreview) {
+        jpegPreview = attachedPlaceholderDataUrl();
       }
+
+      // Anexa na hora — UX pedida: mostrar que a imagem foi anexada
       const draft: OnboardingPhotoDraft = {
         id: crypto.randomUUID(),
         slotId,
         name: compressed.name,
-        previewUrl: result.publicUrl || localPreview,
-        storagePath: result.storagePath || `local/${slotId}`,
-        publicUrl: result.publicUrl,
+        previewUrl: jpegPreview || localPreview || attachedPlaceholderDataUrl(),
+        storagePath: `pending/${slotId}`,
       };
-      onChange({ ...value, [slotId]: draft });
+      onChange({ ...valueRef.current, [slotId]: draft });
+
+      const fd = new FormData();
+      fd.set("slotId", slotId);
+      fd.set("subject", subject);
+      fd.set("file", compressed);
+
+      const res = await fetch("/api/onboarding/upload-photo", {
+        method: "POST",
+        body: fd,
+      });
+
+      let result: {
+        error?: string;
+        warning?: string;
+        storagePath?: string;
+        publicUrl?: string;
+        previewUrl?: string;
+      } = {};
+      try {
+        result = (await res.json()) as typeof result;
+      } catch {
+        result = { error: `Falha no upload (${res.status}).` };
+      }
+
+      if (!res.ok && !result.storagePath) {
+        // Mantém anexada localmente; avisa o motivo
+        setError(
+          result.error ||
+            "Não foi possível enviar ao servidor, mas a foto ficou anexada neste aparelho.",
+        );
+        onChange({
+          ...valueRef.current,
+          [slotId]: {
+            ...draft,
+            storagePath: `local/${slotId}`,
+          },
+        });
+        return;
+      }
+
+      onChange({
+        ...valueRef.current,
+        [slotId]: {
+          ...draft,
+          // Preview local sempre (não depende de rede/CORS)
+          previewUrl: draft.previewUrl,
+          storagePath: result.storagePath || `local/${slotId}`,
+          publicUrl: result.publicUrl,
+        },
+      });
+
+      if (result.warning) {
+        setError(result.warning);
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Não foi possível enviar a foto.";
@@ -84,6 +150,19 @@ export function PhotoSlotGrid({
         );
       } else {
         setError(message);
+      }
+      // Se já tínhamos preview, mantém anexada
+      if (localPreview && !valueRef.current[slotId]) {
+        onChange({
+          ...valueRef.current,
+          [slotId]: {
+            id: crypto.randomUUID(),
+            slotId,
+            name: file.name,
+            previewUrl: localPreview,
+            storagePath: `local/${slotId}`,
+          },
+        });
       }
     } finally {
       setBusySlot(null);
@@ -120,7 +199,7 @@ export function PhotoSlotGrid({
       <input
         ref={cameraRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         capture="user"
         className="hidden"
         onChange={(e) => {
@@ -132,7 +211,7 @@ export function PhotoSlotGrid({
       <input
         ref={uploadRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -152,7 +231,7 @@ export function PhotoSlotGrid({
             <div
               key={slot.id}
               className={`overflow-hidden rounded-2xl border ${
-                photo ? "border-emerald-600/40" : "border-border/70"
+                photo ? "border-emerald-600/50 bg-emerald-50/30" : "border-border/70"
               }`}
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-[#EDE8E0]">
@@ -179,9 +258,15 @@ export function PhotoSlotGrid({
                     <p className="text-[11px] text-white/85">{tip}</p>
                   </div>
                 )}
+                {photo && !busy ? (
+                  <div className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-semibold text-white shadow">
+                    <Check className="size-3" />
+                    Anexada
+                  </div>
+                ) : null}
                 {busy ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-white">
-                    Enviando…
+                    Convertendo e enviando…
                   </div>
                 ) : null}
               </div>
@@ -189,7 +274,9 @@ export function PhotoSlotGrid({
                 <div>
                   <p className="text-sm font-semibold leading-tight">{label}</p>
                   <p className="text-xs leading-snug text-muted-foreground">
-                    {tip}
+                    {photo
+                      ? "Foto anexada — pode trocar se quiser."
+                      : tip}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -202,7 +289,7 @@ export function PhotoSlotGrid({
                     onClick={() => openCamera(slot.id)}
                   >
                     <Camera className="size-3.5" />
-                    Tirar agora
+                    {photo ? "Tirar de novo" : "Tirar agora"}
                   </Button>
                   <Button
                     type="button"
@@ -213,7 +300,7 @@ export function PhotoSlotGrid({
                     onClick={() => openUpload(slot.id)}
                   >
                     <ImagePlus className="size-3.5" />
-                    Galeria
+                    {photo ? "Trocar" : "Galeria"}
                   </Button>
                 </div>
               </div>
@@ -238,4 +325,15 @@ function readAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+/** Fallback visual quando o browser não decodifica HEIC. */
+function attachedPlaceholderDataUrl(): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="800" viewBox="0 0 640 800">
+    <rect width="640" height="800" fill="#E8F5EE"/>
+    <rect x="120" y="260" width="400" height="280" rx="24" fill="#047857"/>
+    <text x="320" y="400" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="36" font-weight="700">Foto anexada</text>
+    <text x="320" y="450" text-anchor="middle" fill="#D1FAE5" font-family="system-ui,sans-serif" font-size="20">convertendo no servidor…</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
