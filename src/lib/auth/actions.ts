@@ -205,7 +205,11 @@ export async function saveChildProfileAction(
     };
     await writeMockOnboarding({
       ...current,
-      child: { displayName, birthDate },
+      child: {
+        displayName,
+        birthDate: birthDate || "2018-01-01",
+        gender: "other",
+      },
     });
     return { success: true };
   }

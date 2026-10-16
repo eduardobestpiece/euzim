@@ -9,51 +9,26 @@ import {
   slotLabel,
   slotTip,
   type PhotoSubject,
-  type PhotoSlotDef,
 } from "@/lib/onboarding/photo-slots";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import { uploadAvatarPhotoAction } from "@/lib/onboarding/actions";
+import {
+  guideSrc,
+  type ChildGender,
+} from "@/lib/onboarding/child-profile";
 
 export type SlotPhotos = Record<string, OnboardingPhotoDraft>;
-
-function Silhouette({ kind }: { kind: PhotoSlotDef["silhouette"] }) {
-  const transform =
-    kind === "angle-r"
-      ? "rotate(18deg)"
-      : kind === "side-r"
-        ? "rotate(35deg)"
-        : kind === "angle-l"
-          ? "rotate(-18deg)"
-          : kind === "side-l"
-            ? "rotate(-35deg)"
-            : kind === "back"
-              ? "scaleX(-1)"
-              : undefined;
-
-  return (
-    <div
-      className="flex h-full w-full items-center justify-center bg-gradient-to-b from-amber-50 to-sky-50"
-      aria-hidden
-    >
-      <div
-        className="relative opacity-40"
-        style={transform ? { transform } : undefined}
-      >
-        <div className="mx-auto size-7 rounded-full bg-amber-800/30" />
-        <div className="mx-auto mt-1 h-10 w-8 rounded-t-2xl bg-amber-800/25" />
-      </div>
-    </div>
-  );
-}
 
 export function PhotoSlotGrid({
   subject,
   value,
   onChange,
+  gender = "other",
 }: {
   subject: PhotoSubject;
   value: SlotPhotos;
   onChange: (next: SlotPhotos) => void;
+  gender?: ChildGender | null;
 }) {
   const [busySlot, setBusySlot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +97,7 @@ export function PhotoSlotGrid({
         ref={cameraRef}
         type="file"
         accept="image/*"
-        capture="environment"
+        capture="user"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -142,29 +117,42 @@ export function PhotoSlotGrid({
         }}
       />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {PHOTO_SLOTS.map((slot) => {
           const photo = value[slot.id];
           const label = slotLabel(slot, subject);
           const tip = slotTip(slot, subject);
           const busy = busySlot === slot.id;
+          const guide = guideSrc(gender, slot.id);
           return (
             <div
               key={slot.id}
-              className={`overflow-hidden rounded-xl border ${
+              className={`overflow-hidden rounded-2xl border ${
                 photo ? "border-emerald-600/40" : "border-border/70"
               }`}
             >
-              <div className="relative aspect-[3/4] bg-muted">
+              <div className="relative aspect-[4/5] bg-[#FFF8F0]">
+                {/* Guia de pose — avatar ilustrado no ângulo */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={guide}
+                  alt={`Guia: ${label}`}
+                  className={`absolute inset-0 h-full w-full object-contain p-2 transition ${
+                    photo ? "opacity-25 blur-[0.5px]" : "opacity-100"
+                  }`}
+                />
                 {photo?.previewUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={photo.previewUrl}
                     alt={label}
-                    className="h-full w-full object-cover"
+                    className="absolute inset-0 h-full w-full object-cover"
                   />
                 ) : (
-                  <Silhouette kind={slot.silhouette} />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 pb-3 pt-10">
+                    <p className="text-xs font-semibold text-white">{label}</p>
+                    <p className="text-[11px] text-white/85">{tip}</p>
+                  </div>
                 )}
                 {busy ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-white">
@@ -172,34 +160,34 @@ export function PhotoSlotGrid({
                   </div>
                 ) : null}
               </div>
-              <div className="space-y-2 p-2.5">
+              <div className="space-y-2 p-3">
                 <div>
-                  <p className="text-xs font-semibold leading-tight">{label}</p>
-                  <p className="text-[11px] leading-snug text-muted-foreground">
+                  <p className="text-sm font-semibold leading-tight">{label}</p>
+                  <p className="text-xs leading-snug text-muted-foreground">
                     {tip}
                   </p>
                 </div>
-                <div className="flex gap-1.5">
+                <div className="flex gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="h-8 flex-1 px-1.5 text-[11px]"
+                    className="h-9 flex-1"
                     disabled={busy}
                     onClick={() => openCamera(slot.id)}
                   >
-                    <Camera className="size-3" />
-                    Tirar
+                    <Camera className="size-3.5" />
+                    Tirar agora
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant="secondary"
-                    className="h-8 flex-1 px-1.5 text-[11px]"
+                    className="h-9 flex-1"
                     disabled={busy}
                     onClick={() => openUpload(slot.id)}
                   >
-                    <ImagePlus className="size-3" />
+                    <ImagePlus className="size-3.5" />
                     Galeria
                   </Button>
                 </div>

@@ -24,6 +24,12 @@ import {
   REQUIRED_PHOTO_COUNT,
   missingSlotIds,
 } from "@/lib/onboarding/photo-slots";
+import {
+  ageYearsFromBirthDate,
+  nextAvatarRefreshDue,
+  validateBirthDate,
+  type ChildGender,
+} from "@/lib/onboarding/child-profile";
 
 export type OnboardingActionResult = {
   error?: string;
@@ -113,24 +119,29 @@ export async function saveChildAvatarProfileAction(
   formData: FormData,
 ): Promise<OnboardingActionResult> {
   const displayName = String(formData.get("displayName") ?? "").trim();
-  const ageRaw = String(formData.get("ageYears") ?? "").trim();
-  const ageYears = ageRaw ? Number.parseInt(ageRaw, 10) : undefined;
+  const birthDate = String(formData.get("birthDate") ?? "").trim();
+  const genderRaw = String(formData.get("gender") ?? "").trim();
+  const gender: ChildGender | null =
+    genderRaw === "boy" || genderRaw === "girl" || genderRaw === "other"
+      ? genderRaw
+      : null;
 
   if (!displayName || displayName.length > 80) {
     return { error: "Informe o nome da criança (até 80 caracteres)." };
   }
-  if (
-    ageYears != null &&
-    (!Number.isFinite(ageYears) || ageYears < 1 || ageYears > 17)
-  ) {
-    return { error: "Informe uma idade entre 1 e 17 anos." };
+  if (!gender) {
+    return { error: "Selecione o gênero (Menino, Menina ou Prefiro não dizer)." };
   }
+
+  const birthError = validateBirthDate(birthDate);
+  if (birthError) return { error: birthError };
+  const ageYears = ageYearsFromBirthDate(birthDate) ?? undefined;
 
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
 
   const state = await loadState();
-  state.child = { displayName, ageYears };
+  state.child = { displayName, birthDate, gender, ageYears };
   await writeMockOnboarding(state);
 
   if (isSupabaseConfigured() && !user.isMock) {
@@ -150,19 +161,19 @@ export async function saveChildAvatarProfileAction(
         .order("created_at", { ascending: true })
         .limit(1);
 
+      const payload = {
+        display_name: displayName,
+        birth_date: birthDate,
+        gender,
+        preferences: { age_years: ageYears ?? null },
+      };
+
       if (existing?.[0]?.id) {
-        await db
-          .from("children")
-          .update({
-            display_name: displayName,
-            preferences: { age_years: ageYears ?? null },
-          })
-          .eq("id", existing[0].id);
+        await db.from("children").update(payload).eq("id", existing[0].id);
       } else {
         await db.from("children").insert({
           parent_id: user.id,
-          display_name: displayName,
-          preferences: { age_years: ageYears ?? null },
+          ...payload,
         });
       }
     }
@@ -244,20 +255,24 @@ export async function saveSubjectPhotosAction(input: {
           input.photos.find((p) => p.slotId === "face-front")?.publicUrl ||
           input.photos[0]?.publicUrl ||
           null;
-        await db
-          .from("children")
-          .update({
-            avatar_url: cover,
-            preferences: {
-              photo_paths: input.photos.map((p) => ({
-                slotId: p.slotId,
-                path: p.storagePath,
-                url: p.publicUrl,
-              })),
-              age_years: state.child?.ageYears ?? null,
-            },
-          })
-          .eq("id", childId);
+        const capturedAt = new Date();
+        const patch: Record<string, unknown> = {
+          avatar_url: cover,
+          preferences: {
+            photo_paths: input.photos.map((p) => ({
+              slotId: p.slotId,
+              path: p.storagePath,
+              url: p.publicUrl,
+            })),
+            age_years: state.child?.ageYears ?? null,
+            gender: state.child?.gender ?? null,
+          },
+        };
+        if (!input.allowPartial) {
+          patch.avatar_photos_captured_at = capturedAt.toISOString();
+          patch.avatar_refresh_due_at = nextAvatarRefreshDue(capturedAt).toISOString();
+        }
+        await db.from("children").update(patch).eq("id", childId);
       }
     }
   }

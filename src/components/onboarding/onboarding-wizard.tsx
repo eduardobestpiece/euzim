@@ -34,6 +34,11 @@ import {
   saveSubjectPhotosAction,
 } from "@/lib/onboarding/actions";
 import { REQUIRED_PHOTO_COUNT } from "@/lib/onboarding/photo-slots";
+import {
+  GENDER_LABELS,
+  ageYearsFromBirthDate,
+  type ChildGender,
+} from "@/lib/onboarding/child-profile";
 import type { OnboardingState } from "@/lib/auth/types";
 
 type Step =
@@ -99,6 +104,13 @@ export function OnboardingWizard({
   const [childName, setChildName] = useState(
     initialState?.child?.displayName ?? "",
   );
+  const [birthDate, setBirthDate] = useState(
+    initialState?.child?.birthDate ?? "",
+  );
+  const [gender, setGender] = useState<ChildGender>(
+    initialState?.child?.gender ?? "other",
+  );
+  const derivedAge = birthDate ? ageYearsFromBirthDate(birthDate) : null;
   const [friendName, setFriendName] = useState(
     initialState?.friend?.displayName ?? "",
   );
@@ -152,6 +164,9 @@ export function OnboardingWizard({
         return;
       }
       setChildName(String(formData.get("displayName") ?? ""));
+      setBirthDate(String(formData.get("birthDate") ?? ""));
+      const g = String(formData.get("gender") ?? "");
+      if (g === "boy" || g === "girl" || g === "other") setGender(g);
       go("child-photos");
     });
   }
@@ -392,18 +407,48 @@ export function OnboardingWizard({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="ageYears">Idade</Label>
+                <Label htmlFor="birthDate">Data de nascimento</Label>
                 <Input
-                  id="ageYears"
-                  name="ageYears"
-                  type="number"
-                  min={1}
-                  max={17}
+                  id="birthDate"
+                  name="birthDate"
+                  type="date"
                   required
-                  defaultValue={initialState?.child?.ageYears ?? ""}
-                  placeholder="6"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  max={new Date().toISOString().slice(0, 10)}
                 />
+                {derivedAge != null ? (
+                  <p className="text-xs text-muted-foreground">
+                    Idade: {derivedAge} ano{derivedAge === 1 ? "" : "s"}
+                  </p>
+                ) : null}
               </div>
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">Gênero</legend>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {(Object.keys(GENDER_LABELS) as ChildGender[]).map((key) => (
+                    <label
+                      key={key}
+                      className={`flex cursor-pointer items-center justify-center rounded-xl border px-3 py-3 text-sm font-medium ${
+                        gender === key
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border/70"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="gender"
+                        value={key}
+                        className="sr-only"
+                        checked={gender === key}
+                        onChange={() => setGender(key)}
+                        required
+                      />
+                      {GENDER_LABELS[key]}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : null}
@@ -441,6 +486,7 @@ export function OnboardingWizard({
               subject="child"
               value={childPhotos}
               onChange={setChildPhotos}
+              gender={gender}
             />
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
@@ -572,6 +618,7 @@ export function OnboardingWizard({
               subject="friend"
               value={friendPhotos}
               onChange={setFriendPhotos}
+              gender={gender}
             />
             {error ? (
               <p className="text-sm text-destructive">{error}</p>

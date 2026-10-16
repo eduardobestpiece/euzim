@@ -1,3 +1,5 @@
+import type { ChildGender } from "@/lib/onboarding/child-profile";
+
 export type AppRole = "parent" | "admin";
 
 export type AuthUser = {
@@ -11,9 +13,10 @@ export type AuthUser = {
 
 export type OnboardingChildDraft = {
   displayName: string;
-  /** Idade em anos (MVP) */
+  birthDate: string;
+  gender: ChildGender;
+  /** Derivado na UI — não é fonte de verdade */
   ageYears?: number;
-  birthDate?: string;
 };
 
 export type FriendKind = "pet" | "toy";

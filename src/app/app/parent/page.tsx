@@ -1,9 +1,11 @@
 import { AppShell } from "@/components/app/app-shell";
 import { ParentDashboard } from "@/components/parent/parent-dashboard";
+import { AvatarRefreshBanner } from "@/components/parent/avatar-refresh-banner";
 import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { MONTHLY_STORY_LIMIT } from "@/lib/billing/character-packs";
+import { getAvatarRefreshStatus } from "@/lib/onboarding/avatar-refresh";
 import { getStoryUsage } from "@/lib/stories/usage";
 import { listStoriesForParent } from "@/lib/stories/load-story";
 import { countMockStoriesThisMonth } from "@/lib/stories/mock-store";
@@ -113,17 +115,21 @@ export default async function ParentPage() {
   }
 
   const stories = await listStoriesForParent(user.id);
+  const refreshStatus = await getAvatarRefreshStatus(user.id);
 
   return (
     <AppShell user={user} title="Área dos pais">
-      <ParentDashboard
-        usage={usage}
-        characters={characters}
-        childName={childName}
-        childAvatarUrl={childAvatarUrl}
-        stories={stories}
-        billing={billing}
-      />
+      <div className="space-y-4">
+        <AvatarRefreshBanner status={refreshStatus} />
+        <ParentDashboard
+          usage={usage}
+          characters={characters}
+          childName={childName}
+          childAvatarUrl={childAvatarUrl}
+          stories={stories}
+          billing={billing}
+        />
+      </div>
     </AppShell>
   );
 }

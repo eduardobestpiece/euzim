@@ -5,21 +5,26 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
+import { getAvatarRefreshStatus } from "@/lib/onboarding/avatar-refresh";
 import type { OnboardingState } from "@/lib/auth/types";
 
 export default async function OnboardingPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (user.onboardingCompleted) redirect("/app/parent");
+
+  const refresh = await getAvatarRefreshStatus(user.id);
+  if (user.onboardingCompleted && !refresh.due) {
+    redirect("/app/parent");
+  }
 
   const cookieState = await readMockOnboarding();
   let initialState: OnboardingState | null = cookieState;
-  let resetMode: "full" | "reuse" | null = null;
+  let resetMode: "full" | "reuse" | null = refresh.due ? "reuse" : null;
 
   if (isSupabaseConfigured() && !user.isMock) {
     const bootstrap = await loadOnboardingBootstrap(user.id);
-    resetMode = bootstrap.resetMode;
-    if (bootstrap.resetMode === "reuse" && bootstrap.initialState) {
+    if (bootstrap.resetMode) resetMode = bootstrap.resetMode;
+    if ((resetMode === "reuse" || refresh.due) && bootstrap.initialState) {
       initialState = {
         ...bootstrap.initialState,
         securityPin:
@@ -31,6 +36,9 @@ export default async function OnboardingPage() {
         friendPhotos:
           cookieState?.friendPhotos ?? bootstrap.initialState.friendPhotos,
       };
+      if (!resetMode) resetMode = "reuse";
+    } else if (bootstrap.resetMode === "reuse" && bootstrap.initialState) {
+      initialState = bootstrap.initialState;
     }
   }
 

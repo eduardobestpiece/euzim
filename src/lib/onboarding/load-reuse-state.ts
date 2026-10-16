@@ -33,7 +33,7 @@ export async function loadOnboardingBootstrap(
 
   const { data: children } = await db
     .from("children")
-    .select("id, display_name, avatar_url, preferences")
+    .select("id, display_name, avatar_url, birth_date, gender, preferences")
     .eq("parent_id", userId)
     .order("created_at", { ascending: true })
     .limit(1);
@@ -43,6 +43,10 @@ export async function loadOnboardingBootstrap(
     age_years?: number;
     photo_paths?: { slotId?: string; path?: string; url?: string }[];
   };
+  const gender =
+    child?.gender === "boy" || child?.gender === "girl" || child?.gender === "other"
+      ? child.gender
+      : ("other" as const);
 
   const childPhotos: OnboardingPhotoDraft[] = [];
   for (const slot of PHOTO_SLOTS) {
@@ -77,6 +81,8 @@ export async function loadOnboardingBootstrap(
     child: child
       ? {
           displayName: child.display_name,
+          birthDate: child.birth_date || "",
+          gender,
           ageYears: prefs.age_years,
         }
       : null,

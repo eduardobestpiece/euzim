@@ -126,13 +126,19 @@ CREATE TABLE public.children (
   parent_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
   display_name text NOT NULL,
   birth_date date,
+  gender text,
   pin_code text,
   avatar_url text,
   avatar_model_id text,
+  avatar_photos_captured_at timestamptz,
+  avatar_refresh_due_at timestamptz,
   preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT children_display_name_len CHECK (char_length(display_name) BETWEEN 1 AND 80)
+  CONSTRAINT children_display_name_len CHECK (char_length(display_name) BETWEEN 1 AND 80),
+  CONSTRAINT children_gender_check CHECK (
+    gender IS NULL OR gender IN ('boy', 'girl', 'other')
+  )
 );
 
 CREATE INDEX children_parent_id_idx ON public.children (parent_id);
