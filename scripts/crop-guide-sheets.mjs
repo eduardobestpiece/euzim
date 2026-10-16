@@ -1,108 +1,121 @@
 /**
- * Corta as folhas de referência (rosto 2×3, corpo 3×2) em guias por slot.
- * Usa sharp. Saída: public/onboarding/guides/{girl,neutral}/*.png
+ * Corta folhas de turnaround 3D (Pixar) em 12 guias por gênero.
+ * Saída: public/onboarding/guides/{girl,boy,neutral}/*.png
  */
 import sharp from "sharp";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, copyFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(process.cwd());
-const faceSheet = resolve(root, "public/onboarding/reference/face-sheet-girl.png");
-const bodySheet = resolve(root, "public/onboarding/reference/body-sheet-girl.png");
+const ref = (...p) => resolve(root, "public/onboarding/reference", ...p);
 
 const FACE_ORDER = [
-  // row-major 2 cols × 3 rows
   "face-front",
-  "face-three_quarter_left", // top-right: head turned to her left
-  "face-three_quarter_right", // mid-left
-  "face-profile_right", // mid-right
-  "face-profile_left", // bottom-left
-  "face-back", // bottom-right
+  "face-three_quarter_left",
+  "face-three_quarter_right",
+  "face-profile_right",
+  "face-profile_left",
+  "face-back",
 ];
 
-// Body sheet is 3 cols × 2 rows — missing true back; top-right is eyes-closed ¾
-const BODY_MAP = [
+const BODY_GIRL = [
   { slot: "body-profile_right", col: 0, row: 0 },
   { slot: "body-three_quarter_right", col: 1, row: 0 },
-  // col 2 row 0 = eyes closed — skip for now (body-back generated separately)
   { slot: "body-front", col: 0, row: 1 },
   { slot: "body-three_quarter_left", col: 1, row: 1 },
   { slot: "body-profile_left", col: 2, row: 1 },
 ];
 
-async function cropGrid(input, cols, rows, order, outDirs, labelTrim = 0.12) {
-  const meta = await sharp(input).metadata();
-  const w = meta.width;
-  const h = meta.height;
-  const cellW = Math.floor(w / cols);
-  const cellH = Math.floor(h / rows);
-  const topTrim = Math.round(cellH * labelTrim);
+const BODY_BOY = [
+  { slot: "body-profile_right", col: 0, row: 0 },
+  { slot: "body-three_quarter_right", col: 1, row: 0 },
+  { slot: "body-back", col: 2, row: 0 },
+  { slot: "body-front", col: 0, row: 1 },
+  { slot: "body-three_quarter_left", col: 1, row: 1 },
+  { slot: "body-profile_left", col: 2, row: 1 },
+];
 
-  for (let i = 0; i < order.length; i++) {
-    const slot = order[i];
-    if (!slot) continue;
+async function cropFaceSheet(input, outDirs) {
+  const meta = await sharp(input).metadata();
+  const cols = 2;
+  const rows = 3;
+  const cellW = Math.floor(meta.width / cols);
+  const cellH = Math.floor(meta.height / rows);
+  const topTrim = Math.round(cellH * 0.14);
+
+  for (let i = 0; i < FACE_ORDER.length; i++) {
+    const slot = FACE_ORDER[i];
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const left = col * cellW;
-    const top = row * cellH + topTrim;
-    const height = cellH - topTrim;
     const buf = await sharp(input)
-      .extract({ left, top, width: cellW, height })
-      .resize(512, 640, { fit: "contain", background: { r: 245, g: 240, b: 232, alpha: 1 } })
+      .extract({
+        left: col * cellW,
+        top: row * cellH + topTrim,
+        width: cellW,
+        height: cellH - topTrim,
+      })
+      .resize(640, 800, {
+        fit: "cover",
+        position: "centre",
+      })
       .png({ compressionLevel: 8 })
       .toBuffer();
     for (const dir of outDirs) {
       mkdirSync(dir, { recursive: true });
       await sharp(buf).toFile(resolve(dir, `${slot}.png`));
     }
-    console.log("wrote", slot, cellW, height);
+    console.log("face", slot);
   }
 }
 
-async function cropBody(outDirs) {
-  const meta = await sharp(bodySheet).metadata();
-  const w = meta.width;
-  const h = meta.height;
+async function cropBodySheet(input, map, outDirs, opts = {}) {
+  const meta = await sharp(input).metadata();
   const cols = 3;
   const rows = 2;
-  const cellW = Math.floor(w / cols);
-  const cellH = Math.floor(h / rows);
-  const topTrim = Math.round(cellH * 0.1);
+  const cellW = Math.floor(meta.width / cols);
+  const cellH = Math.floor(meta.height / rows);
+  const topTrim = Math.round(cellH * (opts.labelTrim ?? 0.1));
 
-  for (const { slot, col, row } of BODY_MAP) {
-    const left = col * cellW;
-    const top = row * cellH + topTrim;
-    const height = cellH - topTrim;
-    const buf = await sharp(bodySheet)
-      .extract({ left, top, width: cellW, height })
-      .resize(512, 720, { fit: "contain", background: { r: 245, g: 240, b: 232, alpha: 1 } })
+  for (const { slot, col, row } of map) {
+    const buf = await sharp(input)
+      .extract({
+        left: col * cellW,
+        top: row * cellH + topTrim,
+        width: cellW,
+        height: cellH - topTrim,
+      })
+      .resize(640, 900, { fit: "cover", position: "centre" })
       .png({ compressionLevel: 8 })
       .toBuffer();
     for (const dir of outDirs) {
       mkdirSync(dir, { recursive: true });
       await sharp(buf).toFile(resolve(dir, `${slot}.png`));
     }
-    console.log("wrote", slot);
+    console.log("body", slot);
   }
+}
 
-  // Provisional body-back: use eyes-closed panel as last resort until generated
-  const left = 2 * cellW;
-  const top = 0 + topTrim;
-  const height = cellH - topTrim;
-  const provisional = await sharp(bodySheet)
-    .extract({ left, top, width: cellW, height })
-    .resize(512, 720, { fit: "contain", background: { r: 245, g: 240, b: 232, alpha: 1 } })
-    .png()
+async function writeBodyBackFromFile(input, outDirs) {
+  const buf = await sharp(input)
+    .resize(640, 900, { fit: "cover", position: "centre" })
+    .png({ compressionLevel: 8 })
     .toBuffer();
   for (const dir of outDirs) {
-    await sharp(provisional).toFile(resolve(dir, "body-back.png"));
+    mkdirSync(dir, { recursive: true });
+    await sharp(buf).toFile(resolve(dir, "body-back.png"));
   }
-  console.log("wrote body-back (provisional from sheet)");
+  console.log("body-back from", input);
 }
 
 const girlDir = resolve(root, "public/onboarding/guides/girl");
+const boyDir = resolve(root, "public/onboarding/guides/boy");
 const neutralDir = resolve(root, "public/onboarding/guides/neutral");
 
-await cropGrid(faceSheet, 2, 3, FACE_ORDER, [girlDir, neutralDir]);
-await cropBody([girlDir, neutralDir]);
-console.log("done");
+await cropFaceSheet(ref("face-sheet-girl.png"), [girlDir]);
+await cropBodySheet(ref("body-sheet-girl.png"), BODY_GIRL, [girlDir]);
+await writeBodyBackFromFile(ref("body-back-girl.jpg"), [girlDir]);
+
+await cropFaceSheet(ref("face-sheet-boy.jpg"), [boyDir, neutralDir]);
+await cropBodySheet(ref("body-sheet-boy.jpg"), BODY_BOY, [boyDir, neutralDir]);
+
+console.log("done — all guides are 3D sheet crops (no SVG)");

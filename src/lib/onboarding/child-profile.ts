@@ -6,19 +6,24 @@ export const GENDER_LABELS: Record<ChildGender, string> = {
   other: "Prefiro não dizer",
 };
 
+/** Cache-bust quando as guias 3D mudam (evita SVG flat antigo no browser). */
+export const GUIDE_ASSET_VERSION = "2";
+
 export function guideFolderForGender(
   gender: ChildGender | null | undefined,
 ): "boy" | "girl" | "neutral" {
-  if (gender === "boy") return "boy";
   if (gender === "girl") return "girl";
+  // boy + other/null → menino 3D (nunca SVG flat)
+  if (gender === "boy") return "boy";
   return "neutral";
 }
 
+/** Só PNG das folhas Pixar — nunca SVG. */
 export function guideSrc(
   gender: ChildGender | null | undefined,
   slotId: string,
 ): string {
-  return `/onboarding/guides/${guideFolderForGender(gender)}/${slotId}.png`;
+  return `/onboarding/guides/${guideFolderForGender(gender)}/${slotId}.png?v=${GUIDE_ASSET_VERSION}`;
 }
 
 /** Idade em anos completos a partir de YYYY-MM-DD. */

@@ -146,14 +146,15 @@ export function PhotoSlotGrid({
                 photo ? "border-emerald-600/40" : "border-border/70"
               }`}
             >
-              <div className="relative aspect-[4/5] bg-[#FFF8F0]">
-                {/* Guia de pose — avatar ilustrado no ângulo */}
+              <div className="relative aspect-[4/5] overflow-hidden bg-[#EDE8E0]">
+                {/* Guia 3D Pixar (crop da folha) — full-bleed, sem SVG flat */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={guide}
                   alt={`Guia: ${label}`}
-                  className={`absolute inset-0 h-full w-full object-contain p-2 transition ${
-                    photo ? "opacity-25 blur-[0.5px]" : "opacity-100"
+                  decoding="async"
+                  className={`absolute inset-0 h-full w-full object-cover object-top transition ${
+                    photo ? "opacity-20" : "opacity-100"
                   }`}
                 />
                 {photo?.previewUrl ? (
@@ -164,7 +165,7 @@ export function PhotoSlotGrid({
                     className="absolute inset-0 h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/45 to-transparent px-3 pb-3 pt-10">
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-3 pb-3 pt-10">
                     <p className="text-xs font-semibold text-white">{label}</p>
                     <p className="text-[11px] text-white/85">{tip}</p>
                   </div>
