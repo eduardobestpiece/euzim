@@ -71,13 +71,15 @@ CREATE TABLE public.users (
   stripe_customer_id text UNIQUE,
   subscription_status public.subscription_status NOT NULL DEFAULT 'none',
   subscription_plan_id text,
+  extra_characters_available integer NOT NULL DEFAULT 0,
   avatar_url text,
   locale text NOT NULL DEFAULT 'pt-BR',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT users_security_pin_format CHECK (
     security_pin IS NULL OR security_pin ~ '^[0-9]{4,6}$'
-  )
+  ),
+  CONSTRAINT users_extra_characters_nonneg CHECK (extra_characters_available >= 0)
 );
 
 CREATE INDEX users_subscription_status_idx ON public.users (subscription_status);
@@ -316,7 +318,7 @@ CREATE TRIGGER subscription_limits_set_updated_at
 INSERT INTO public.subscription_limits (plan_id, plan_name, max_children, max_stories_per_month, max_characters, max_images_per_story, features)
 VALUES
   ('free', 'Gratuito', 1, 3, 1, 4, '{"share": true, "lora": false}'::jsonb),
-  ('family', 'Família', 4, 30, 8, 12, '{"share": true, "lora": true}'::jsonb)
+  ('family', 'Família', 4, 15, 1, 8, '{"share": true, "lora": true, "stripe": true}'::jsonb)
 ON CONFLICT (plan_id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------

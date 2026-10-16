@@ -5,6 +5,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StoryUsageTracker } from "@/components/parent/story-usage-tracker";
 import { CharactersPanel } from "@/components/parent/characters-panel";
 import { NewStoryForm } from "@/components/parent/new-story-form";
+import {
+  SubscriptionPanel,
+  type BillingSnapshot,
+} from "@/components/parent/subscription-panel";
 import type { StoryUsage } from "@/lib/stories/usage";
 
 type CharacterRow = {
@@ -25,11 +29,13 @@ export function ParentDashboard({
   characters,
   childName,
   stories,
+  billing,
 }: {
   usage: StoryUsage;
   characters: CharacterRow[];
   childName?: string | null;
   stories: StoryListItem[];
+  billing: BillingSnapshot;
 }) {
   const remaining = Math.max(0, usage.limit - usage.used);
 
@@ -42,7 +48,7 @@ export function ParentDashboard({
         <p className="max-w-2xl text-muted-foreground">
           Acompanhe o uso mensal de histórias
           {childName ? ` de ${childName}` : ""}, gere novas aventuras e gerencie
-          personagens.
+          personagens e assinatura.
         </p>
       </div>
 
@@ -53,6 +59,7 @@ export function ParentDashboard({
           <TabsTrigger value="create">Nova História</TabsTrigger>
           <TabsTrigger value="library">Biblioteca</TabsTrigger>
           <TabsTrigger value="characters">Gerenciar Personagens</TabsTrigger>
+          <TabsTrigger value="billing">Assinatura</TabsTrigger>
         </TabsList>
 
         <TabsContent value="create" className="space-y-4">
@@ -98,7 +105,11 @@ export function ParentDashboard({
         </TabsContent>
 
         <TabsContent value="characters">
-          <CharactersPanel characters={characters} />
+          <CharactersPanel characters={characters} billing={billing} />
+        </TabsContent>
+
+        <TabsContent value="billing">
+          <SubscriptionPanel billing={billing} />
         </TabsContent>
       </Tabs>
     </div>

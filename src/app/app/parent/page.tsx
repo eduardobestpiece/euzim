@@ -1,14 +1,20 @@
 import { AppShell } from "@/components/app/app-shell";
 import { ParentDashboard } from "@/components/parent/parent-dashboard";
+import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { MONTHLY_STORY_LIMIT } from "@/lib/billing/character-packs";
 import { getStoryUsage } from "@/lib/stories/usage";
 import { listStoriesForParent } from "@/lib/stories/load-story";
 import { countMockStoriesThisMonth } from "@/lib/stories/mock-store";
-import { MONTHLY_STORY_LIMIT } from "@/lib/billing/character-packs";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  describeStripeKeyIssue,
+  isStripeSecretValid,
+  stripeMissingKeys,
+} from "@/lib/stripe/config";
 
 export default async function ParentPage() {
   const user = await getCurrentUser();
@@ -26,6 +32,15 @@ export default async function ParentPage() {
 
   let characters: { id: string; name: string; isPrimary?: boolean }[] = [];
   let childName: string | null = null;
+  let billing: BillingSnapshot = {
+    subscriptionStatus: "none",
+    planId: null,
+    stripeCustomerId: null,
+    extraCharacters: 0,
+    stripeReady: isStripeSecretValid(),
+    missingKeys: stripeMissingKeys(),
+    keyIssue: describeStripeKeyIssue(),
+  };
 
   if (!isSupabaseConfigured() || user.isMock) {
     const onboarding = await readMockOnboarding();
@@ -58,6 +73,27 @@ export default async function ParentPage() {
         .limit(1);
 
       childName = children?.[0]?.display_name ?? null;
+
+      const { data: profile } = await db
+        .from("users")
+        .select(
+          "subscription_status, subscription_plan_id, stripe_customer_id, extra_characters_available",
+        )
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile) {
+        billing = {
+          ...billing,
+          subscriptionStatus: profile.subscription_status,
+          planId: profile.subscription_plan_id,
+          stripeCustomerId: profile.stripe_customer_id,
+          extraCharacters:
+            typeof profile.extra_characters_available === "number"
+              ? profile.extra_characters_available
+              : 0,
+        };
+      }
     }
 
     if (!childName) {
@@ -77,6 +113,7 @@ export default async function ParentPage() {
         characters={characters}
         childName={childName}
         stories={stories}
+        billing={billing}
       />
     </AppShell>
   );

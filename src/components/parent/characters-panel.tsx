@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,11 @@ import {
   formatBrl,
   type CharacterPack,
 } from "@/lib/billing/character-packs";
+import {
+  mockActivatePackAction,
+  startCharacterPackCheckoutAction,
+} from "@/lib/stripe/checkout-actions";
+import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 
 type CharacterRow = {
   id: string;
@@ -26,17 +31,49 @@ type CharacterRow = {
 
 export function CharactersPanel({
   characters,
+  billing,
 }: {
   characters: CharacterRow[];
+  billing: BillingSnapshot;
 }) {
+  const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function buyPack(pack: CharacterPack) {
     setSelected(pack.id);
-    setMessage(
-      `Pacote “${pack.name}” (${formatBrl(pack.priceBrl)}) — Stripe entra nas próximas fases. Seleção salva localmente.`,
-    );
+    setMessage(null);
+    setError(null);
+    startTransition(async () => {
+      const result = await startCharacterPackCheckoutAction(pack.id);
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      if (result.error) setError(result.error);
+      if (!billing.stripeReady) {
+        setMessage(
+          `Checkout real indisponível. Use “Simular compra” para creditar ${pack.characters} personagem(ns) localmente.`,
+        );
+      }
+    });
+  }
+
+  function simulatePack(pack: CharacterPack) {
+    setSelected(pack.id);
+    setError(null);
+    startTransition(async () => {
+      const result = await mockActivatePackAction(pack.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage(
+        `Pacote “${pack.name}” creditado (simulado). Extras: +${pack.characters}.`,
+      );
+      window.location.reload();
+    });
   }
 
   return (
@@ -48,6 +85,9 @@ export function CharactersPanel({
             Seus personagens
           </h2>
         </div>
+        <p className="text-sm text-muted-foreground">
+          Extras disponíveis: {billing.extraCharacters ?? 0}
+        </p>
         {characters.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nenhum personagem ainda. Crie no onboarding ou compre um pacote
@@ -75,8 +115,7 @@ export function CharactersPanel({
             Pacotes extras
           </h2>
           <p className="text-sm text-muted-foreground">
-            Expanda o elenco da família. Pagamento real (Stripe) nas fases
-            seguintes — aqui é só a vitrine.
+            Upsell via Stripe Checkout (pagamento único). Preços do brief MVP.
           </p>
         </div>
 
@@ -106,19 +145,37 @@ export function CharactersPanel({
                   {pack.characters > 1 ? "s" : ""}
                 </p>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="flex flex-col gap-2">
                 <Button
                   className="w-full"
                   variant={selected === pack.id ? "secondary" : "default"}
+                  disabled={pending}
                   onClick={() => buyPack(pack)}
                 >
-                  {selected === pack.id ? "Selecionado" : "Quero este"}
+                  {pending && selected === pack.id
+                    ? "Abrindo…"
+                    : "Comprar com Stripe"}
                 </Button>
+                {!billing.stripeReady ? (
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() => simulatePack(pack)}
+                  >
+                    Simular compra
+                  </Button>
+                ) : null}
               </CardFooter>
             </Card>
           ))}
         </div>
 
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
         {message ? (
           <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
             {message}
