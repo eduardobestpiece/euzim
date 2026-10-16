@@ -12,6 +12,9 @@ import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import type { OnboardingState } from "@/lib/auth/types";
 
+/** Geração Pixar no fluxo pode passar de 60s. */
+export const maxDuration = 300;
+
 export default async function OnboardingPage() {
   // cacheComponents: connection() opts into request time — sem Date.now() aqui
   await connection();

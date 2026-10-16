@@ -27,7 +27,6 @@ import {
 } from "@/components/onboarding/photo-slot-grid";
 import {
   finishAvatarOnboardingAction,
-  generateAvatarsAction,
   saveChildAvatarProfileAction,
   saveFriendProfileAction,
   saveOnboardingPinAction,
@@ -153,9 +152,14 @@ export function OnboardingWizard({
   const [friendAvatarUrl, setFriendAvatarUrl] = useState<string | null>(
     initialState?.friendAvatarUrl ?? null,
   );
-  const [engine, setEngine] = useState<string | null>(
-    isReuse ? "reuse" : null,
+  const [childFaceSheetUrl, setChildFaceSheetUrl] = useState<string | null>(
+    null,
   );
+  const [childBodySheetUrl, setChildBodySheetUrl] = useState<string | null>(
+    null,
+  );
+  const [friendSheetUrl, setFriendSheetUrl] = useState<string | null>(null);
+  const [engine, setEngine] = useState<string | null>(null);
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
@@ -265,21 +269,42 @@ export function OnboardingWizard({
           return;
         }
       }
-      if (isReuse && childAvatarUrl && friendAvatarUrl) {
-        go("preview");
-        return;
-      }
       go("generating");
-      const gen = await generateAvatarsAction();
-      if (gen.error) {
-        setError(gen.error);
+      try {
+        const res = await fetch("/api/onboarding/generate-avatars", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force: true }),
+        });
+        const gen = (await res.json()) as {
+          error?: string;
+          childAvatarUrl?: string;
+          friendAvatarUrl?: string;
+          childFaceSheetUrl?: string;
+          childBodySheetUrl?: string;
+          friendSheetUrl?: string;
+          engine?: string;
+        };
+        if (!res.ok || gen.error) {
+          setError(gen.error || `Falha na geração (${res.status}).`);
+          setStep("friend-photos");
+          return;
+        }
+        setChildAvatarUrl(gen.childAvatarUrl ?? null);
+        setFriendAvatarUrl(gen.friendAvatarUrl ?? null);
+        setChildFaceSheetUrl(gen.childFaceSheetUrl ?? null);
+        setChildBodySheetUrl(gen.childBodySheetUrl ?? null);
+        setFriendSheetUrl(gen.friendSheetUrl ?? null);
+        setEngine(gen.engine ?? null);
+        go("preview");
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Falha de rede ao gerar avatares.",
+        );
         setStep("friend-photos");
-        return;
       }
-      setChildAvatarUrl(gen.childAvatarUrl ?? null);
-      setFriendAvatarUrl(gen.friendAvatarUrl ?? null);
-      setEngine(gen.engine ?? null);
-      go("preview");
     });
   }
 
@@ -635,10 +660,11 @@ export function OnboardingWizard({
             <Sparkles className="size-8 animate-pulse text-amber-600" />
             <div className="space-y-1">
               <p className="font-heading text-xl font-semibold">
-                Criando magia…
+                Criando magia Disney/Pixar…
               </p>
               <p className="text-sm text-muted-foreground">
-                Treino LoRA simulado + preview Disney-like dos personagens.
+                A IA está transformando as fotos em folhas de personagem 3D.
+                Isso pode levar cerca de 1–2 minutos.
               </p>
             </div>
           </CardContent>
@@ -650,12 +676,11 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Check className="size-5 text-emerald-600" />
-              Seus avatares
+              Seus avatares Pixar
             </CardTitle>
             <CardDescription>
-              Preview pronto
-              {engine ? ` (${engine})` : ""}. Falta só o PIN dos pais para
-              liberar o painel.
+              Gerados a partir das suas fotos
+              {engine ? ` · ${engine}` : ""}. Falta só o PIN dos pais.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -694,6 +719,49 @@ export function OnboardingWizard({
                 </figcaption>
               </figure>
             </div>
+
+            {childFaceSheetUrl ? (
+              <figure className="space-y-2">
+                <p className="text-sm font-semibold">
+                  Estudo de personagem — rosto
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={childFaceSheetUrl}
+                  alt={`Folha de rosto de ${childName}`}
+                  className="w-full rounded-xl border border-border/60 object-contain"
+                />
+              </figure>
+            ) : null}
+
+            {childBodySheetUrl ? (
+              <figure className="space-y-2">
+                <p className="text-sm font-semibold">
+                  Estudo de personagem — corpo
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={childBodySheetUrl}
+                  alt={`Folha de corpo de ${childName}`}
+                  className="w-full rounded-xl border border-border/60 object-contain"
+                />
+              </figure>
+            ) : null}
+
+            {friendSheetUrl ? (
+              <figure className="space-y-2">
+                <p className="text-sm font-semibold">
+                  Estudo — {friendName}
+                </p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={friendSheetUrl}
+                  alt={`Folha de ${friendName}`}
+                  className="w-full rounded-xl border border-border/60 object-contain"
+                />
+              </figure>
+            ) : null}
+
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
             ) : null}
@@ -705,6 +773,58 @@ export function OnboardingWizard({
                 onClick={() => go("friend-photos")}
               >
                 Voltar
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="sm:flex-1"
+                disabled={pending}
+                onClick={() => {
+                  setError(null);
+                  startTransition(async () => {
+                    go("generating");
+                    try {
+                      const res = await fetch(
+                        "/api/onboarding/generate-avatars",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ force: true }),
+                        },
+                      );
+                      const gen = (await res.json()) as {
+                        error?: string;
+                        childAvatarUrl?: string;
+                        friendAvatarUrl?: string;
+                        childFaceSheetUrl?: string;
+                        childBodySheetUrl?: string;
+                        friendSheetUrl?: string;
+                        engine?: string;
+                      };
+                      if (!res.ok || gen.error) {
+                        setError(gen.error || `Falha (${res.status}).`);
+                        setStep("preview");
+                        return;
+                      }
+                      setChildAvatarUrl(gen.childAvatarUrl ?? null);
+                      setFriendAvatarUrl(gen.friendAvatarUrl ?? null);
+                      setChildFaceSheetUrl(gen.childFaceSheetUrl ?? null);
+                      setChildBodySheetUrl(gen.childBodySheetUrl ?? null);
+                      setFriendSheetUrl(gen.friendSheetUrl ?? null);
+                      setEngine(gen.engine ?? null);
+                      go("preview");
+                    } catch (err) {
+                      setError(
+                        err instanceof Error
+                          ? err.message
+                          : "Falha ao regenerar.",
+                      );
+                      setStep("preview");
+                    }
+                  });
+                }}
+              >
+                {pending ? "Regenerando…" : "Regenerar Pixar"}
               </Button>
               <Button
                 className="w-full sm:flex-[2]"

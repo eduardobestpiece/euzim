@@ -18,7 +18,11 @@ import type {
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { generateAvatarPreview } from "@/lib/onboarding/avatar-preview";
+import {
+  generateChildPixarAvatars,
+  generateFriendPixarAvatar,
+  isPixarGeneratedUrl,
+} from "@/lib/onboarding/generate-pixar-avatar";
 import {
   slotsForSubject,
   requiredPhotoCount,
@@ -43,6 +47,9 @@ export type OnboardingActionResult = {
   success?: boolean;
   childAvatarUrl?: string;
   friendAvatarUrl?: string;
+  childFaceSheetUrl?: string;
+  childBodySheetUrl?: string;
+  friendSheetUrl?: string;
   engine?: string;
 };
 
@@ -434,18 +441,13 @@ export async function saveSubjectPhotosAction(input: {
           preferences: prefs,
         };
 
-        if (input.subject === "child") {
-          const cover =
-            input.photos.find((p) => p.slotId === "face-front")?.publicUrl ||
-            input.photos[0]?.publicUrl ||
-            null;
-          if (cover) patch.avatar_url = cover;
-          if (!input.allowPartial) {
-            const capturedAt = new Date();
-            patch.avatar_photos_captured_at = capturedAt.toISOString();
-            patch.avatar_refresh_due_at =
-              nextAvatarRefreshDue(capturedAt).toISOString();
-          }
+        // Não gravar foto crua em avatar_url — isso confundia o preview com "reuse".
+        // avatar_url só recebe o Pixar gerado em generateAvatarsAction.
+        if (input.subject === "child" && !input.allowPartial) {
+          const capturedAt = new Date();
+          patch.avatar_photos_captured_at = capturedAt.toISOString();
+          patch.avatar_refresh_due_at =
+            nextAvatarRefreshDue(capturedAt).toISOString();
         }
 
         const { error } = await db
@@ -551,7 +553,10 @@ export async function uploadAvatarPhotoAction(formData: FormData): Promise<{
   };
 }
 
-export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
+export async function generateAvatarsAction(input?: {
+  /** Força nova geração mesmo se já existir Pixar salvo */
+  force?: boolean;
+}): Promise<OnboardingActionResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
 
@@ -562,62 +567,88 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
   if (!state.friend?.displayName) {
     return { error: "Complete o melhor amigo." };
   }
-  // Reuse: se já há avatares, não regenera
-  if (state.childAvatarUrl && state.friendAvatarUrl) {
+
+  const childMiss = assertCompletePhotos(state.childPhotos, "child");
+  if (childMiss) {
+    return { error: `Fotos da criança: ${childMiss}` };
+  }
+  const friendMiss = assertCompletePhotos(state.friendPhotos, "friend");
+  if (friendMiss) {
+    return { error: `Fotos do amigo: ${friendMiss}` };
+  }
+
+  // Só reusa se já for avatar Pixar gerado (nunca foto crua do upload)
+  const canReuse =
+    !input?.force &&
+    isPixarGeneratedUrl(state.childAvatarUrl) &&
+    isPixarGeneratedUrl(state.friendAvatarUrl);
+
+  if (canReuse) {
     return {
       success: true,
-      childAvatarUrl: state.childAvatarUrl,
-      friendAvatarUrl: state.friendAvatarUrl,
+      childAvatarUrl: state.childAvatarUrl!,
+      friendAvatarUrl: state.friendAvatarUrl!,
       engine: "reuse",
     };
   }
 
-  const childMiss = assertCompletePhotos(state.childPhotos, "child");
-  if (childMiss && !state.childAvatarUrl) {
-    return { error: `Fotos da criança: ${childMiss}` };
-  }
-  const friendMiss = assertCompletePhotos(state.friendPhotos, "friend");
-  if (friendMiss && !state.friendAvatarUrl) {
-    return { error: `Fotos do amigo: ${friendMiss}` };
+  let childPixar;
+  let friendPixar;
+  try {
+    childPixar = await generateChildPixarAvatars({
+      userId: user.id,
+      name: state.child.displayName,
+      photos: state.childPhotos,
+    });
+    friendPixar = await generateFriendPixarAvatar({
+      userId: user.id,
+      name: state.friend.displayName,
+      kind: state.friend.kind,
+      photos: state.friendPhotos,
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Falha ao gerar avatares Pixar.";
+    return { error: message };
   }
 
-  const childPreview = state.childAvatarUrl
-    ? { url: state.childAvatarUrl, engine: "reuse" as const }
-    : await generateAvatarPreview({
-        subjectName: state.child.displayName,
-        kind: "child",
-      });
-  const friendPreview = state.friendAvatarUrl
-    ? { url: state.friendAvatarUrl, engine: "reuse" as const }
-    : await generateAvatarPreview({
-        subjectName: state.friend.displayName,
-        kind: state.friend.kind,
-      });
+  if (!childPixar.url || !friendPixar.url) {
+    return {
+      error:
+        "Não foi possível gerar os avatares. Confira OPENAI_API_KEY e as fotos enviadas.",
+    };
+  }
 
-  state.childAvatarUrl = childPreview.url;
-  state.friendAvatarUrl = friendPreview.url;
+  state.childAvatarUrl = childPixar.url;
+  state.friendAvatarUrl = friendPixar.url;
   await writeMockOnboarding(state);
 
   if (isSupabaseConfigured() && !user.isMock) {
     const db = createAdminClient() ?? (await createClient());
     if (db) {
-      const { data: children } = await db
-        .from("children")
-        .select("id")
-        .eq("parent_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1);
-      const childId = children?.[0]?.id;
+      const row = await loadChildPreferences(user.id);
+      const childId = row?.childId;
       if (childId) {
+        const prefs = { ...(row?.preferences ?? {}) };
+        prefs.pixar = {
+          child_hero: childPixar.url,
+          child_face_sheet: childPixar.faceSheetUrl ?? null,
+          child_body_sheet: childPixar.bodySheetUrl ?? null,
+          friend_hero: friendPixar.url,
+          friend_sheet: friendPixar.faceSheetUrl ?? null,
+          engine: childPixar.engine,
+          generated_at: new Date().toISOString(),
+        };
+
         await db
           .from("children")
           .update({
-            avatar_url: childPreview.url,
-            avatar_model_id: `lora-sim:${user.id}`,
+            avatar_url: childPixar.url,
+            avatar_model_id: `pixar:${childPixar.engine}:${user.id}`,
+            preferences: prefs,
           })
           .eq("id", childId);
 
-        // Personagem principal (criança)
         const { data: existingChars } = await db
           .from("characters")
           .select("id, is_primary")
@@ -629,9 +660,9 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
             .from("characters")
             .update({
               name: state.child.displayName,
-              description: "Avatar principal da criança",
-              avatar_url: childPreview.url,
-              lora_model_id: `lora-sim:${user.id}:child`,
+              description: "Avatar Pixar da criança",
+              avatar_url: childPixar.url,
+              lora_model_id: `pixar:${user.id}:child`,
             })
             .eq("id", primary.id);
         } else {
@@ -640,13 +671,12 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
             child_id: childId,
             name: state.child.displayName,
             is_primary: true,
-            description: "Avatar principal da criança",
-            avatar_url: childPreview.url,
-            lora_model_id: `lora-sim:${user.id}:child`,
+            description: "Avatar Pixar da criança",
+            avatar_url: childPixar.url,
+            lora_model_id: `pixar:${user.id}:child`,
           });
         }
 
-        // Melhor amigo
         const friendName = state.friend.displayName;
         const friendExisting = existingChars?.find((c) => !c.is_primary);
         if (friendExisting) {
@@ -654,9 +684,9 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
             .from("characters")
             .update({
               name: friendName,
-              description: `Melhor amigo (${state.friend.kind})`,
-              avatar_url: friendPreview.url,
-              lora_model_id: `lora-sim:${user.id}:friend`,
+              description: `Melhor amigo Pixar (${state.friend.kind})`,
+              avatar_url: friendPixar.url,
+              lora_model_id: `pixar:${user.id}:friend`,
             })
             .eq("id", friendExisting.id);
         } else {
@@ -665,9 +695,9 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
             child_id: childId,
             name: friendName,
             is_primary: false,
-            description: `Melhor amigo (${state.friend.kind})`,
-            avatar_url: friendPreview.url,
-            lora_model_id: `lora-sim:${user.id}:friend`,
+            description: `Melhor amigo Pixar (${state.friend.kind})`,
+            avatar_url: friendPixar.url,
+            lora_model_id: `pixar:${user.id}:friend`,
           });
         }
       }
@@ -676,9 +706,12 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
 
   return {
     success: true,
-    childAvatarUrl: childPreview.url,
-    friendAvatarUrl: friendPreview.url,
-    engine: childPreview.engine,
+    childAvatarUrl: childPixar.url,
+    friendAvatarUrl: friendPixar.url,
+    childFaceSheetUrl: childPixar.faceSheetUrl,
+    childBodySheetUrl: childPixar.bodySheetUrl,
+    friendSheetUrl: friendPixar.faceSheetUrl,
+    engine: childPixar.engine,
   };
 }
 
