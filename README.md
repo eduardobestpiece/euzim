@@ -62,4 +62,6 @@ Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story
 
 ## GitHub
 
-https://github.com/euzimgeral/estudio-magico
+https://github.com/euzimgeral/euzim
+
+> Nota: o PAT atual só tem Contents write em `euzim`. O repo `estudio-magico` foi criado na conta, mas o token fine-grained não consegue push nele até incluir o repositório nas permissões.
