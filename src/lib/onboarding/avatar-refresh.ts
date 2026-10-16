@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type AvatarRefreshStatus = {
+  /** Calculado no cliente (evita Date.now no RSC / cacheComponents). */
   due: boolean;
   childId?: string;
   childName?: string;
@@ -9,14 +10,9 @@ export type AvatarRefreshStatus = {
   capturedAt?: string | null;
 };
 
-/**
- * Gate: fotos de avatar com mais de ~12 meses.
- * `nowMs` deve vir da page DEPOIS de `await connection()` — evita Date.now()
- * dentro deste módulo (cacheComponents / prerender).
- */
+/** Carrega timestamps — NÃO usa Date.now() (prerender-safe). */
 export async function getAvatarRefreshStatus(
   parentId: string,
-  nowMs: number,
 ): Promise<AvatarRefreshStatus> {
   const db = createAdminClient() ?? (await createClient());
   if (!db) return { due: false };
@@ -31,12 +27,8 @@ export async function getAvatarRefreshStatus(
 
   if (!data) return { due: false };
 
-  const dueAt = data.avatar_refresh_due_at as string | null;
-  const dueMs = dueAt ? Date.parse(dueAt) : NaN;
-  const due = Number.isFinite(dueMs) && dueMs <= nowMs;
-
   return {
-    due,
+    due: false, // cliente decide com dueAt
     childId: data.id,
     childName: data.display_name,
     dueAt: data.avatar_refresh_due_at,

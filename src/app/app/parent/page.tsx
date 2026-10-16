@@ -21,7 +21,6 @@ import {
 
 export default async function ParentPage() {
   await connection();
-  const nowMs = Date.now();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -118,7 +117,7 @@ export default async function ParentPage() {
   }
 
   const stories = await listStoriesForParent(user.id);
-  const refreshStatus = await getAvatarRefreshStatus(user.id, nowMs);
+  const refreshStatus = await getAvatarRefreshStatus(user.id);
 
   return (
     <AppShell user={user} title="Área dos pais">

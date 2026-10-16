@@ -62,7 +62,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "friend-photos", label: "Fotos" },
   { id: "generating", label: "Magia" },
   { id: "preview", label: "Pronto" },
-  { id: "pin", label: "PIN" },
+  { id: "pin", label: "PIN★" },
 ];
 
 const STEP_IDS = new Set(STEPS.map((s) => s.id));

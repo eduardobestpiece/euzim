@@ -9,30 +9,29 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
-import { getAvatarRefreshStatus } from "@/lib/onboarding/avatar-refresh";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import type { OnboardingState } from "@/lib/auth/types";
 
 export default async function OnboardingPage() {
-  // Obrigatório com cacheComponents antes de relógio / cookies
+  // cacheComponents: connection() opts into request time — sem Date.now() aqui
   await connection();
-  const nowMs = Date.now();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  const refresh = await getAvatarRefreshStatus(user.id, nowMs);
-  if (user.onboardingCompleted && !refresh.due) {
-    redirect("/app/parent");
-  }
-
   const cookieState = await readMockOnboarding();
   let initialState: OnboardingState | null = cookieState;
-  let resetMode: "full" | "reuse" | null = refresh.due ? "reuse" : null;
+  let resetMode: "full" | "reuse" | null = null;
 
   if (isSupabaseConfigured() && !user.isMock) {
     const bootstrap = await loadOnboardingBootstrap(user.id);
     if (bootstrap.resetMode) resetMode = bootstrap.resetMode;
-    if ((resetMode === "reuse" || refresh.due) && bootstrap.initialState) {
+
+    if (user.onboardingCompleted && resetMode !== "reuse") {
+      // Completo e sem refresh forçado → painel (sem relógio JS)
+      redirect("/app/parent");
+    }
+
+    if (resetMode === "reuse" && bootstrap.initialState) {
       initialState = {
         ...bootstrap.initialState,
         securityPin:
@@ -40,15 +39,13 @@ export default async function OnboardingPage() {
         childPhotos:
           bootstrap.initialState.childPhotos.length > 0
             ? bootstrap.initialState.childPhotos
-            : cookieState?.childPhotos ?? [],
+            : (cookieState?.childPhotos ?? []),
         friendPhotos:
           cookieState?.friendPhotos ?? bootstrap.initialState.friendPhotos,
         wizardStep:
           cookieState?.wizardStep || bootstrap.initialState.wizardStep || null,
       };
-      if (!resetMode) resetMode = "reuse";
     } else if (bootstrap.initialState) {
-      // Retoma passo / drafts do cookie + passo salvo no perfil
       initialState = {
         ...(cookieState ?? {
           securityPin: "",
@@ -64,8 +61,17 @@ export default async function OnboardingPage() {
           cookieState?.securityPin ||
           bootstrap.initialState.securityPin ||
           "",
+        child: cookieState?.child ?? bootstrap.initialState.child,
+        childPhotos:
+          (cookieState?.childPhotos?.length ?? 0) > 0
+            ? cookieState!.childPhotos
+            : bootstrap.initialState.childPhotos,
       };
+    } else if (user.onboardingCompleted) {
+      redirect("/app/parent");
     }
+  } else if (user.onboardingCompleted) {
+    redirect("/app/parent");
   }
 
   return (
@@ -76,8 +82,8 @@ export default async function OnboardingPage() {
           <p className="truncate text-xs text-muted-foreground sm:text-sm">
             {user.email}
           </p>
-          <p className="font-mono text-[10px] text-emerald-800/80">
-            build {ONBOARDING_BUILD}
+          <p className="font-mono text-[10px] font-semibold text-emerald-800">
+            build {ONBOARDING_BUILD} · PIN por último
           </p>
         </div>
         <form action={signOutAction}>

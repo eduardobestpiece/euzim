@@ -1,10 +1,30 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { AvatarRefreshStatus } from "@/lib/onboarding/avatar-refresh";
 
+function subscribe() {
+  return () => {};
+}
+
+function getDue(dueAt: string | null | undefined): boolean {
+  if (!dueAt) return false;
+  const t = Date.parse(dueAt);
+  return Number.isFinite(t) && t <= Date.now();
+}
+
 export function AvatarRefreshBanner({ status }: { status: AvatarRefreshStatus }) {
-  if (!status.due) return null;
+  // Relógio só no cliente — evita Date.now no RSC / hydration mismatch
+  const due = useSyncExternalStore(
+    subscribe,
+    () => getDue(status.dueAt),
+    () => false,
+  );
+
+  if (!due) return null;
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-amber-600/30 bg-amber-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
