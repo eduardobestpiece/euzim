@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { SessionHeartbeat } from "@/components/app/session-heartbeat";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
+import { Button } from "@/components/ui/button";
+import { signOutAction } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
