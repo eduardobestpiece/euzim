@@ -1,2 +1,2 @@
 /** Stamp visível — se o browser não mostrar isto, ainda está em cache / outro agente. */
-export const ONBOARDING_BUILD = "v7-upload-attach";
+export const ONBOARDING_BUILD = "v8-preview-fix";

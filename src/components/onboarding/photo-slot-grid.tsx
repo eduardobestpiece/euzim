@@ -11,7 +11,10 @@ import {
   type PhotoSubject,
 } from "@/lib/onboarding/photo-slots";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
-import { compressImageForUpload } from "@/lib/onboarding/compress-image";
+import {
+  attachedPlaceholderDataUrl,
+  compressImageForUpload,
+} from "@/lib/onboarding/compress-image";
 import {
   guideSrc,
   type ChildGender,
@@ -32,6 +35,9 @@ export function PhotoSlotGrid({
 }) {
   const [busySlot, setBusySlot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [brokenPreview, setBrokenPreview] = useState<Record<string, boolean>>(
+    {},
+  );
   const [activeSlot, setActiveSlot] = useState<string | null>(
     PHOTO_SLOTS[0]?.id ?? null,
   );
@@ -46,44 +52,22 @@ export function PhotoSlotGrid({
   async function applyFile(slotId: string, file: File) {
     setBusySlot(slotId);
     setError(null);
-
-    let localPreview = "";
-    try {
-      localPreview = URL.createObjectURL(file);
-    } catch {
-      localPreview = "";
-    }
+    setBrokenPreview((prev) => {
+      const next = { ...prev };
+      delete next[slotId];
+      return next;
+    });
 
     try {
-      const compressed = await compressImageForUpload(file);
-      // Preview do JPEG leve (melhor que o original HEIC)
-      let jpegPreview = localPreview;
-      const isHeic =
-        /heic|heif/i.test(compressed.type) ||
-        /\.(heic|heif)$/i.test(compressed.name);
-      if (!isHeic) {
-        try {
-          const dataUrl = await readAsDataUrl(compressed);
-          if (dataUrl) {
-            if (localPreview.startsWith("blob:")) {
-              URL.revokeObjectURL(localPreview);
-            }
-            jpegPreview = dataUrl;
-            localPreview = dataUrl;
-          }
-        } catch {
-          // mantém object URL do original
-        }
-      } else if (!jpegPreview) {
-        jpegPreview = attachedPlaceholderDataUrl();
-      }
+      const { file: compressed, previewUrl } =
+        await compressImageForUpload(file);
 
-      // Anexa na hora — UX pedida: mostrar que a imagem foi anexada
+      // Anexa na hora com preview JPEG (ou placeholder se HEIC)
       const draft: OnboardingPhotoDraft = {
         id: crypto.randomUUID(),
         slotId,
         name: compressed.name,
-        previewUrl: jpegPreview || localPreview || attachedPlaceholderDataUrl(),
+        previewUrl,
         storagePath: `pending/${slotId}`,
       };
       onChange({ ...valueRef.current, [slotId]: draft });
@@ -104,6 +88,7 @@ export function PhotoSlotGrid({
         storagePath?: string;
         publicUrl?: string;
         previewUrl?: string;
+        previewDataUrl?: string;
       } = {};
       try {
         result = (await res.json()) as typeof result;
@@ -111,8 +96,15 @@ export function PhotoSlotGrid({
         result = { error: `Falha no upload (${res.status}).` };
       }
 
+      // Preferir preview JPEG do servidor (cobre HEIC) ou o local do canvas
+      const serverPreview =
+        result.previewDataUrl ||
+        (result.previewUrl?.startsWith("data:image/")
+          ? result.previewUrl
+          : undefined);
+      const nextPreview = serverPreview || draft.previewUrl;
+
       if (!res.ok && !result.storagePath) {
-        // Mantém anexada localmente; avisa o motivo
         setError(
           result.error ||
             "Não foi possível enviar ao servidor, mas a foto ficou anexada neste aparelho.",
@@ -121,6 +113,7 @@ export function PhotoSlotGrid({
           ...valueRef.current,
           [slotId]: {
             ...draft,
+            previewUrl: nextPreview,
             storagePath: `local/${slotId}`,
           },
         });
@@ -131,8 +124,7 @@ export function PhotoSlotGrid({
         ...valueRef.current,
         [slotId]: {
           ...draft,
-          // Preview local sempre (não depende de rede/CORS)
-          previewUrl: draft.previewUrl,
+          previewUrl: nextPreview,
           storagePath: result.storagePath || `local/${slotId}`,
           publicUrl: result.publicUrl,
         },
@@ -151,19 +143,6 @@ export function PhotoSlotGrid({
       } else {
         setError(message);
       }
-      // Se já tínhamos preview, mantém anexada
-      if (localPreview && !valueRef.current[slotId]) {
-        onChange({
-          ...valueRef.current,
-          [slotId]: {
-            id: crypto.randomUUID(),
-            slotId,
-            name: file.name,
-            previewUrl: localPreview,
-            storagePath: `local/${slotId}`,
-          },
-        });
-      }
     } finally {
       setBusySlot(null);
     }
@@ -177,6 +156,14 @@ export function PhotoSlotGrid({
   function openUpload(slotId: string) {
     setActiveSlot(slotId);
     uploadRef.current?.click();
+  }
+
+  function previewSrc(slotId: string, photo: OnboardingPhotoDraft): string {
+    if (brokenPreview[slotId]) return attachedPlaceholderDataUrl();
+    if (photo.previewUrl?.startsWith("data:image/")) return photo.previewUrl;
+    if (photo.previewUrl?.startsWith("blob:")) return photo.previewUrl;
+    if (photo.previewUrl?.startsWith("http")) return photo.previewUrl;
+    return attachedPlaceholderDataUrl();
   }
 
   return (
@@ -227,30 +214,39 @@ export function PhotoSlotGrid({
           const tip = slotTip(slot, subject);
           const busy = busySlot === slot.id;
           const guide = guideSrc(gender, slot.id);
+          const showPhoto = Boolean(photo);
           return (
             <div
               key={slot.id}
               className={`overflow-hidden rounded-2xl border ${
-                photo ? "border-emerald-600/50 bg-emerald-50/30" : "border-border/70"
+                photo
+                  ? "border-emerald-600/50 bg-emerald-50/30"
+                  : "border-border/70"
               }`}
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-[#EDE8E0]">
-                {/* Guia 3D Pixar (crop da folha) — full-bleed, sem SVG flat */}
+                {/* Guia some debaixo da foto anexada */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={guide}
-                  alt={`Guia: ${label}`}
+                  alt=""
                   decoding="async"
                   className={`absolute inset-0 h-full w-full object-cover object-top transition ${
-                    photo ? "opacity-20" : "opacity-100"
+                    showPhoto ? "opacity-0" : "opacity-100"
                   }`}
                 />
-                {photo?.previewUrl ? (
+                {photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={photo.previewUrl}
-                    alt={label}
+                    src={previewSrc(slot.id, photo)}
+                    alt=""
                     className="absolute inset-0 h-full w-full object-cover"
+                    onError={() =>
+                      setBrokenPreview((prev) => ({
+                        ...prev,
+                        [slot.id]: true,
+                      }))
+                    }
                   />
                 ) : (
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-3 pb-3 pt-10">
@@ -259,13 +255,13 @@ export function PhotoSlotGrid({
                   </div>
                 )}
                 {photo && !busy ? (
-                  <div className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-semibold text-white shadow">
+                  <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-semibold text-white shadow">
                     <Check className="size-3" />
                     Anexada
                   </div>
                 ) : null}
                 {busy ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-xs text-white">
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 text-xs text-white">
                     Convertendo e enviando…
                   </div>
                 ) : null}
@@ -316,24 +312,4 @@ export function PhotoSlotGrid({
       ) : null}
     </div>
   );
-}
-
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-/** Fallback visual quando o browser não decodifica HEIC. */
-function attachedPlaceholderDataUrl(): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="800" viewBox="0 0 640 800">
-    <rect width="640" height="800" fill="#E8F5EE"/>
-    <rect x="120" y="260" width="400" height="280" rx="24" fill="#047857"/>
-    <text x="320" y="400" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="36" font-weight="700">Foto anexada</text>
-    <text x="320" y="450" text-anchor="middle" fill="#D1FAE5" font-family="system-ui,sans-serif" font-size="20">convertendo no servidor…</text>
-  </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

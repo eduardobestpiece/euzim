@@ -53,12 +53,17 @@ export async function POST(request: Request) {
   const converted = await convertUploadToJpeg(raw);
   const storagePath = `${user.id}/${subject}/${slotId}.${converted.ext}`;
 
+  const previewPayload = converted.previewDataUrl
+    ? { previewDataUrl: converted.previewDataUrl, previewUrl: converted.previewDataUrl }
+    : {};
+
   if (!isSupabaseConfigured() || user.isMock) {
     return NextResponse.json({
       storagePath: `mock/avatars/${storagePath}`,
       slotId,
       converted: converted.converted,
       bytes: converted.buffer.length,
+      ...previewPayload,
     });
   }
 
@@ -71,6 +76,7 @@ export async function POST(request: Request) {
       warning: "Supabase indisponível; foto ficou só no aparelho.",
       converted: converted.converted,
       bytes: converted.buffer.length,
+      ...previewPayload,
     });
   }
 
@@ -88,6 +94,7 @@ export async function POST(request: Request) {
       warning: upErr.message || "Storage falhou; preview local mantido.",
       converted: converted.converted,
       bytes: converted.buffer.length,
+      ...previewPayload,
     });
   }
 
@@ -95,9 +102,11 @@ export async function POST(request: Request) {
   return NextResponse.json({
     storagePath,
     publicUrl: pub.publicUrl,
-    previewUrl: pub.publicUrl,
+    // Prefer preview JPEG local (data URL) — publicUrl só como backup de path
+    previewUrl: converted.previewDataUrl || pub.publicUrl,
     slotId,
     converted: converted.converted,
     bytes: converted.buffer.length,
+    ...previewPayload,
   });
 }

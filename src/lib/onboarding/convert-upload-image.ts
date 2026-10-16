@@ -12,6 +12,8 @@ export async function convertUploadToJpeg(bytes: Buffer): Promise<{
   contentType: "image/jpeg";
   ext: "jpg";
   converted: boolean;
+  /** Preview pequeno (data URL) para o cliente exibir na hora. */
+  previewDataUrl?: string;
 }> {
   try {
     const buffer = await sharp(bytes, { failOn: "none" })
@@ -24,11 +26,18 @@ export async function convertUploadToJpeg(bytes: Buffer): Promise<{
       })
       .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
       .toBuffer();
+
+    const thumb = await sharp(buffer)
+      .resize({ width: 480, height: 600, fit: "cover" })
+      .jpeg({ quality: 72 })
+      .toBuffer();
+
     return {
       buffer,
       contentType: "image/jpeg",
       ext: "jpg",
       converted: true,
+      previewDataUrl: `data:image/jpeg;base64,${thumb.toString("base64")}`,
     };
   } catch {
     return {
