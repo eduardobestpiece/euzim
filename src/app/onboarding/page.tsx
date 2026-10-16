@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { SessionHeartbeat } from "@/components/app/session-heartbeat";
@@ -12,6 +13,8 @@ import { getAvatarRefreshStatus } from "@/lib/onboarding/avatar-refresh";
 import type { OnboardingState } from "@/lib/auth/types";
 
 export default async function OnboardingPage() {
+  // Auth + refresh gate usam tempo/cookies — evita prerender com Date.now()
+  await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 

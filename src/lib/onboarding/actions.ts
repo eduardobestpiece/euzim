@@ -300,18 +300,32 @@ export async function uploadAvatarPhotoAction(formData: FormData): Promise<{
     return { error: "Envie uma imagem." };
   }
 
+  // Limite de segurança (cliente já comprime; config bodySizeLimit = 12mb)
+  const MAX_BYTES = 10 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    return {
+      error:
+        "A foto ultrapassa 10 MB. Escolha outra imagem ou tire novamente.",
+    };
+  }
+
   const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-  const storagePath = `${user.id}/${subject}/${slotId}.${ext}`;
+  const safeExt = ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(ext)
+    ? ext === "jpeg"
+      ? "jpg"
+      : ext
+    : "jpg";
+  const storagePath = `${user.id}/${subject}/${slotId}.${safeExt}`;
   const bytes = Buffer.from(await file.arrayBuffer());
 
-  // Preview local (data URL) — limitado; cliente também guarda File
-  const previewUrl = `data:${file.type};base64,${bytes.toString("base64")}`;
+  // Não devolver data URL base64 — estoura a resposta e o limite da action.
+  // O cliente usa preview local (object URL / data URL) até ter publicUrl.
 
   if (!isSupabaseConfigured() || user.isMock) {
     return {
       storagePath: `mock/avatars/${storagePath}`,
-      publicUrl: previewUrl,
-      previewUrl,
+      publicUrl: undefined,
+      previewUrl: undefined,
       slotId,
     };
   }
@@ -319,21 +333,25 @@ export async function uploadAvatarPhotoAction(formData: FormData): Promise<{
   const db = createAdminClient() ?? (await createClient());
   if (!db) return { error: "Supabase indisponível." };
 
+  const contentType =
+    file.type && file.type.startsWith("image/")
+      ? file.type
+      : "image/jpeg";
+
   const { error: upErr } = await db.storage
     .from("avatars")
     .upload(storagePath, bytes, {
-      contentType: file.type,
+      contentType,
       upsert: true,
     });
 
   if (upErr) {
-    // Continua com preview local se storage falhar
+    // Continua com path local se storage falhar — preview fica no cliente
     return {
       storagePath: `local/${storagePath}`,
-      publicUrl: previewUrl,
-      previewUrl,
+      publicUrl: undefined,
+      previewUrl: undefined,
       slotId,
-      error: undefined,
     };
   }
 
@@ -341,7 +359,7 @@ export async function uploadAvatarPhotoAction(formData: FormData): Promise<{
   return {
     storagePath,
     publicUrl: pub.publicUrl,
-    previewUrl: pub.publicUrl || previewUrl,
+    previewUrl: pub.publicUrl,
     slotId,
   };
 }

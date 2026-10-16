@@ -27,7 +27,8 @@ export async function getAvatarRefreshStatus(
 
   if (!data) return { due: false };
 
-  const due = isAvatarRefreshDue(data.avatar_refresh_due_at);
+  // Agora explícito (cacheComponents / connection()) em vez do default new Date()
+  const due = isAvatarRefreshDue(data.avatar_refresh_due_at, new Date());
   return {
     due,
     childId: data.id,

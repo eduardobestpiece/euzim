@@ -12,6 +12,7 @@ import {
 } from "@/lib/onboarding/photo-slots";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import { uploadAvatarPhotoAction } from "@/lib/onboarding/actions";
+import { compressImageForUpload } from "@/lib/onboarding/compress-image";
 import {
   guideSrc,
   type ChildGender,
@@ -44,26 +45,40 @@ export function PhotoSlotGrid({
   async function applyFile(slotId: string, file: File) {
     setBusySlot(slotId);
     setError(null);
-    const fd = new FormData();
-    fd.set("slotId", slotId);
-    fd.set("subject", subject);
-    fd.set("file", file);
-    const result = await uploadAvatarPhotoAction(fd);
-    setBusySlot(null);
-    if (result.error && !result.previewUrl) {
-      setError(result.error);
-      return;
+    try {
+      const compressed = await compressImageForUpload(file);
+      const localPreview = await readAsDataUrl(compressed);
+      const fd = new FormData();
+      fd.set("slotId", slotId);
+      fd.set("subject", subject);
+      fd.set("file", compressed);
+      const result = await uploadAvatarPhotoAction(fd);
+      if (result.error && !result.storagePath && !result.publicUrl) {
+        setError(result.error);
+        return;
+      }
+      const draft: OnboardingPhotoDraft = {
+        id: crypto.randomUUID(),
+        slotId,
+        name: compressed.name,
+        previewUrl: result.publicUrl || localPreview,
+        storagePath: result.storagePath || `local/${slotId}`,
+        publicUrl: result.publicUrl,
+      };
+      onChange({ ...value, [slotId]: draft });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Não foi possível enviar a foto.";
+      if (/Body exceeded|1 MB|body size/i.test(message)) {
+        setError(
+          "A foto é grande demais. Tente outra da galeria ou tire de novo com menos zoom.",
+        );
+      } else {
+        setError(message);
+      }
+    } finally {
+      setBusySlot(null);
     }
-    const localPreview = await readAsDataUrl(file);
-    const draft: OnboardingPhotoDraft = {
-      id: crypto.randomUUID(),
-      slotId,
-      name: file.name,
-      previewUrl: result.previewUrl || localPreview,
-      storagePath: result.storagePath || `local/${slotId}`,
-      publicUrl: result.publicUrl,
-    };
-    onChange({ ...value, [slotId]: draft });
   }
 
   function openCamera(slotId: string) {

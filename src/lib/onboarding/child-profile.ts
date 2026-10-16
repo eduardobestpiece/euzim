@@ -18,7 +18,7 @@ export function guideSrc(
   gender: ChildGender | null | undefined,
   slotId: string,
 ): string {
-  return `/onboarding/guides/${guideFolderForGender(gender)}/${slotId}.svg`;
+  return `/onboarding/guides/${guideFolderForGender(gender)}/${slotId}.png`;
 }
 
 /** Idade em anos completos a partir de YYYY-MM-DD. */
