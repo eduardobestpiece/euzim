@@ -83,13 +83,18 @@ CREATE TABLE public.users (
   email text,
   full_name text,
   role public.user_role NOT NULL DEFAULT 'parent',
+  security_pin text,
+  onboarding_completed boolean NOT NULL DEFAULT false,
   stripe_customer_id text UNIQUE,
   subscription_status public.subscription_status NOT NULL DEFAULT 'none',
   subscription_plan_id text,
   avatar_url text,
   locale text NOT NULL DEFAULT 'pt-BR',
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT users_security_pin_format CHECK (
+    security_pin IS NULL OR security_pin ~ '^[0-9]{4,6}$'
+  )
 );
 
 CREATE INDEX users_subscription_status_idx ON public.users (subscription_status);

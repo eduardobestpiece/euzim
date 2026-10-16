@@ -1,7 +1,11 @@
+import Link from "next/link";
 import { BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export default function Home() {
+  const mockMode = !isSupabaseConfigured();
+
   return (
     <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
       <div
@@ -11,7 +15,15 @@ export default function Home() {
       <header className="relative z-10 flex items-center justify-between px-6 py-5 md:px-10">
         <div className="flex items-center gap-2 text-sm font-medium tracking-wide text-foreground/70">
           <Sparkles className="size-4 text-amber-600" aria-hidden />
-          Fase 1 — infraestrutura
+          Estúdio Mágico · porta 5050
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/login">Entrar</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/signup">Criar conta</Link>
+          </Button>
         </div>
       </header>
 
@@ -24,18 +36,26 @@ export default function Home() {
             Histórias infantis personalizadas com o avatar da sua criança.
           </h1>
           <p className="max-w-lg text-base leading-relaxed text-muted-foreground">
-            Setup da Fase 1 concluído: Next.js, Tailwind, Shadcn UI e clientes
-            Supabase. Auth, onboarding e gerador chegam nas próximas fases.
+            Fase 2: Auth, onboarding (PIN, perfil e fotos LoRA simuladas) e
+            rotas protegidas em /app/parent, /app/kids e /app/admin.
           </p>
+          {mockMode ? (
+            <p className="text-sm text-amber-800">
+              Supabase em modo mock — preencha `.env.local` com o projeto
+              zlzgkivktvnyvehjwcjw quando for usar Auth real.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="lg" disabled className="gap-2">
-            <BookOpen className="size-4" aria-hidden />
-            Entrar (em breve)
+          <Button asChild size="lg" className="gap-2">
+            <Link href="/signup">
+              <BookOpen className="size-4" aria-hidden />
+              Começar
+            </Link>
           </Button>
           <p className="text-sm text-muted-foreground">
-            Dev server na porta 8080 · schema em{" "}
+            Schema em{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
               supabase/schema.sql
             </code>

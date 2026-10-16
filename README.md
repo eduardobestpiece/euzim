@@ -4,10 +4,12 @@ SaaS B2C para pais gerarem histórias infantis personalizadas com IA (avatar LoR
 
 Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supabase.
 
+**Porta do app: `5050`.** A porta `8080` é reservada para BP Sales — não use neste Project.
+
 ## Pré-requisitos
 
 - Node.js 20+
-- Conta Supabase (projeto `zlzgkivktvnyvehjwcjw`)
+- Conta Supabase (projeto `zlzgkivktvnyvehjwcjw`) — opcional em dev (modo mock)
 
 ## Setup local
 
@@ -15,17 +17,18 @@ Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supaba
 npm install
 cp .env.local.example .env.local
 # Preencha NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY
+# Se deixar placeholders, o app usa modo mock (Auth + onboarding locais)
 ```
 
-## Desenvolvimento (porta 8080)
+## Desenvolvimento (porta 5050)
 
 ```bash
 npm run dev
 ```
 
-Abra [http://127.0.0.1:8080](http://127.0.0.1:8080).
+Abra [http://127.0.0.1:5050](http://127.0.0.1:5050).
 
-Script equivalente: `next dev -H 0.0.0.0 -p 8080`.
+Script: `next dev -H 0.0.0.0 -p 5050`.
 
 ## Schema Supabase
 
@@ -35,15 +38,23 @@ O SQL da Fase 1 está em [`supabase/schema.sql`](./supabase/schema.sql).
 
 Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story_images`, `games`, `subscription_limits` — com FKs e RLS.
 
+## Auth e onboarding (Fase 2)
+
+- `/login` e `/signup` — Auth via `@supabase/ssr` (ou mock local)
+- `/onboarding` — PIN de segurança, 1ª criança, upload de fotos (simulação LoRA)
+- Áreas protegidas: `/app/parent`, `/app/kids`, `/app/admin`
+
 ## Scripts
 
-| Comando        | Descrição                          |
-|----------------|------------------------------------|
-| `npm run dev`  | Dev server em `0.0.0.0:8080`       |
-| `npm run build`| Build de produção                  |
-| `npm run start`| Serve build em `0.0.0.0:8080`      |
-| `npm run lint` | ESLint                             |
+| Comando         | Descrição                         |
+|-----------------|-----------------------------------|
+| `npm run dev`   | Dev server em `0.0.0.0:5050`      |
+| `npm run build` | Build de produção                 |
+| `npm run start` | Serve build em `0.0.0.0:5050`     |
+| `npm run lint`  | ESLint                            |
 
-## Fase atual
+## Fases
 
-Fase 1 — infraestrutura (app + schema). Auth, onboarding e gerador ficam para fases seguintes.
+- **Fase 1** — infraestrutura (app + schema) ✅
+- **Fase 2** — Auth + onboarding + rotas protegidas
+- Fases 3+ — dashboards, gerador, quiz, share (ainda não)
