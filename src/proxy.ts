@@ -42,7 +42,14 @@ export async function proxy(request: NextRequest) {
 
   const isAuthPage = pathname === "/login" || pathname === "/signup";
   const isOnboarding = pathname.startsWith("/onboarding");
+  const isPublicShare =
+    pathname.startsWith("/story/") || pathname.startsWith("/app/story/");
   const isApp = pathname.startsWith("/app");
+
+  if (!hasUser && isPublicShare) {
+    // Share público: /app/story/* redireciona na page; /story/* é aberto
+    return response;
+  }
 
   if (!hasUser && (isApp || isOnboarding)) {
     const url = request.nextUrl.clone();

@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { BookOpen, Gamepad2, Star } from "lucide-react";
 import { AppShell } from "@/components/app/app-shell";
 import { PinGuardButton } from "@/components/kids/pin-guard";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { listStoriesForParent } from "@/lib/stories/load-story";
 
 export default async function KidsPage() {
   const user = await getCurrentUser();
@@ -14,6 +16,8 @@ export default async function KidsPage() {
       ? (await readMockOnboarding())?.child?.displayName
       : null;
 
+  const stories = await listStoriesForParent(user.id);
+
   return (
     <AppShell user={user} title="Área kids" kidsMode>
       <div className="space-y-8">
@@ -23,49 +27,73 @@ export default async function KidsPage() {
               Olá{childName ? `, ${childName}` : ""}!
             </h1>
             <p className="max-w-xl text-lg text-muted-foreground">
-              Este é o seu cantinho mágico. Histórias e jogos chegam em breve —
-              por enquanto explore o espaço.
+              Escolha uma história para ler. No final tem um quiz divertido.
             </p>
           </div>
           <PinGuardButton label="Voltar aos pais" href="/app/parent" />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <KidsTile
-            icon={BookOpen}
-            title="Histórias"
-            body="Suas aventuras personalizadas aparecerão aqui."
-          />
-          <KidsTile
-            icon={Gamepad2}
-            title="Jogos"
-            body="Quiz e desafios depois de cada história."
-          />
-          <KidsTile
-            icon={Star}
-            title="Favoritos"
-            body="Guarde as histórias que mais gostar."
-          />
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 font-heading text-xl font-semibold">
+            <BookOpen className="size-5 text-amber-700" />
+            Suas histórias
+          </h2>
+          {stories.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Ainda não há histórias. Peça aos pais para criar uma no painel.
+            </p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {stories.map((story) => (
+                <li key={story.id}>
+                  <Link
+                    href={`/app/kids/read/${story.id}`}
+                    className="flex gap-3 rounded-2xl border border-border/60 bg-[radial-gradient(ellipse_at_top,_oklch(0.97_0.03_85),_transparent_70%)] p-3 transition hover:border-foreground/30"
+                  >
+                    {story.coverImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={story.coverImageUrl}
+                        alt=""
+                        className="size-20 rounded-xl object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-20 items-center justify-center rounded-xl bg-muted">
+                        <BookOpen className="size-6 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0 self-center">
+                      <p className="truncate font-heading text-lg font-semibold">
+                        {story.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Tocar para ler →
+                      </p>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl border border-border/60 p-5">
+            <Gamepad2 className="mb-3 size-6 text-amber-700" />
+            <p className="font-heading text-lg font-semibold">Quiz Therapy</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Aparece na última página de cada história.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border/60 p-5">
+            <Star className="mb-3 size-6 text-amber-700" />
+            <p className="font-heading text-lg font-semibold">Favoritos</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Em breve você poderá marcar as preferidas.
+            </p>
+          </div>
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function KidsTile({
-  icon: Icon,
-  title,
-  body,
-}: {
-  icon: typeof BookOpen;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-border/60 bg-[radial-gradient(ellipse_at_top,_oklch(0.96_0.03_85),_transparent_70%)] p-5">
-      <Icon className="mb-3 size-6 text-amber-700" />
-      <p className="font-heading text-lg font-semibold">{title}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
-    </div>
   );
 }

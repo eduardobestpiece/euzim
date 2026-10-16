@@ -1,20 +1,21 @@
 # Estúdio Mágico — plano MVP (resumo)
 
 ## Fases
-1. **Infra** — Next.js, Shadcn, schema SQL (`zlzgkivktvnyvehjwcjw`) ✅ (arquivo pronto; aplicar no SQL Editor)
-2. **Auth + onboarding** — login/signup, PIN, criança, fotos LoRA simuladas ✅
-3. **Dashboards** — Painel Pais (tracker 15), Personagens upsell, Kids + PIN Guard ✅
-4. **Gerador** — Nova História mock 4 páginas + Unsplash + persistência ✅
-5. Quiz / jogos
-6. Share público + Stripe
+1. **Infra** — Next.js, Shadcn, schema SQL ✅ (aplicar no SQL Editor se ainda missing)
+2. **Auth + onboarding** ✅
+3. **Dashboards** — tracker 15, personagens upsell, Kids + PIN ✅
+4. **Gerador** — Nova História mock 4 páginas ✅
+5. **Kids reader + Quiz Therapy** ✅
+6. **Share público** — `/story/[shareToken]` + CTA ✅
+7. Stripe / LoRA real / IA (futuro)
 
 ## Porta
-`5050` (8080 reservada BP Sales)
+`5050` — usar Try Live na VM cloud
 
 ## Supabase
 - Projeto: `zlzgkivktvnyvehjwcjw`
 - Keys em `.env.local` (não commitadas)
-- Schema: `supabase/schema.sql` — pendente aplicar no SQL Editor (secret ≠ DDL)
+- Fallback mock enquanto tabelas não existirem
 
 ## GitHub
 https://github.com/euzimgeral/euzim

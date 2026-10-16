@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Share2 } from "lucide-react";
 import { AppShell } from "@/components/app/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ export default async function StoryReaderPage({
   const story = await loadStoryForParent(id, user.id);
   if (!story) notFound();
 
+  const shareHref = `/story/${story.id}`;
+
   return (
     <AppShell user={user} title="História">
       <div className="space-y-6">
@@ -30,6 +32,15 @@ export default async function StoryReaderPage({
             </Link>
           </Button>
           <Badge variant="secondary">{story.source}</Badge>
+          <Button asChild variant="outline" size="sm">
+            <Link href={shareHref} className="gap-1.5">
+              <Share2 className="size-3.5" />
+              Página pública
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/app/kids/read/${story.id}`}>Abrir no kids</Link>
+          </Button>
         </div>
 
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
