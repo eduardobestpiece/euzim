@@ -19,7 +19,7 @@ export default async function StoryReaderPage({
   const story = await loadStoryForParent(id, user.id);
   if (!story) notFound();
 
-  const shareHref = `/story/${story.id}`;
+  const shareHref = `/story/${story.shareToken ?? story.id}`;
 
   return (
     <AppShell user={user} title="História">

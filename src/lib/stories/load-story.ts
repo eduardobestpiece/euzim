@@ -8,6 +8,7 @@ export type StoryDetail = {
   coverImageUrl: string | null;
   pages: { pageIndex: number; text: string; imageUrl: string; altText: string }[];
   source: "supabase" | "mock";
+  shareToken?: string | null;
 };
 
 export async function loadStoryForParent(
@@ -22,7 +23,9 @@ export async function loadStoryForParent(
     try {
       const { data: story, error } = await db
         .from("stories")
-        .select("id, title, cover_image_url, text_content, parent_id")
+        .select(
+          "id, title, cover_image_url, text_content, parent_id, share_token",
+        )
         .eq("id", storyId)
         .maybeSingle();
 
@@ -60,6 +63,7 @@ export async function loadStoryForParent(
           coverImageUrl: story.cover_image_url,
           pages,
           source: "supabase",
+          shareToken: story.share_token,
         };
       }
     } catch {
@@ -77,6 +81,7 @@ export async function loadStoryForParent(
     coverImageUrl: mock.coverImageUrl,
     pages: mock.pages,
     source: "mock",
+    shareToken: mock.id,
   };
 }
 

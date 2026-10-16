@@ -57,10 +57,20 @@ export async function saveQuizProgress(input: {
 
   if (db) {
     try {
+      let childId = input.childId ?? null;
+      if (!childId) {
+        const { data: storyRow } = await db
+          .from("stories")
+          .select("child_id")
+          .eq("id", input.storyId)
+          .maybeSingle();
+        childId = storyRow?.child_id ?? null;
+      }
+
       const { error } = await db.from("games").insert({
         story_id: input.storyId,
         parent_id: input.parentId,
-        child_id: input.childId ?? null,
+        child_id: childId,
         game_type: "quiz",
         title: `Quiz — ${input.title}`,
         config: { version: 1 },
@@ -96,6 +106,47 @@ export async function getQuizProgress(
   storyId: string,
   parentId: string,
 ): Promise<QuizProgress | null> {
+  const admin = createAdminClient();
+  const userClient = await createClient();
+  const db = admin ?? userClient;
+
+  if (db) {
+    try {
+      const { data } = await db
+        .from("games")
+        .select("score_best, questions_data, created_at")
+        .eq("story_id", storyId)
+        .eq("parent_id", parentId)
+        .eq("game_type", "quiz")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        const raw = data.questions_data;
+        const answers = Array.isArray(raw)
+          ? raw.map((q) => {
+              if (q && typeof q === "object" && "chosenIndex" in q) {
+                const chosen = (q as { chosenIndex?: unknown }).chosenIndex;
+                return typeof chosen === "number" ? chosen : -1;
+              }
+              return -1;
+            })
+          : [];
+        return {
+          storyId,
+          parentId,
+          score: data.score_best ?? 0,
+          total: answers.length || 0,
+          answers,
+          completedAt: data.created_at ?? new Date().toISOString(),
+        };
+      }
+    } catch {
+      // mock
+    }
+  }
+
   const games = await readMockGames();
   return (
     games.find((g) => g.storyId === storyId && g.parentId === parentId) ?? null

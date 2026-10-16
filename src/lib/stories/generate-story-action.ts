@@ -7,8 +7,8 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { generateMockStory } from "@/lib/stories/generate-mock";
+import { ensureParentChildContext } from "@/lib/stories/ensure-profile";
 import {
   countMockStoriesThisMonth,
   readMockStories,
@@ -21,67 +21,10 @@ export type GenerateStoryResult = {
   error?: string;
   success?: boolean;
   storyId?: string;
+  shareToken?: string;
   persistedTo?: "supabase" | "mock";
   title?: string;
 };
-
-async function resolveChildContext(userId: string): Promise<{
-  childId: string;
-  childName: string;
-  characterId?: string;
-} | null> {
-  if (!isSupabaseConfigured()) {
-    const onboarding = await readMockOnboarding();
-    if (!onboarding?.child?.displayName) return null;
-    return {
-      childId: "mock-child",
-      childName: onboarding.child.displayName,
-    };
-  }
-
-  const supabase = await createClient();
-  const admin = createAdminClient();
-  const client = admin ?? supabase;
-  if (!client) {
-    const onboarding = await readMockOnboarding();
-    if (!onboarding?.child?.displayName) return null;
-    return {
-      childId: "mock-child",
-      childName: onboarding.child.displayName,
-    };
-  }
-
-  const { data: children, error } = await client
-    .from("children")
-    .select("id, display_name")
-    .eq("parent_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1);
-
-  if (error || !children?.[0]) {
-    const onboarding = await readMockOnboarding();
-    if (onboarding?.child?.displayName) {
-      return {
-        childId: "mock-child",
-        childName: onboarding.child.displayName,
-      };
-    }
-    return null;
-  }
-
-  const { data: characters } = await client
-    .from("characters")
-    .select("id")
-    .eq("parent_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1);
-
-  return {
-    childId: children[0].id,
-    childName: children[0].display_name,
-    characterId: characters?.[0]?.id,
-  };
-}
 
 export async function generateStoryAction(
   _prev: GenerateStoryResult,
@@ -95,18 +38,29 @@ export async function generateStoryAction(
 
   const usage = await getStoryUsage();
   const mockUsed = await countMockStoriesThisMonth(user.id);
-  const used = Math.max(usage.used, user.isMock ? mockUsed : usage.used);
+  const used = Math.max(
+    usage.used,
+    usage.source === "supabase" ? usage.used : mockUsed,
+  );
 
-  if (used >= MONTHLY_STORY_LIMIT) {
+  if (used >= usage.limit) {
     return {
-      error: `Limite mensal atingido (${MONTHLY_STORY_LIMIT} histórias).`,
+      error: `Limite mensal atingido (${usage.limit} histórias).`,
     };
   }
 
-  const childCtx = await resolveChildContext(user.id);
+  let childCtx = await ensureParentChildContext(user);
+
   if (!childCtx) {
-    return {
-      error: "Cadastre a primeira criança no onboarding antes de gerar.",
+    const onboarding = await readMockOnboarding();
+    if (!onboarding?.child?.displayName) {
+      return {
+        error: "Cadastre a primeira criança no onboarding antes de gerar.",
+      };
+    }
+    childCtx = {
+      childId: "mock-child",
+      childName: onboarding.child.displayName,
     };
   }
 
@@ -146,7 +100,8 @@ export async function generateStoryAction(
             title: theme,
             synopsis: `Template cacheado para o tema “${theme}”.`,
             theme_tags: [theme.toLowerCase()],
-            is_public: false,
+            is_public: true,
+            is_active: true,
             created_by: user.id,
             prompt_skeleton: { theme, version: 1 },
           })
@@ -164,7 +119,7 @@ export async function generateStoryAction(
           template_id: templateId,
           title: generated.title,
           status: "ready",
-          is_public: false,
+          is_public: true,
           text_content: generated.textContent,
           questions_data: [],
           cover_image_url: generated.coverImageUrl,
@@ -175,7 +130,7 @@ export async function generateStoryAction(
           },
           published_at: new Date().toISOString(),
         })
-        .select("id")
+        .select("id, share_token")
         .single();
 
       if (!storyError && story?.id) {
@@ -194,17 +149,23 @@ export async function generateStoryAction(
 
         if (!imagesError) {
           revalidatePath("/app/parent");
+          revalidatePath("/app/kids");
           revalidatePath(`/app/parent/stories/${story.id}`);
+          revalidatePath(`/app/kids/read/${story.id}`);
+          if (story.share_token) {
+            revalidatePath(`/story/${story.share_token}`);
+          }
           return {
             success: true,
             storyId: story.id,
+            shareToken: story.share_token ?? undefined,
             persistedTo: "supabase",
             title: generated.title,
           };
         }
       }
     } catch {
-      // cai no mock abaixo
+      // fallback mock
     }
   }
 
@@ -236,6 +197,7 @@ export async function generateStoryAction(
   return {
     success: true,
     storyId: record.id,
+    shareToken: record.id,
     persistedTo: "mock",
     title: generated.title,
   };
