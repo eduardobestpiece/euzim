@@ -118,4 +118,29 @@ await writeBodyBackFromFile(ref("body-back-girl.jpg"), [girlDir]);
 await cropFaceSheet(ref("face-sheet-boy.jpg"), [boyDir, neutralDir]);
 await cropBodySheet(ref("body-sheet-boy.jpg"), BODY_BOY, [boyDir, neutralDir]);
 
+/**
+ * Folhas Pixar: células "left" de ¾ (face) e corpo (¾ + perfil) vêm viradas
+ * para a direita do viewer. Espelhar para bater o label viewer-facing:
+ * esquerda = olhando à esquerda do viewer.
+ * face-profile_left já vem correto na folha — não flopar.
+ */
+const FLOP_AFTER_CROP = [
+  "face-three_quarter_left.png",
+  "body-three_quarter_left.png",
+  "body-profile_left.png",
+];
+
+async function flopGuides(dirs) {
+  for (const dir of dirs) {
+    for (const file of FLOP_AFTER_CROP) {
+      const path = resolve(dir, file);
+      const buf = await sharp(path).flop().png({ compressionLevel: 8 }).toBuffer();
+      await sharp(buf).toFile(path);
+      console.log("flop", dir.split("/").pop(), file);
+    }
+  }
+}
+
+await flopGuides([girlDir, boyDir, neutralDir]);
+
 console.log("done — all guides are 3D sheet crops (no SVG)");
