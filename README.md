@@ -58,7 +58,13 @@ Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story
 - **Fase 1** — infraestrutura (app + schema) ✅
 - **Fase 2** — Auth + onboarding + rotas protegidas ✅
 - **Fase 3** — Painel Pais (tracker 15), Personagens upsell, Kids + PIN Guard ✅
-- Fases 4+ — gerador IA, quiz, share, Stripe
+- **Fase 4** — Motor gerador mock (Nova História, 4 páginas + Unsplash) ✅
+- Fases 5+ — quiz, share, Stripe
+
+## Schema remoto
+
+Aplique `supabase/schema.sql` no SQL Editor do projeto `zlzgkivktvnyvehjwcjw`.
+A secret key autentica a API REST, mas **não** executa DDL. Ver `scripts/apply-schema.mjs`.
 
 ## GitHub
 
