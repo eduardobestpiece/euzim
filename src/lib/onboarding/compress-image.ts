@@ -119,13 +119,25 @@ function canvasToBlob(
   });
 }
 
-/** Fallback visual quando o browser não decodifica a foto (ex.: HEIC). */
+/** Preview é a foto real (JPEG/PNG/WebP data URL, blob ou http) — não o SVG placeholder. */
+export function isRealPhotoPreview(url: string | undefined | null): boolean {
+  if (!url) return false;
+  if (url.startsWith("blob:")) return true;
+  if (url.startsWith("http://") || url.startsWith("https://")) return true;
+  if (url.startsWith("data:image/jpeg")) return true;
+  if (url.startsWith("data:image/jpg")) return true;
+  if (url.startsWith("data:image/png")) return true;
+  if (url.startsWith("data:image/webp")) return true;
+  return false;
+}
+
+/** Fallback só se servidor também falhar ao gerar preview. */
 export function attachedPlaceholderDataUrl(): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="800" viewBox="0 0 640 800">
     <rect width="640" height="800" fill="#E8F5EE"/>
     <rect x="100" y="240" width="440" height="320" rx="28" fill="#047857"/>
     <text x="320" y="380" text-anchor="middle" fill="#fff" font-family="system-ui,sans-serif" font-size="40" font-weight="700">Foto anexada</text>
-    <text x="320" y="440" text-anchor="middle" fill="#D1FAE5" font-family="system-ui,sans-serif" font-size="22">pronta para o avatar</text>
+    <text x="320" y="440" text-anchor="middle" fill="#D1FAE5" font-family="system-ui,sans-serif" font-size="22">preview indisponível</text>
   </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }

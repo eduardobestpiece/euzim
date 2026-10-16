@@ -14,6 +14,7 @@ import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import {
   attachedPlaceholderDataUrl,
   compressImageForUpload,
+  isRealPhotoPreview,
 } from "@/lib/onboarding/compress-image";
 import {
   guideSrc,
@@ -35,9 +36,6 @@ export function PhotoSlotGrid({
 }) {
   const [busySlot, setBusySlot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [brokenPreview, setBrokenPreview] = useState<Record<string, boolean>>(
-    {},
-  );
   const [activeSlot, setActiveSlot] = useState<string | null>(
     PHOTO_SLOTS[0]?.id ?? null,
   );
@@ -52,22 +50,18 @@ export function PhotoSlotGrid({
   async function applyFile(slotId: string, file: File) {
     setBusySlot(slotId);
     setError(null);
-    setBrokenPreview((prev) => {
-      const next = { ...prev };
-      delete next[slotId];
-      return next;
-    });
 
     try {
-      const { file: compressed, previewUrl } =
+      const { file: compressed, previewUrl: clientPreview } =
         await compressImageForUpload(file);
 
-      // Anexa na hora com preview JPEG (ou placeholder se HEIC)
+      // Anexa já (conta no progresso). Preview real se o canvas conseguiu;
+      // senão fica pendente até o servidor devolver JPEG.
       const draft: OnboardingPhotoDraft = {
         id: crypto.randomUUID(),
         slotId,
         name: compressed.name,
-        previewUrl,
+        previewUrl: isRealPhotoPreview(clientPreview) ? clientPreview : "",
         storagePath: `pending/${slotId}`,
       };
       onChange({ ...valueRef.current, [slotId]: draft });
@@ -96,13 +90,18 @@ export function PhotoSlotGrid({
         result = { error: `Falha no upload (${res.status}).` };
       }
 
-      // Preferir preview JPEG do servidor (cobre HEIC) ou o local do canvas
       const serverPreview =
         result.previewDataUrl ||
-        (result.previewUrl?.startsWith("data:image/")
+        (result.previewUrl && isRealPhotoPreview(result.previewUrl)
           ? result.previewUrl
           : undefined);
-      const nextPreview = serverPreview || draft.previewUrl;
+
+      // Sempre preferir JPEG do servidor (foto real). Fallback: canvas local.
+      const nextPreview =
+        serverPreview ||
+        (isRealPhotoPreview(draft.previewUrl) ? draft.previewUrl : "") ||
+        (isRealPhotoPreview(clientPreview) ? clientPreview : "") ||
+        attachedPlaceholderDataUrl();
 
       if (!res.ok && !result.storagePath) {
         setError(
@@ -130,6 +129,12 @@ export function PhotoSlotGrid({
         },
       });
 
+      if (!isRealPhotoPreview(nextPreview)) {
+        setError(
+          "Foto recebida, mas o preview não pôde ser gerado. Tente JPG/PNG ou outra da galeria.",
+        );
+      }
+
       if (result.warning) {
         setError(result.warning);
       }
@@ -156,14 +161,6 @@ export function PhotoSlotGrid({
   function openUpload(slotId: string) {
     setActiveSlot(slotId);
     uploadRef.current?.click();
-  }
-
-  function previewSrc(slotId: string, photo: OnboardingPhotoDraft): string {
-    if (brokenPreview[slotId]) return attachedPlaceholderDataUrl();
-    if (photo.previewUrl?.startsWith("data:image/")) return photo.previewUrl;
-    if (photo.previewUrl?.startsWith("blob:")) return photo.previewUrl;
-    if (photo.previewUrl?.startsWith("http")) return photo.previewUrl;
-    return attachedPlaceholderDataUrl();
   }
 
   return (
@@ -214,7 +211,9 @@ export function PhotoSlotGrid({
           const tip = slotTip(slot, subject);
           const busy = busySlot === slot.id;
           const guide = guideSrc(gender, slot.id);
-          const showPhoto = Boolean(photo);
+          const hasRealPreview = Boolean(
+            photo && isRealPhotoPreview(photo.previewUrl),
+          );
           return (
             <div
               key={slot.id}
@@ -225,44 +224,42 @@ export function PhotoSlotGrid({
               }`}
             >
               <div className="relative aspect-[4/5] overflow-hidden bg-[#EDE8E0]">
-                {/* Guia some debaixo da foto anexada */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={guide}
                   alt=""
                   decoding="async"
                   className={`absolute inset-0 h-full w-full object-cover object-top transition ${
-                    showPhoto ? "opacity-0" : "opacity-100"
+                    hasRealPreview ? "opacity-0" : "opacity-100"
                   }`}
                 />
-                {photo ? (
+                {hasRealPreview && photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={previewSrc(slot.id, photo)}
-                    alt=""
+                    key={photo.id}
+                    src={photo.previewUrl}
+                    alt={label}
                     className="absolute inset-0 h-full w-full object-cover"
-                    onError={() =>
-                      setBrokenPreview((prev) => ({
-                        ...prev,
-                        [slot.id]: true,
-                      }))
-                    }
                   />
-                ) : (
+                ) : null}
+                {!photo ? (
                   <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/55 to-transparent px-3 pb-3 pt-10">
                     <p className="text-xs font-semibold text-white">{label}</p>
                     <p className="text-[11px] text-white/85">{tip}</p>
                   </div>
-                )}
-                {photo && !busy ? (
+                ) : null}
+                {photo && hasRealPreview && !busy ? (
                   <div className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-semibold text-white shadow">
                     <Check className="size-3" />
                     Anexada
                   </div>
                 ) : null}
-                {busy ? (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 text-xs text-white">
-                    Convertendo e enviando…
+                {busy || (photo && !hasRealPreview) ? (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-black/45 px-4 text-center text-xs text-white">
+                    <span className="font-semibold">
+                      {busy ? "Convertendo e enviando…" : "Gerando preview…"}
+                    </span>
+                    <span className="text-white/80">A foto real aparece aqui</span>
                   </div>
                 ) : null}
               </div>
@@ -270,9 +267,11 @@ export function PhotoSlotGrid({
                 <div>
                   <p className="text-sm font-semibold leading-tight">{label}</p>
                   <p className="text-xs leading-snug text-muted-foreground">
-                    {photo
+                    {hasRealPreview
                       ? "Foto anexada — pode trocar se quiser."
-                      : tip}
+                      : photo
+                        ? "Recebendo preview da foto…"
+                        : tip}
                   </p>
                 </div>
                 <div className="flex gap-2">
