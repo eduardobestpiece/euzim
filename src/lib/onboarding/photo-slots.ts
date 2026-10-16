@@ -103,31 +103,31 @@ const BODY_COPY: Record<
   three_quarter_right: {
     labelChild: "Corpo — ¾ direita",
     tipChild: "Corpo inteiro, ¾ à direita",
-    labelFriend: "Corpo — ¾ direita",
+    labelFriend: "Corpo inteiro — ¾ direita",
     tipFriend: "Inteiro, levemente à direita",
   },
   profile_right: {
     labelChild: "Corpo — perfil direita",
     tipChild: "Corpo inteiro de perfil direito",
-    labelFriend: "Corpo — perfil direita",
+    labelFriend: "Corpo inteiro — perfil direita",
     tipFriend: "Inteiro de perfil direito",
   },
   three_quarter_left: {
     labelChild: "Corpo — ¾ esquerda",
     tipChild: "Corpo inteiro, ¾ à esquerda",
-    labelFriend: "Corpo — ¾ esquerda",
+    labelFriend: "Corpo inteiro — ¾ esquerda",
     tipFriend: "Inteiro, levemente à esquerda",
   },
   profile_left: {
     labelChild: "Corpo — perfil esquerda",
     tipChild: "Corpo inteiro de perfil esquerdo",
-    labelFriend: "Corpo — perfil esquerda",
+    labelFriend: "Corpo inteiro — perfil esquerda",
     tipFriend: "Inteiro de perfil esquerdo",
   },
   back: {
     labelChild: "Corpo — costas",
     tipChild: "Corpo inteiro de costas",
-    labelFriend: "Corpo — costas",
+    labelFriend: "Corpo inteiro — costas",
     tipFriend: "Inteiro de costas",
   },
 };
@@ -143,12 +143,33 @@ function buildSlots(group: "face" | "body"): PhotoSlotDef[] {
   }));
 }
 
-export const PHOTO_SLOTS: PhotoSlotDef[] = [
+/** Criança: 6 rosto + 6 corpo = 12 */
+export const CHILD_PHOTO_SLOTS: PhotoSlotDef[] = [
   ...buildSlots("face"),
   ...buildSlots("body"),
 ];
 
-export const REQUIRED_PHOTO_COUNT = PHOTO_SLOTS.length; // 12
+/** Pet/brinquedo: só 6 de corpo inteiro */
+export const FRIEND_PHOTO_SLOTS: PhotoSlotDef[] = buildSlots("body");
+
+/** @deprecated use CHILD_PHOTO_SLOTS — mantido para imports legados */
+export const PHOTO_SLOTS = CHILD_PHOTO_SLOTS;
+
+export const REQUIRED_CHILD_PHOTO_COUNT = CHILD_PHOTO_SLOTS.length; // 12
+export const REQUIRED_FRIEND_PHOTO_COUNT = FRIEND_PHOTO_SLOTS.length; // 6
+
+/** @deprecated use REQUIRED_CHILD_PHOTO_COUNT */
+export const REQUIRED_PHOTO_COUNT = REQUIRED_CHILD_PHOTO_COUNT;
+
+export function slotsForSubject(subject: PhotoSubject): PhotoSlotDef[] {
+  return subject === "friend" ? FRIEND_PHOTO_SLOTS : CHILD_PHOTO_SLOTS;
+}
+
+export function requiredPhotoCount(subject: PhotoSubject): number {
+  return subject === "friend"
+    ? REQUIRED_FRIEND_PHOTO_COUNT
+    : REQUIRED_CHILD_PHOTO_COUNT;
+}
 
 export function slotLabel(slot: PhotoSlotDef, subject: PhotoSubject): string {
   return subject === "child" ? slot.labelChild : slot.labelFriend;
@@ -160,6 +181,9 @@ export function slotTip(slot: PhotoSlotDef, subject: PhotoSubject): string {
 
 export function missingSlotIds(
   filled: Record<string, unknown>,
+  subject: PhotoSubject = "child",
 ): string[] {
-  return PHOTO_SLOTS.filter((s) => !filled[s.id]).map((s) => s.id);
+  return slotsForSubject(subject)
+    .filter((s) => !filled[s.id])
+    .map((s) => s.id);
 }

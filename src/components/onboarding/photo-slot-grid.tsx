@@ -4,8 +4,8 @@ import { useRef, useState } from "react";
 import { Camera, ImagePlus, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  PHOTO_SLOTS,
-  REQUIRED_PHOTO_COUNT,
+  requiredPhotoCount,
+  slotsForSubject,
   slotLabel,
   slotTip,
   type PhotoSubject,
@@ -37,15 +37,18 @@ export function PhotoSlotGrid({
   const [busySlot, setBusySlot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeSlot, setActiveSlot] = useState<string | null>(
-    PHOTO_SLOTS[0]?.id ?? null,
+    () => slotsForSubject(subject)[0]?.id ?? null,
   );
   const cameraRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef(value);
   valueRef.current = value;
+  const activeSlotRef = useRef<string | null>(null);
 
+  const slots = slotsForSubject(subject);
+  const required = requiredPhotoCount(subject);
   const filled = Object.keys(value).length;
-  const missing = REQUIRED_PHOTO_COUNT - filled;
+  const missing = required - filled;
 
   async function applyFile(slotId: string, file: File) {
     setBusySlot(slotId);
@@ -167,7 +170,7 @@ export function PhotoSlotGrid({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 text-sm">
         <p className="text-muted-foreground">
-          {filled}/{REQUIRED_PHOTO_COUNT} fotos
+          {filled}/{required} fotos
         </p>
         {missing > 0 ? (
           <p className="font-medium text-amber-800">
@@ -205,7 +208,7 @@ export function PhotoSlotGrid({
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {PHOTO_SLOTS.map((slot) => {
+        {slots.map((slot) => {
           const photo = value[slot.id];
           const label = slotLabel(slot, subject);
           const tip = slotTip(slot, subject);

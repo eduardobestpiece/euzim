@@ -20,10 +20,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateAvatarPreview } from "@/lib/onboarding/avatar-preview";
 import {
-  PHOTO_SLOTS,
-  REQUIRED_PHOTO_COUNT,
+  slotsForSubject,
+  requiredPhotoCount,
   missingSlotIds,
+  type PhotoSubject,
 } from "@/lib/onboarding/photo-slots";
+import {
+  draftsFromStoredPaths,
+  preferenceKeyForSubject,
+  storedPathsFromDrafts,
+  type StoredPhotoPath,
+} from "@/lib/onboarding/photo-persistence";
 import {
   ageYearsFromBirthDate,
   nextAvatarRefreshDue,
@@ -103,10 +110,6 @@ export async function saveWizardStepAction(
   return { success: true };
 }
 
-async function loadState(): Promise<OnboardingState> {
-  return (await readMockOnboarding()) ?? emptyState();
-}
-
 function photosBySlot(
   photos: OnboardingPhotoDraft[],
 ): Record<string, OnboardingPhotoDraft> {
@@ -117,19 +120,122 @@ function photosBySlot(
   return map;
 }
 
-function assertCompletePhotos(photos: OnboardingPhotoDraft[]): string | null {
+function assertCompletePhotos(
+  photos: OnboardingPhotoDraft[],
+  subject: PhotoSubject,
+): string | null {
   const bySlot = photosBySlot(photos);
-  const missing = missingSlotIds(bySlot);
+  const missing = missingSlotIds(bySlot, subject);
+  const slots = slotsForSubject(subject);
+  const required = requiredPhotoCount(subject);
   if (missing.length) {
     const labels = missing
-      .map((id) => PHOTO_SLOTS.find((s) => s.id === id)?.labelChild ?? id)
+      .map((id) => {
+        const slot = slots.find((s) => s.id === id);
+        if (!slot) return id;
+        return subject === "friend" ? slot.labelFriend : slot.labelChild;
+      })
       .slice(0, 4);
     return `Faltam ${missing.length} foto(s): ${labels.join(", ")}${missing.length > 4 ? "…" : ""}`;
   }
-  if (photos.length < REQUIRED_PHOTO_COUNT) {
-    return `Envie as ${REQUIRED_PHOTO_COUNT} fotos guiadas.`;
+  if (Object.keys(bySlot).length < required) {
+    return `Envie as ${required} fotos guiadas.`;
   }
   return null;
+}
+
+async function loadChildPreferences(userId: string): Promise<{
+  childId: string | null;
+  preferences: Record<string, unknown>;
+  displayName?: string;
+  birthDate?: string | null;
+  gender?: string | null;
+  avatarUrl?: string | null;
+} | null> {
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return null;
+  const { data: children } = await db
+    .from("children")
+    .select("id, display_name, birth_date, gender, avatar_url, preferences")
+    .eq("parent_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const child = children?.[0];
+  if (!child) return null;
+  const preferences =
+    child.preferences && typeof child.preferences === "object"
+      ? (child.preferences as Record<string, unknown>)
+      : {};
+  return {
+    childId: child.id,
+    preferences,
+    displayName: child.display_name,
+    birthDate: child.birth_date,
+    gender: child.gender,
+    avatarUrl: child.avatar_url,
+  };
+}
+
+/** Cookie + hidratação das fotos salvas no banco (fonte da verdade). */
+async function loadState(): Promise<OnboardingState> {
+  const cookie = (await readMockOnboarding()) ?? emptyState();
+  const user = await getCurrentUser();
+  if (!user || !isSupabaseConfigured() || user.isMock) {
+    return cookie;
+  }
+
+  const row = await loadChildPreferences(user.id);
+  if (!row) return cookie;
+
+  const state: OnboardingState = { ...cookie };
+
+  if (!state.child?.displayName && row.displayName) {
+    const gender =
+      row.gender === "boy" || row.gender === "girl" || row.gender === "other"
+        ? row.gender
+        : "other";
+    state.child = {
+      displayName: row.displayName,
+      birthDate: row.birthDate || "",
+      gender,
+      ageYears: ageYearsFromBirthDate(row.birthDate || "") ?? undefined,
+    };
+  }
+
+  const childPaths = row.preferences.photo_paths as StoredPhotoPath[] | undefined;
+  const friendPaths = row.preferences.friend_photo_paths as
+    | StoredPhotoPath[]
+    | undefined;
+  const dbChildPhotos = draftsFromStoredPaths(childPaths);
+  const dbFriendPhotos = draftsFromStoredPaths(friendPaths);
+
+  if (dbChildPhotos.length >= (state.childPhotos?.length ?? 0)) {
+    state.childPhotos = dbChildPhotos;
+  }
+  if (dbFriendPhotos.length >= (state.friendPhotos?.length ?? 0)) {
+    state.friendPhotos = dbFriendPhotos;
+  }
+
+  if (!state.childAvatarUrl && row.avatarUrl) {
+    state.childAvatarUrl = row.avatarUrl;
+  }
+
+  const friendMeta = row.preferences.friend as
+    | { kind?: string; displayName?: string }
+    | undefined;
+  if (!state.friend?.displayName && friendMeta?.displayName) {
+    state.friend = {
+      kind: friendMeta.kind === "toy" ? "toy" : "pet",
+      displayName: friendMeta.displayName,
+    };
+  }
+
+  const step = row.preferences.onboarding_wizard_step;
+  if (typeof step === "string" && step && !state.wizardStep) {
+    state.wizardStep = step;
+  }
+
+  return state;
 }
 
 export async function saveOnboardingPinAction(
@@ -256,10 +362,24 @@ export async function saveFriendProfileAction(
   state.friend = friend;
   await writeMockOnboarding(state);
 
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      if (row?.childId) {
+        const prefs = { ...row.preferences, friend: { kind, displayName } };
+        await db
+          .from("children")
+          .update({ preferences: prefs })
+          .eq("id", row.childId);
+      }
+    }
+  }
+
   return { success: true };
 }
 
-/** Persiste fotos de um sujeito (paths + previews leves no cookie mock). */
+/** Persiste fotos no banco (preferences) + cookie enxuto (só paths). */
 export async function saveSubjectPhotosAction(input: {
   subject: "child" | "friend";
   photos: OnboardingPhotoDraft[];
@@ -269,14 +389,13 @@ export async function saveSubjectPhotosAction(input: {
   if (!user) return { error: "Faça login." };
 
   if (!input.allowPartial) {
-    const missing = assertCompletePhotos(input.photos);
+    const missing = assertCompletePhotos(input.photos, input.subject);
     if (missing) return { error: missing };
   } else if (input.photos.length < 1) {
     return { error: "Nenhuma foto para salvar." };
   }
 
   const state = await loadState();
-  // Não guardar data URLs grandes no cookie — só metadados + path
   const light = input.photos.map((p) => ({
     id: p.id,
     slotId: p.slotId,
@@ -295,37 +414,52 @@ export async function saveSubjectPhotosAction(input: {
 
   if (isSupabaseConfigured() && !user.isMock) {
     const db = createAdminClient() ?? (await createClient());
-    if (db && input.subject === "child") {
-      const { data: children } = await db
-        .from("children")
-        .select("id")
-        .eq("parent_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(1);
-      const childId = children?.[0]?.id;
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      const childId = row?.childId;
       if (childId) {
-        const cover =
-          input.photos.find((p) => p.slotId === "face-front")?.publicUrl ||
-          input.photos[0]?.publicUrl ||
-          null;
-        const capturedAt = new Date();
-        const patch: Record<string, unknown> = {
-          avatar_url: cover,
-          preferences: {
-            photo_paths: input.photos.map((p) => ({
-              slotId: p.slotId,
-              path: p.storagePath,
-              url: p.publicUrl,
-            })),
-            age_years: state.child?.ageYears ?? null,
-            gender: state.child?.gender ?? null,
-          },
-        };
-        if (!input.allowPartial) {
-          patch.avatar_photos_captured_at = capturedAt.toISOString();
-          patch.avatar_refresh_due_at = nextAvatarRefreshDue(capturedAt).toISOString();
+        const prefs = { ...(row?.preferences ?? {}) };
+        const key = preferenceKeyForSubject(input.subject);
+        prefs[key] = storedPathsFromDrafts(input.photos);
+        prefs.age_years = state.child?.ageYears ?? prefs.age_years ?? null;
+        prefs.gender = state.child?.gender ?? prefs.gender ?? null;
+        if (state.friend) {
+          prefs.friend = {
+            kind: state.friend.kind,
+            displayName: state.friend.displayName,
+          };
         }
-        await db.from("children").update(patch).eq("id", childId);
+
+        const patch: Record<string, unknown> = {
+          preferences: prefs,
+        };
+
+        if (input.subject === "child") {
+          const cover =
+            input.photos.find((p) => p.slotId === "face-front")?.publicUrl ||
+            input.photos[0]?.publicUrl ||
+            null;
+          if (cover) patch.avatar_url = cover;
+          if (!input.allowPartial) {
+            const capturedAt = new Date();
+            patch.avatar_photos_captured_at = capturedAt.toISOString();
+            patch.avatar_refresh_due_at =
+              nextAvatarRefreshDue(capturedAt).toISOString();
+          }
+        }
+
+        const { error } = await db
+          .from("children")
+          .update(patch)
+          .eq("id", childId);
+        if (error) {
+          return { error: `Não foi possível salvar as fotos: ${error.message}` };
+        }
+      } else {
+        return {
+          error:
+            "Perfil da criança não encontrado no banco. Volte e salve o nome/idade.",
+        };
       }
     }
   }
@@ -438,11 +572,11 @@ export async function generateAvatarsAction(): Promise<OnboardingActionResult> {
     };
   }
 
-  const childMiss = assertCompletePhotos(state.childPhotos);
+  const childMiss = assertCompletePhotos(state.childPhotos, "child");
   if (childMiss && !state.childAvatarUrl) {
     return { error: `Fotos da criança: ${childMiss}` };
   }
-  const friendMiss = assertCompletePhotos(state.friendPhotos);
+  const friendMiss = assertCompletePhotos(state.friendPhotos, "friend");
   if (friendMiss && !state.friendAvatarUrl) {
     return { error: `Fotos do amigo: ${friendMiss}` };
   }

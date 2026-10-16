@@ -1,7 +1,11 @@
 import type { OnboardingPhotoDraft, OnboardingState } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { PHOTO_SLOTS } from "@/lib/onboarding/photo-slots";
+import {
+  CHILD_PHOTO_SLOTS,
+  FRIEND_PHOTO_SLOTS,
+} from "@/lib/onboarding/photo-slots";
+import { draftsFromStoredPaths } from "@/lib/onboarding/photo-persistence";
 
 export type ReuseBootstrap = {
   resetMode: "full" | "reuse" | null;
@@ -38,6 +42,8 @@ export async function loadOnboardingBootstrap(
   const prefs = (child?.preferences ?? {}) as {
     age_years?: number;
     photo_paths?: { slotId?: string; path?: string; url?: string }[];
+    friend_photo_paths?: { slotId?: string; path?: string; url?: string }[];
+    friend?: { kind?: string; displayName?: string };
     onboarding_wizard_step?: string;
   };
   const savedStep =
@@ -50,20 +56,24 @@ export async function loadOnboardingBootstrap(
       ? child.gender
       : ("other" as const);
 
-  const childPhotos: OnboardingPhotoDraft[] = [];
-  for (const slot of PHOTO_SLOTS) {
-    const found = prefs.photo_paths?.find((p) => p.slotId === slot.id);
-    if (found?.url || found?.path) {
-      childPhotos.push({
-        id: crypto.randomUUID(),
-        slotId: slot.id,
-        name: slot.id,
-        previewUrl: found.url || "",
-        storagePath: found.path || "",
-        publicUrl: found.url,
-      });
-    }
-  }
+  const childPhotos: OnboardingPhotoDraft[] = draftsFromStoredPaths(
+    prefs.photo_paths,
+  ).filter((p) => CHILD_PHOTO_SLOTS.some((s) => s.id === p.slotId));
+
+  const friendPhotos: OnboardingPhotoDraft[] = draftsFromStoredPaths(
+    prefs.friend_photo_paths,
+  ).filter((p) => FRIEND_PHOTO_SLOTS.some((s) => s.id === p.slotId));
+
+  const friendFromPrefs =
+    prefs.friend?.displayName
+      ? {
+          kind:
+            prefs.friend.kind === "toy"
+              ? ("toy" as const)
+              : ("pet" as const),
+          displayName: prefs.friend.displayName,
+        }
+      : null;
 
   if (resetMode !== "reuse") {
     if (!savedStep && !child) return { resetMode, initialState: null };
@@ -80,8 +90,8 @@ export async function loadOnboardingBootstrap(
             }
           : null,
         childPhotos,
-        friend: null,
-        friendPhotos: [],
+        friend: friendFromPrefs,
+        friendPhotos,
         childAvatarUrl: child?.avatar_url || null,
         wizardStep: savedStep,
         completed: false,
@@ -115,8 +125,8 @@ export async function loadOnboardingBootstrap(
     childPhotos,
     friend: friend
       ? { kind: friendKind, displayName: friend.name }
-      : null,
-    friendPhotos: [],
+      : friendFromPrefs,
+    friendPhotos,
     childAvatarUrl: child?.avatar_url || primary?.avatar_url || null,
     friendAvatarUrl: friend?.avatar_url || null,
     wizardStep: savedStep,

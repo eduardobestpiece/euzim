@@ -34,7 +34,10 @@ import {
   saveSubjectPhotosAction,
   saveWizardStepAction,
 } from "@/lib/onboarding/actions";
-import { REQUIRED_PHOTO_COUNT } from "@/lib/onboarding/photo-slots";
+import {
+  REQUIRED_CHILD_PHOTO_COUNT,
+  REQUIRED_FRIEND_PHOTO_COUNT,
+} from "@/lib/onboarding/photo-slots";
 import {
   GENDER_LABELS,
   ageYearsFromBirthDate,
@@ -97,8 +100,8 @@ function resolveInitialStep(
   }
   if (initialState?.friend?.displayName) return "friend-photos";
   if (
-    (initialState?.childPhotos?.length ?? 0) >= REQUIRED_PHOTO_COUNT ||
-    (initialState?.photos?.length ?? 0) >= REQUIRED_PHOTO_COUNT
+    (initialState?.childPhotos?.length ?? 0) >= REQUIRED_CHILD_PHOTO_COUNT ||
+    (initialState?.photos?.length ?? 0) >= REQUIRED_CHILD_PHOTO_COUNT
   ) {
     return "friend";
   }
@@ -204,9 +207,9 @@ export function OnboardingWizard({
 
   function persistChildPhotos() {
     setError(null);
-    if (!isReuse && childFilled < REQUIRED_PHOTO_COUNT) {
+    if (!isReuse && childFilled < REQUIRED_CHILD_PHOTO_COUNT) {
       setError(
-        `Preencha todos os ${REQUIRED_PHOTO_COUNT} slots da criança (${REQUIRED_PHOTO_COUNT - childFilled} faltando).`,
+        `Preencha todos os ${REQUIRED_CHILD_PHOTO_COUNT} slots da criança (${REQUIRED_CHILD_PHOTO_COUNT - childFilled} faltando).`,
       );
       return;
     }
@@ -244,9 +247,9 @@ export function OnboardingWizard({
 
   function persistFriendPhotos() {
     setError(null);
-    if (!isReuse && friendFilled < REQUIRED_PHOTO_COUNT) {
+    if (!isReuse && friendFilled < REQUIRED_FRIEND_PHOTO_COUNT) {
       setError(
-        `Preencha todos os ${REQUIRED_PHOTO_COUNT} slots do amigo (${REQUIRED_PHOTO_COUNT - friendFilled} faltando).`,
+        `Preencha as ${REQUIRED_FRIEND_PHOTO_COUNT} fotos de corpo do amigo (${REQUIRED_FRIEND_PHOTO_COUNT - friendFilled} faltando).`,
       );
       return;
     }
@@ -446,11 +449,11 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Camera className="size-4" />
-              12 fotos de {childName || "sua criança"}
+              {REQUIRED_CHILD_PHOTO_COUNT} fotos de {childName || "sua criança"}
             </CardTitle>
             <CardDescription>
               6 do rosto + 6 do corpo. Tire agora ou envie da galeria — cada
-              slot tem a pose certa.
+              slot tem a pose certa. As fotos são salvas no banco ao enviar.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -476,14 +479,14 @@ export function OnboardingWizard({
                 className="flex-1"
                 disabled={
                   pending ||
-                  (!isReuse && childFilled < REQUIRED_PHOTO_COUNT)
+                  (!isReuse && childFilled < REQUIRED_CHILD_PHOTO_COUNT)
                 }
                 onClick={persistChildPhotos}
               >
                 {pending
                   ? "Salvando…"
-                  : !isReuse && childFilled < REQUIRED_PHOTO_COUNT
-                    ? `Faltam ${REQUIRED_PHOTO_COUNT - childFilled}`
+                  : !isReuse && childFilled < REQUIRED_CHILD_PHOTO_COUNT
+                    ? `Faltam ${REQUIRED_CHILD_PHOTO_COUNT - childFilled}`
                     : "Continuar"}
               </Button>
             </div>
@@ -578,11 +581,12 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Camera className="size-4" />
-              12 fotos de {friendName || "melhor amigo"}
+              {REQUIRED_FRIEND_PHOTO_COUNT} fotos de corpo —{" "}
+              {friendName || "melhor amigo"}
             </CardTitle>
             <CardDescription>
-              Mesmas 12 poses, com guia adaptada para{" "}
-              {friendKind === "pet" ? "pet" : "brinquedo"}.
+              Só corpo inteiro (6 ângulos) do{" "}
+              {friendKind === "pet" ? "pet" : "brinquedo"}. Sem fotos de rosto.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -608,14 +612,14 @@ export function OnboardingWizard({
                 className="flex-1"
                 disabled={
                   pending ||
-                  (!isReuse && friendFilled < REQUIRED_PHOTO_COUNT)
+                  (!isReuse && friendFilled < REQUIRED_FRIEND_PHOTO_COUNT)
                 }
                 onClick={persistFriendPhotos}
               >
                 {pending
                   ? "Gerando avatares…"
-                  : !isReuse && friendFilled < REQUIRED_PHOTO_COUNT
-                    ? `Faltam ${REQUIRED_PHOTO_COUNT - friendFilled}`
+                  : !isReuse && friendFilled < REQUIRED_FRIEND_PHOTO_COUNT
+                    ? `Faltam ${REQUIRED_FRIEND_PHOTO_COUNT - friendFilled}`
                     : isReuse && childAvatarUrl
                       ? "Continuar com avatares salvos"
                       : "Gerar personagens"}
