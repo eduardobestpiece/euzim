@@ -46,13 +46,26 @@ export default async function OnboardingPage() {
   }
 
   return (
-    <main className="flex min-h-full flex-1 justify-center bg-[radial-gradient(ellipse_at_top,_oklch(0.94_0.04_85),_transparent_55%),radial-gradient(ellipse_at_bottom,_oklch(0.93_0.03_200),_transparent_50%)] px-4 py-10 sm:py-14">
+    <main className="relative flex min-h-full flex-1 flex-col bg-[radial-gradient(ellipse_at_top,_oklch(0.94_0.04_85),_transparent_55%),radial-gradient(ellipse_at_bottom,_oklch(0.93_0.03_200),_transparent_50%)]">
       <SessionHeartbeat />
-      <OnboardingWizard
-        initialState={initialState}
-        mockMode={!isSupabaseConfigured() || user.isMock}
-        resetMode={resetMode}
-      />
+      <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <p className="truncate text-xs text-muted-foreground sm:text-sm">
+          {user.email}
+        </p>
+        <form action={signOutAction}>
+          <Button type="submit" variant="outline" size="sm" className="gap-1.5">
+            <LogOut className="size-3.5" />
+            Sair
+          </Button>
+        </form>
+      </header>
+      <div className="flex flex-1 justify-center px-4 pb-10 pt-2 sm:pb-14 sm:pt-4">
+        <OnboardingWizard
+          initialState={initialState}
+          mockMode={!isSupabaseConfigured() || user.isMock}
+          resetMode={resetMode}
+        />
+      </div>
     </main>
   );
 }
