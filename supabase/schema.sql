@@ -43,27 +43,10 @@ CREATE TYPE public.game_type AS ENUM (
 );
 
 -- ---------------------------------------------------------------------------
--- Helpers (SECURITY DEFINER em schema privado — não expor via API)
+-- Helpers base (schema privado + trigger updated_at)
+-- private.is_admin() vem DEPOIS de public.users (depende da tabela)
 -- ---------------------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS private;
-
-CREATE OR REPLACE FUNCTION private.is_admin()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.users u
-    WHERE u.id = auth.uid()
-      AND u.role = 'admin'
-  );
-$$;
-
-REVOKE ALL ON FUNCTION private.is_admin() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION private.is_admin() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS trigger
@@ -104,6 +87,25 @@ CREATE TRIGGER users_set_updated_at
   BEFORE UPDATE ON public.users
   FOR EACH ROW
   EXECUTE FUNCTION public.set_updated_at();
+
+-- Agora que public.users existe:
+CREATE OR REPLACE FUNCTION private.is_admin()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.users u
+    WHERE u.id = auth.uid()
+      AND u.role = 'admin'
+  );
+$$;
+
+REVOKE ALL ON FUNCTION private.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.is_admin() TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- children — filhos do responsável (parent)
