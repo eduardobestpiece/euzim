@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     template: "%s · Euzim",
   },
   description:
-    "Histórias infantis personalizadas com o avatar da sua criança.",
+    "Crie histórias onde a sua criança é a protagonista. O Euzim constrói o hábito da leitura — e nós fazemos tudo por você.",
   applicationName: "Euzim",
   icons: {
     icon: [
@@ -45,9 +45,9 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Euzim",
     description:
-      "Histórias infantis personalizadas com o avatar da sua criança.",
+      "Crie histórias onde a sua criança é a protagonista. O Euzim constrói o hábito da leitura — e nós fazemos tudo por você.",
     siteName: "Euzim",
-    images: [{ url: "/brand/euzim-logo-color.png" }],
+    images: [{ url: "/brand/euzim-hero-serena-boy.jpg" }],
   },
 };
 
