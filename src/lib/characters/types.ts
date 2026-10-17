@@ -25,6 +25,11 @@ export const RELATIONSHIP_OPTIONS = [
 export type RelationshipValue =
   (typeof RELATIONSHIP_OPTIONS)[number]["value"];
 
+export type CharacterStudySheet = {
+  label: string;
+  url: string;
+};
+
 export type CharacterManageRow = {
   id: string;
   name: string;
@@ -36,6 +41,8 @@ export type CharacterManageRow = {
   birthDate?: string | null;
   kind?: string | null;
   description?: string | null;
+  /** Folhas turnaround (rosto/corpo ou personagem inteiro). */
+  studySheets?: CharacterStudySheet[];
 };
 
 export type ChildFamilyMeta = {

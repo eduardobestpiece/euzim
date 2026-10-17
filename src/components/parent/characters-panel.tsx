@@ -15,6 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AvatarStudyDialog,
+  type AvatarStudySubject,
+} from "@/components/onboarding/avatar-study-dialog";
+import {
   CHARACTER_PACKS,
   formatBrl,
   priceForAvatarCount,
@@ -37,14 +41,21 @@ import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 
 export type { CharacterManageRow };
 
+function isPetOrToyKind(
+  kind?: string | null,
+  relationship?: string | null,
+): boolean {
+  return (
+    kind === "pet" ||
+    kind === "toy" ||
+    relationship === "pet" ||
+    relationship === "toy"
+  );
+}
+
 function isPetOrToyRow(c: CharacterManageRow | null): boolean {
   if (!c) return false;
-  return (
-    c.kind === "pet" ||
-    c.kind === "toy" ||
-    c.relationship === "pet" ||
-    c.relationship === "toy"
-  );
+  return isPetOrToyKind(c.kind, c.relationship);
 }
 
 export function CharactersPanel({
@@ -64,6 +75,10 @@ export function CharactersPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [relFilter, setRelFilter] = useState("");
+  const [studySubject, setStudySubject] = useState<AvatarStudySubject | null>(
+    null,
+  );
+  const [studyOpen, setStudyOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -94,6 +109,27 @@ export function CharactersPanel({
 
   const editingIsPrimary = Boolean(editing?.isPrimary);
   const editingIsPetOrToy = isPetOrToyRow(editing);
+  const formIsPetOrToy = isPetOrToyKind(form.kind, form.relationship);
+  /** Pet/brinquedo: sem data de nascimento (também se mudar o parentesco no form). */
+  const showBirthField =
+    editingIsPrimary || (!editingIsPetOrToy && !formIsPetOrToy);
+
+  function openStudy(c: CharacterManageRow) {
+    const petToy = isPetOrToyRow(c);
+    setStudySubject({
+      name: c.name,
+      kindLabel: c.isPrimary
+        ? "Criança principal"
+        : petToy
+          ? c.kind === "toy" || c.relationship === "toy"
+            ? "Brinquedo"
+            : "Pet"
+          : "Personagem",
+      heroUrl: c.avatarUrl ?? null,
+      sheets: c.studySheets ?? [],
+    });
+    setStudyOpen(true);
+  }
 
   function openEdit(c: CharacterManageRow) {
     setEditing(c);
@@ -141,7 +177,7 @@ export function CharactersPanel({
             ? form.relationshipOther
             : null,
         gender: form.gender || null,
-        birthDate: editingIsPetOrToy ? null : form.birthDate || null,
+        birthDate: showBirthField ? form.birthDate || null : null,
         kind: editingIsPrimary
           ? "child"
           : editingIsPetOrToy
@@ -259,23 +295,33 @@ export function CharactersPanel({
                 className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-4 py-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  {c.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={c.avatarUrl}
-                      alt=""
-                      className="size-12 rounded-xl object-cover"
-                    />
-                  ) : (
-                    <div className="flex size-12 items-center justify-center rounded-xl bg-muted">
-                      <Sparkles className="size-4 text-muted-foreground" />
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => openStudy(c)}
+                    className="relative shrink-0 overflow-hidden rounded-xl ring-offset-background transition hover:ring-2 hover:ring-amber-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Ver poses de ${c.name}`}
+                    title="Ver poses do avatar"
+                  >
+                    {c.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={c.avatarUrl}
+                        alt=""
+                        className="size-12 object-cover"
+                        draggable={false}
+                      />
+                    ) : (
+                      <div className="flex size-12 items-center justify-center bg-muted">
+                        <Sparkles className="size-4 text-muted-foreground" />
+                      </div>
+                    )}
+                  </button>
                   <div className="min-w-0">
                     <p className="truncate font-medium">{c.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {c.relationship || (c.isPrimary ? "filho(a)" : "elenco")}
                       {c.kind ? ` · ${c.kind}` : ""}
+                      {" · toque na foto"}
                     </p>
                   </div>
                 </div>
@@ -442,7 +488,7 @@ export function CharactersPanel({
                 }
               >
                 <option value="">—</option>
-                {editingIsPetOrToy ? (
+                {formIsPetOrToy || editingIsPetOrToy ? (
                   <>
                     <option value="male">Macho / masculino</option>
                     <option value="female">Fêmea / feminino</option>
@@ -460,7 +506,7 @@ export function CharactersPanel({
               </select>
             </div>
 
-            {!editingIsPetOrToy ? (
+            {showBirthField ? (
               <div className="space-y-1.5">
                 <Label htmlFor="char-birth">Nascimento</Label>
                 <Input
@@ -600,6 +646,12 @@ export function CharactersPanel({
           {message}
         </p>
       ) : null}
+
+      <AvatarStudyDialog
+        open={studyOpen}
+        onOpenChange={setStudyOpen}
+        subject={studySubject}
+      />
     </div>
   );
 }

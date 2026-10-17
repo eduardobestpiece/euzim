@@ -68,29 +68,6 @@ export default async function ParentPage() {
   } else {
     const db = createAdminClient() ?? (await createClient());
     if (db) {
-      const { data: chars } = await db
-        .from("characters")
-        .select(
-          "id, name, is_primary, avatar_url, relationship, relationship_other, gender, birth_date, kind, description",
-        )
-        .eq("parent_id", user.id)
-        .order("created_at", { ascending: true });
-
-      if (chars) {
-        characters = chars.map((c) => ({
-          id: c.id,
-          name: c.name,
-          isPrimary: Boolean(c.is_primary),
-          avatarUrl: c.avatar_url,
-          relationship: c.relationship,
-          relationshipOther: c.relationship_other,
-          gender: c.gender,
-          birthDate: c.birth_date,
-          kind: c.kind,
-          description: c.description,
-        }));
-      }
-
       const { data: children } = await db
         .from("children")
         .select(
@@ -116,6 +93,76 @@ export default async function ParentPage() {
           motherName: child.mother_name,
           motherBirthDate: child.mother_birth_date,
         };
+      }
+
+      const pixar = (
+        child?.preferences && typeof child.preferences === "object"
+          ? (child.preferences as Record<string, unknown>).pixar
+          : null
+      ) as
+        | {
+            child_hero?: string;
+            child_face_sheet?: string;
+            child_body_sheet?: string;
+            friend_hero?: string;
+            friend_sheet?: string;
+          }
+        | null
+        | undefined;
+
+      const { data: chars } = await db
+        .from("characters")
+        .select(
+          "id, name, is_primary, avatar_url, relationship, relationship_other, gender, birth_date, kind, description",
+        )
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true });
+
+      if (chars) {
+        const firstFriendId = chars.find((c) => !c.is_primary)?.id ?? null;
+        characters = chars.map((c) => {
+          const isPrimary = Boolean(c.is_primary);
+          const studySheets: { label: string; url: string }[] = [];
+          if (isPrimary) {
+            if (pixar?.child_face_sheet) {
+              studySheets.push({
+                label: "Rosto — turnaround",
+                url: pixar.child_face_sheet,
+              });
+            }
+            if (pixar?.child_body_sheet) {
+              studySheets.push({
+                label: "Corpo — turnaround",
+                url: pixar.child_body_sheet,
+              });
+            }
+          } else if (c.id === firstFriendId && pixar?.friend_sheet) {
+            studySheets.push({
+              label: "Personagem — turnaround",
+              url: pixar.friend_sheet,
+            });
+          }
+          return {
+            id: c.id,
+            name: c.name,
+            isPrimary,
+            avatarUrl:
+              c.avatar_url ||
+              (isPrimary
+                ? pixar?.child_hero
+                : c.id === firstFriendId
+                  ? pixar?.friend_hero
+                  : null) ||
+              null,
+            relationship: c.relationship,
+            relationshipOther: c.relationship_other,
+            gender: c.gender,
+            birthDate: c.birth_date,
+            kind: c.kind,
+            description: c.description,
+            studySheets,
+          };
+        });
       }
       const prefs = (child?.preferences ?? {}) as {
         age_years?: number;

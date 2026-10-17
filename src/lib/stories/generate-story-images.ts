@@ -17,6 +17,12 @@ import {
   estimateImageUsd,
   recordUsageEvent,
 } from "@/lib/usage/openai-meter";
+import {
+  imageSizeForStoryPage,
+  isWallpaperStoryPage,
+  STORY_SAFE_FRAME_HINT,
+  type StoryImageSize,
+} from "@/lib/stories/image-formats";
 
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
 /** Qualidade intermediária = custo↓ sem matar fidelidade dos avatares. */
@@ -104,6 +110,7 @@ async function callImageEdit(
   images: Buffer[],
   userId?: string | null,
   pageIndex?: number,
+  size: StoryImageSize = "1536x1024",
 ): Promise<Buffer> {
   const key = apiKey();
   if (!key) throw new Error("OPENAI_API_KEY ausente.");
@@ -111,7 +118,7 @@ async function callImageEdit(
   const form = new FormData();
   form.set("model", IMAGE_MODEL);
   form.set("prompt", prompt);
-  form.set("size", "1024x1024");
+  form.set("size", size);
   form.set("quality", IMAGE_QUALITY);
   form.set("output_format", "jpeg");
   if (IMAGE_MODEL.includes("gpt-image-1")) {
@@ -143,9 +150,14 @@ async function callImageEdit(
     userId,
     category: "story_image",
     model: IMAGE_MODEL,
-    operation: "story_page_image",
+    operation:
+      size === "1024x1536" ? "story_wallpaper_image" : "story_page_image",
     estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1) * qualityMul,
-    meta: { pageIndex: pageIndex ?? null, quality: IMAGE_QUALITY },
+    meta: {
+      pageIndex: pageIndex ?? null,
+      quality: IMAGE_QUALITY,
+      size,
+    },
   });
   const b64 = json.data?.[0]?.b64_json;
   if (b64) return Buffer.from(b64, "base64");
@@ -246,9 +258,12 @@ function scenePrompt(
     `Do NOT lock clothing to the reference sheet blouse — change outfit when the story context changes.`,
     `Do not invent avatar face/hair details that contradict the reference sheets.`,
     familyFaceRule(cast),
-    pageIndex === totalPages - 1
-      ? `Final beat: prefer a rich closing scene when the text allows (park, snack, joy, companions) — avoid only a bed close-up if the story covers more; outfit should match that closing context.`
-      : "",
+    isWallpaperStoryPage(pageIndex, totalPages)
+      ? [
+          `Final beat / wallpaper page: rich closing scene when the text allows; outfit matches that closing context.`,
+          `Output format is PORTRAIT mobile wallpaper (${STORY_SAFE_FRAME_HINT})`,
+        ].join(" ")
+      : `Output format is LANDSCAPE cinematic story still (1536x1024), composed for a 16:10 story reader frame — keep important action inside the frame, avoid awkward edge crops.`,
     `Soft cinematic lighting, wholesome family-friendly mood, rich storybook composition.`,
     `No text, no captions, no watermark, no logos, no photorealistic humans.`,
   ]
@@ -320,6 +335,7 @@ export async function generateStoryPageImages(input: {
         let jpeg: Buffer | null = null;
         let chosenHash = "";
         let usedPrompt = basePrompt;
+        const size = imageSizeForStoryPage(i, input.pages.length);
         for (let attempt = 0; attempt <= MAX_UNIQUENESS_RETRIES; attempt++) {
           const prompt = scenePrompt(
             input.cast,
@@ -336,6 +352,7 @@ export async function generateStoryPageImages(input: {
             refs.slice(0, 4),
             input.userId,
             page.pageIndex,
+            size,
           );
           const hash = await differenceHash(candidate);
           if (

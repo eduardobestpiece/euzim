@@ -106,8 +106,9 @@ export function WallpaperDialog({
           <DialogHeader className="px-4 pt-4 text-left">
             <DialogTitle>Wallpaper do celular</DialogTitle>
             <DialogDescription className="text-white/70">
-              Formato retrato 9:19.5 (1080×2340) — upscale da arte da história para
-              a tela do celular.
+              A última página da história já nasce em formato mobile. O quadro
+              central (~16:10) é o que aparece na leitura; o restante completa o
+              wallpaper do celular.
             </DialogDescription>
           </DialogHeader>
           <div className="flex max-h-[65vh] items-center justify-center bg-black px-4 py-2">
@@ -118,6 +119,15 @@ export function WallpaperDialog({
                 alt={`Wallpaper — ${title}`}
                 className="h-full w-full object-cover"
               />
+              {/* Guia do quadro seguro da história (centro ~16:10) */}
+              <div
+                className="pointer-events-none absolute inset-x-0 top-1/2 z-10 -translate-y-1/2 border border-dashed border-amber-300/70"
+                style={{ height: "42%" }}
+                aria-hidden
+              />
+              <p className="pointer-events-none absolute bottom-3 left-0 right-0 text-center text-[10px] font-medium text-amber-100/90">
+                Faixa central = quadro da história
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 px-4 py-4">
