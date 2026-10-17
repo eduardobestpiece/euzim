@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: `Você ajuda pais a esclarecer temas de histórias infantis (Estúdio Mágico).
+          content: `Você ajuda pais a esclarecer temas de histórias infantis (Euzim).
 Seja econômico em tokens: no máximo 3 perguntas curtas.
 Se o tema já for claro e específico o bastante, responda needsClarify=false e questions=[].
 Se for vago/ambíguo, faça 1 a 3 perguntas em português do Brasil.

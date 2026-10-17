@@ -254,7 +254,7 @@ export async function startCharacterPackCheckoutAction(
                 currency: "brl",
                 unit_amount: cents,
                 product_data: {
-                  name: `Estúdio Mágico — ${pack.name}`,
+                  name: `Euzim — ${pack.name}`,
                   description: pack.description,
                 },
               },

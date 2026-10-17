@@ -14,10 +14,10 @@ import {
   Heart,
   Lock,
   PawPrint,
-  Sparkles,
   ToyBrick,
   UserRound,
 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -456,9 +456,8 @@ export function OnboardingWizard({
     <div className="mx-auto w-full max-w-lg space-y-6 pb-10">
       <header className="space-y-2 text-center sm:text-left">
         <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-          <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-900">
-            <Sparkles className="size-3.5" />
-            Estúdio Mágico
+          <div className="inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-1">
+            <BrandLogo size="compact" href={null} />
           </div>
           <span className="rounded-full bg-emerald-600/15 px-2.5 py-1 font-mono text-[10px] font-semibold text-emerald-900">
             {ONBOARDING_BUILD}

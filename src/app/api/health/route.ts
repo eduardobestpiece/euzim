@@ -5,7 +5,7 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      service: "estudio-magico",
+      service: "euzim",
       port: 5050,
       supabaseConfigured: isSupabaseConfigured(),
       hasSecretKey: hasSecretKey(),

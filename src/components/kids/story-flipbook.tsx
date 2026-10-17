@@ -9,6 +9,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { QuizTherapy } from "@/components/kids/quiz-therapy";
 import { WallpaperDialog } from "@/components/parent/wallpaper-dialog";
@@ -143,17 +144,14 @@ export function StoryFlipbook({
       />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        {/* Topo: Euzim + botão de saída na mesma linha */}
+        {/* Topo: logo + botão de saída na mesma linha */}
         <div className="flex shrink-0 items-center justify-between gap-3 px-3 pb-2 pt-3 md:px-5">
-          <span
-            className="font-story-display text-lg font-semibold tracking-tight md:text-xl"
-            style={{
-              color: palette.paper,
-              textShadow: `0 1px 2px ${withAlpha(palette.deep, 0.55)}`,
-            }}
-          >
-            Euzim
-          </span>
+          <BrandLogo
+            variant="onDark"
+            size="compact"
+            href={null}
+            className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
+          />
           <div className="flex flex-wrap items-center justify-end gap-2">
             {backHref ? (
               <Button

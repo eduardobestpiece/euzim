@@ -42,7 +42,7 @@ export function validateBirthDate(birthDate: string): string | null {
   const age = ageYearsFromBirthDate(birthDate);
   if (age == null) return "Informe uma data de nascimento válida.";
   if (age < 0) return "A data não pode ser no futuro.";
-  if (age > 17) return "O Estúdio Mágico é para crianças até 17 anos.";
+  if (age > 17) return "O Euzim é para crianças até 17 anos.";
   if (age < 1) return "A criança precisa ter pelo menos 1 ano.";
   return null;
 }

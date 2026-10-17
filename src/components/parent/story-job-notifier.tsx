@@ -120,7 +120,7 @@ export function StoryJobNotifier({
               setToast(body);
               void maybeNotifyBrowser(
                 "História pronta!",
-                body.progress || "Sua história do Estúdio Mágico está pronta.",
+                body.progress || "Sua história do Euzim está pronta.",
               );
             }
           } else if (body.status === "failed") {

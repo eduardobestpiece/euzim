@@ -1,4 +1,4 @@
-# Estúdio Mágico
+# Euzim
 
 SaaS B2C para pais gerarem histórias infantis personalizadas com IA (avatar Pixar da criança).
 
@@ -6,7 +6,7 @@ Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supaba
 
 **Porta do app: `5050`.** A porta `8080` é reservada para BP Sales — não use neste Project.
 
-Stamp da plataforma: `v22` (`src/lib/platform-build.ts`).
+Stamp da plataforma: `v33` (`src/lib/platform-build.ts`). Brand assets em `public/brand/`.
 
 ## Pré-requisitos
 

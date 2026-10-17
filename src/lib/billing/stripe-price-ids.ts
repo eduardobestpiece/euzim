@@ -1,5 +1,5 @@
 /**
- * Stripe Price/Product IDs (LIVE) — Estúdio Mágico.
+ * Stripe Price/Product IDs (LIVE) — Euzim.
  * Gerado por scripts/create-stripe-products.mjs — sem secrets.
  * Nunca coloque sk_/whsec_ neste arquivo.
  */

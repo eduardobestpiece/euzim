@@ -29,7 +29,7 @@ export async function shareStoryLink(input: {
     try {
       await navigator.share({
         title: input.title,
-        text: `Leia “${input.title}” no Estúdio Mágico`,
+        text: `Leia “${input.title}” no Euzim`,
         url,
       });
       return "shared";

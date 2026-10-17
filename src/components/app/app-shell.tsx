@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Baby, Shield, Sparkles, UserRound, Users } from "lucide-react";
+import { Baby, Shield, UserRound, Users } from "lucide-react";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { PinGuardButton } from "@/components/kids/pin-guard";
 import { signOutAction } from "@/lib/auth/actions";
@@ -31,12 +32,9 @@ export function AppShell({
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-4 md:px-8">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-amber-600" aria-hidden />
-          <span className="font-heading text-lg font-semibold">
-            Estúdio Mágico
-          </span>
-          <span className="hidden text-sm text-muted-foreground sm:inline">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <BrandLogo size="header" href="/app/parent" />
+          <span className="hidden truncate text-sm text-muted-foreground sm:inline">
             / {title}
           </span>
         </div>

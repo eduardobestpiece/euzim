@@ -96,7 +96,7 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
           Assinatura
         </h2>
         <p className="text-sm text-muted-foreground">
-          Planos do Estúdio Mágico — pagamento via Stripe Checkout.
+          Planos Euzim — pagamento via Stripe Checkout.
         </p>
       </div>
 

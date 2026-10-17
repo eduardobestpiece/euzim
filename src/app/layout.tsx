@@ -27,9 +27,28 @@ const fontStoryBody = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "Estúdio Mágico",
+  title: {
+    default: "Euzim",
+    template: "%s · Euzim",
+  },
   description:
     "Histórias infantis personalizadas com o avatar da sua criança.",
+  applicationName: "Euzim",
+  icons: {
+    icon: [
+      { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/brand/icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  openGraph: {
+    title: "Euzim",
+    description:
+      "Histórias infantis personalizadas com o avatar da sua criança.",
+    siteName: "Euzim",
+    images: [{ url: "/brand/euzim-logo-color.png" }],
+  },
 };
 
 export default function RootLayout({

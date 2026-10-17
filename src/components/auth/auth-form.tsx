@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import {
   signInAction,
   signUpAction,
@@ -35,15 +36,18 @@ export function AuthForm({
 
   return (
     <Card className="w-full max-w-md border-border/60 shadow-none">
-      <CardHeader>
-        <CardTitle className="font-heading text-2xl">
-          {mode === "login" ? "Entrar" : "Criar conta"}
-        </CardTitle>
-        <CardDescription>
-          {mode === "login"
-            ? "Acesse o Estúdio Mágico com seu e-mail."
-            : "Comece a personalizar histórias para sua criança."}
-        </CardDescription>
+      <CardHeader className="space-y-4">
+        <BrandLogo size="auth" href="/" priority className="mx-auto sm:mx-0" />
+        <div className="space-y-1.5">
+          <CardTitle className="font-heading text-2xl">
+            {mode === "login" ? "Entrar" : "Criar conta"}
+          </CardTitle>
+          <CardDescription>
+            {mode === "login"
+              ? "Acesse o Euzim com seu e-mail."
+              : "Comece a personalizar histórias para sua criança."}
+          </CardDescription>
+        </div>
       </CardHeader>
       <form action={formAction}>
         <CardContent className="space-y-4">
