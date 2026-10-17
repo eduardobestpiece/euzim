@@ -46,10 +46,11 @@ Abra [http://127.0.0.1:5050](http://127.0.0.1:5050).
 
 SQL: `supabase/migrations/20261017_melhorias_7_etapas.sql`
 
-### Stripe — bloqueio conhecido
+### Stripe
 
-Sem `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`, o Checkout fica desligado (UI + simulação).
-Quando liberar a secret, rode:
+Checkout exige `STRIPE_SECRET_KEY` (`sk_live_` / `sk_test_`) + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+`STRIPE_WEBHOOK_SECRET` (`whsec_`) é opcional — sem ele, o fulfillment roda na página de sucesso do Checkout.
+Products/Prices:
 
 ```bash
 node scripts/create-stripe-products.mjs

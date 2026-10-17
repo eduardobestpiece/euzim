@@ -52,6 +52,11 @@ export function stripeMissingKeys(): string[] {
   return missing;
 }
 
+/**
+ * Mensagem de bloqueio para UI / gate do Checkout.
+ * Webhook (whsec_) é opcional — fulfillment também roda na página de sucesso —
+ * e não deve aparecer para o usuário.
+ */
 export function describeStripeKeyIssue(): string | null {
   const key = getStripeSecretKey();
   if (!key) return "STRIPE_SECRET_KEY ausente.";
@@ -63,9 +68,6 @@ export function describeStripeKeyIssue(): string | null {
   }
   if (!isStripePublishableConfigured()) {
     return "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ausente.";
-  }
-  if (!isStripeWebhookConfigured()) {
-    return "Checkout liberado. Webhook ainda sem STRIPE_WEBHOOK_SECRET (whsec_) — fulfillment também roda na página de sucesso.";
   }
   return null;
 }
