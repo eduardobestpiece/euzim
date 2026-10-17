@@ -3,7 +3,7 @@ import { generateAvatarsAction } from "@/lib/onboarding/actions";
 
 export const maxDuration = 300;
 
-/** Gera avatares Pixar (pode levar 1–3 min). */
+/** Gera avatares Pixar (pode levar 1–3 min). Sem `dynamic` — incompatível com cacheComponents. */
 export async function POST(request: Request) {
   let force = true;
   try {

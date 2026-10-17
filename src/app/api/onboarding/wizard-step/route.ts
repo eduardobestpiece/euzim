@@ -17,6 +17,7 @@ const STEPS = new Set([
   "generating",
   "preview",
   "pin",
+  "done",
 ]);
 
 /** Persiste passo sem estourar cookie (só DB + slim cookie). */
