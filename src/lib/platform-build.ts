@@ -1,2 +1,2 @@
 /** Versão única da plataforma — exibida ao lado de Sair / headers. */
-export const PLATFORM_BUILD = "v19-unique-palette-wallpaper";
+export const PLATFORM_BUILD = "v20-cost-opt";

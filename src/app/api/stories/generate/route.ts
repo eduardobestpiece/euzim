@@ -224,6 +224,7 @@ export async function POST(request: Request) {
           text_content: textContent,
           questions_data: questionsData,
           cover_image_url: coverImageUrl,
+          template_id: pipeline.templateId ?? null,
           generation_meta: {
             engine,
             theme,
@@ -232,10 +233,14 @@ export async function POST(request: Request) {
             wordVolume: wordVolume ?? null,
             pages: pages.length,
             quizCount: questionsData.length,
-            pipeline: "draft-review-split-pixar-quiz",
+            pipeline: "outline-expand-split-pixar-quiz",
+            fromTemplate: Boolean(pipeline.fromTemplate),
+            templateId: pipeline.templateId ?? null,
             friend: { name: cast.friendName, kind: cast.friendKind },
             moral: pipeline.moral,
             stamp: PLATFORM_BUILD,
+            auxModel: "gpt-4o-mini",
+            textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
           },
           published_at: new Date().toISOString(),
         })

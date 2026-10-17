@@ -197,6 +197,17 @@ export function AdminDashboard({
         ))}
       </div>
 
+      {kpis.monthSpendUsd >= 15 ? (
+        <p
+          className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+          role="status"
+        >
+          Atenção: gasto OpenAI do mês já em{" "}
+          {fmtMoney(kpis.monthSpendUsd, "USD")} (
+          {fmtMoney(kpis.monthSpendBrl, "BRL")}). Revise contas com alto uso.
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
         {Object.entries(kpis.byStatus).map(([st, n]) => (
           <Badge key={st} variant="secondary">
@@ -307,8 +318,11 @@ export function AdminDashboard({
                 <td className="px-3 py-2">{row.charactersCount}</td>
                 <td className="px-3 py-2">{row.storiesCount}</td>
                 <td className="px-3 py-2 text-xs">{fmtTokens(row.usageTokens)}</td>
-                <td className="px-3 py-2 text-xs">
+                <td
+                  className={`px-3 py-2 text-xs ${row.usageUsd >= 5 ? "font-semibold text-amber-800" : ""}`}
+                >
                   {fmtMoney(row.usageUsd, "USD")}
+                  {row.usageUsd >= 5 ? " ⚠" : ""}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {fmtMoney(row.usageBrl, "BRL")}

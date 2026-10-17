@@ -64,8 +64,13 @@ fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca 
 - A criança protagonista e o amigo (pet/brinquedo) SEMPRE podem mostrar o rosto (têm avatar).
 `.trim();
 
+/** Narrativa final (expansão densa) — modelo forte. */
 export const STORY_TEXT_MODEL =
   process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o";
+
+/** Auxiliar barato: clarify, quiz, outline, revisão leve, split. */
+export const STORY_AUX_MODEL =
+  process.env.OPENAI_STORY_AUX_MODEL?.trim() || "gpt-4o-mini";
 
 export const MIN_STORY_PAGES = 5;
 export const MAX_STORY_PAGES = 10;

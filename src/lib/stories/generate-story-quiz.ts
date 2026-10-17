@@ -1,6 +1,6 @@
 import type { QuizQuestion } from "@/lib/stories/quiz";
 import {
-  STORY_TEXT_MODEL,
+  STORY_AUX_MODEL,
   STORYTELLER_SKILL,
 } from "@/lib/stories/storyteller-skill";
 import { meteredChatCompletion } from "@/lib/usage/openai-meter";
@@ -52,7 +52,7 @@ export async function generateStoryQuiz(input: {
     category: "story_quiz",
     operation: "generate_quiz",
     body: {
-      model: STORY_TEXT_MODEL,
+      model: STORY_AUX_MODEL,
       temperature: 0.4,
       response_format: { type: "json_object" },
       messages: [

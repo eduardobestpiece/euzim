@@ -106,7 +106,8 @@ export function WallpaperDialog({
           <DialogHeader className="px-4 pt-4 text-left">
             <DialogTitle>Wallpaper do celular</DialogTitle>
             <DialogDescription className="text-white/70">
-              Formato retrato 9:19.5 (1080×2340) — pronto para a tela do celular.
+              Formato retrato 9:19.5 (1080×2340) — upscale da arte da história para
+              a tela do celular.
             </DialogDescription>
           </DialogHeader>
           <div className="flex max-h-[65vh] items-center justify-center bg-black px-4 py-2">

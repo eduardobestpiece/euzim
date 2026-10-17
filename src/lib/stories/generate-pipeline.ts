@@ -2,9 +2,15 @@ import type { GeneratedPage, GeneratedStory } from "@/lib/stories/generate-mock"
 import { generateMockStory } from "@/lib/stories/generate-mock";
 import type { StoryCast } from "@/lib/stories/story-cast";
 import {
+  findMatchingTemplate,
+  personalizeSkeleton,
+  saveStoryTemplate,
+} from "@/lib/stories/story-templates";
+import {
   MAX_STORY_PAGES,
   MIN_STORY_PAGES,
   STORYTELLER_SKILL,
+  STORY_AUX_MODEL,
   STORY_TEXT_MODEL,
   TARGET_WORDS_PER_PAGE,
   storyTypeGuidance,
@@ -16,6 +22,7 @@ import { meteredChatCompletion } from "@/lib/usage/openai-meter";
 
 export type StoryEngine =
   | "openai-storyteller-v1"
+  | "openai-storyteller-template"
   | "openai-gpt-4o-mini"
   | "mock-v1";
 
@@ -32,6 +39,8 @@ export type PipelineStory = {
   pages: StoryChapter[];
   fullText: string;
   reviewNotes: string;
+  templateId?: string | null;
+  fromTemplate?: boolean;
 };
 
 export type PipelineOptions = {
@@ -47,16 +56,19 @@ export type PipelineOptions = {
 async function chatJson(input: {
   userId?: string | null;
   operation: string;
+  model: string;
+  category?: "story_text" | "other";
   system: string;
   user: string;
   temperature?: number;
+  timeoutMs?: number;
 }): Promise<Record<string, unknown> | null> {
   const result = await meteredChatCompletion({
     userId: input.userId,
-    category: "story_text",
+    category: input.category ?? "story_text",
     operation: input.operation,
     body: {
-      model: STORY_TEXT_MODEL,
+      model: input.model,
       temperature: input.temperature ?? 0.75,
       response_format: { type: "json_object" },
       messages: [
@@ -64,7 +76,7 @@ async function chatJson(input: {
         { role: "user", content: input.user },
       ],
     },
-    timeoutMs: 180_000,
+    timeoutMs: input.timeoutMs ?? 180_000,
   });
 
   if (!result.ok || !result.content) return null;
@@ -128,49 +140,96 @@ function clarifyBrief(opts?: PipelineOptions): string {
   ].join("\n");
 }
 
-/** Passo 1 — rascunho longo contínuo. */
-async function draftFullStory(
+/** Outline estrutural barato (mini). */
+async function outlineStory(
   cast: StoryCast,
   theme: string,
   opts?: PipelineOptions,
-): Promise<{ title: string; moral: string; fullText: string } | null> {
-  const vol = volumeBrief(opts);
+): Promise<{
+  title: string;
+  moral: string;
+  beats: string[];
+} | null> {
   const parsed = await chatJson({
     userId: opts?.userId,
-    operation: "draft_story",
-    temperature: 0.85,
+    model: STORY_AUX_MODEL,
+    operation: "outline_story",
+    temperature: 0.6,
     system: `${STORYTELLER_SKILL}
 
+Você faz só o OUTLINE (esqueleto), não a prosa final.
 Responda SOMENTE JSON:
 {
   "title": string,
-  "moral": string (1 frase suave, sem "a lição é"),
-  "full_text": string (história completa contínua, OBRIGATÓRIO ${vol.min}–${vol.max} palavras, com diálogos e cenas)
-}
-Meta de volume: ~${vol.target} palavras. Se o texto tiver menos de ${vol.min} palavras, continue expandindo cenas antes de responder.`,
+  "moral": string,
+  "beats": string[] (6 a 10 batidas: lugar + conflito + emoção, 1 frase cada)
+}`,
     user: `${castBrief(cast, opts)}
 
 ${typeBrief(opts)}
 ${clarifyBrief(opts)}
 
-Pedido / tema dos pais:
-"""${theme}"""
+Tema: """${theme}"""
 
-Escreva a história completa (ainda sem dividir em páginas). Profunda, oral, cinematográfica.
-Meta ~${vol.target} palavras. Inclua cenas distintas e diálogos entre a criança e o amigo.
-Se o tema envolve rua/desconhecidos/vulnerabilidade, inclua pais/cuidadores presentes.`,
+Outline agora.`,
+    timeoutMs: 90_000,
   });
   if (!parsed) return null;
   const title = String(parsed.title ?? "").trim();
   const moral = String(parsed.moral ?? "").trim();
+  const beats = Array.isArray(parsed.beats)
+    ? parsed.beats.map((b) => String(b).trim()).filter(Boolean)
+    : [];
+  if (!title || beats.length < 5) return null;
+  return { title, moral, beats };
+}
+
+/** Expansão narrativa final (modelo forte) — qualidade preservada. */
+async function expandNarrative(
+  cast: StoryCast,
+  theme: string,
+  outline: { title: string; moral: string; beats: string[] },
+  opts?: PipelineOptions,
+): Promise<{ title: string; moral: string; fullText: string } | null> {
+  const vol = volumeBrief(opts);
+  const parsed = await chatJson({
+    userId: opts?.userId,
+    model: STORY_TEXT_MODEL,
+    operation: "expand_story",
+    temperature: 0.85,
+    system: `${STORYTELLER_SKILL}
+
+Expanda o outline numa história COMPLETA, oral e cinematográfica.
+Responda SOMENTE JSON:
+{
+  "title": string,
+  "moral": string,
+  "full_text": string (OBRIGATÓRIO ${vol.min}–${vol.max} palavras)
+}`,
+    user: `${castBrief(cast, opts)}
+
+${typeBrief(opts)}
+${clarifyBrief(opts)}
+
+Tema: """${theme}"""
+Título outline: ${outline.title}
+Moral: ${outline.moral}
+Batidas:
+${outline.beats.map((b, i) => `${i + 1}. ${b}`).join("\n")}
+
+Escreva a prosa final completa (~${vol.target} palavras).`,
+  });
+  if (!parsed) return null;
+  const title = String(parsed.title ?? outline.title).trim();
+  const moral = String(parsed.moral ?? outline.moral).trim();
   const fullText = String(parsed.full_text ?? "").trim();
   const minWords = Math.min(700, Math.round(vol.min * 0.7));
   if (!title || fullText.split(/\s+/).length < minWords) return null;
   return { title, moral, fullText };
 }
 
-/** Passo 2 — revisão crítica e reescrita. */
-async function reviewStory(
+/** Revisão leve (mini) — só ajusta se necessário. */
+async function lightReview(
   cast: StoryCast,
   theme: string,
   draft: { title: string; moral: string; fullText: string },
@@ -180,59 +239,49 @@ async function reviewStory(
   moral: string;
   fullText: string;
   reviewNotes: string;
-} | null> {
-  const vol = volumeBrief(opts);
+}> {
   const parsed = await chatJson({
     userId: opts?.userId,
-    operation: "review_story",
-    temperature: 0.55,
+    model: STORY_AUX_MODEL,
+    operation: "light_review",
+    temperature: 0.35,
     system: `${STORYTELLER_SKILL}
 
-Você agora é o EDITOR-SÁBIO. Critique e REESCREVA.
-
-Checklist obrigatório:
-- Protagonistas corretos (${opts?.protagonistName || cast.childName} + ${cast.friendName})?
-- Tema dos pais atendido com profundidade (não raso)?
-- Segurança parental em cenas públicas/estranhos?
-- Sem agenda de identidade de gênero / ideologia?
-- Arco completo (desejo, obstáculo, escolha, transformação)?
-- Adequado a criança? Empático?
-- Linguagem oral, rica, sem moral pregada?
-
+EDITOR LEVE: corrija só problemas graves (protagonistas, segurança parental,
+adequação etária). Se estiver boa, devolva o texto quase igual.
 Responda SOMENTE JSON:
 {
   "title": string,
   "moral": string,
-  "full_text": string (versão FINAL melhorada, ~${vol.target} palavras),
-  "review_notes": string (o que melhorou, em 2–4 frases)
+  "full_text": string,
+  "review_notes": string
 }`,
     user: `${castBrief(cast, opts)}
-
-${typeBrief(opts)}
-${clarifyBrief(opts)}
-
-Tema dos pais: """${theme}"""
-
-Título rascunho: ${draft.title}
-Moral rascunho: ${draft.moral}
-
-TEXTO RASCUNHO:
+Tema: """${theme}"""
+Título: ${draft.title}
+Moral: ${draft.moral}
+TEXTO:
 """
 ${draft.fullText}
-"""
-
-Reescreva a melhor versão possível.`,
+"""`,
+    timeoutMs: 120_000,
   });
-  if (!parsed) return null;
-  const title = String(parsed.title ?? draft.title).trim();
-  const moral = String(parsed.moral ?? draft.moral).trim();
+  if (!parsed) {
+    return { ...draft, reviewNotes: "revisão leve pulada" };
+  }
   const fullText = String(parsed.full_text ?? "").trim();
-  const reviewNotes = String(parsed.review_notes ?? "").trim();
-  if (fullText.split(/\s+/).length < 400) return null;
-  return { title, moral, fullText, reviewNotes };
+  if (fullText.split(/\s+/).length < 400) {
+    return { ...draft, reviewNotes: "revisão leve descartada — texto curto" };
+  }
+  return {
+    title: String(parsed.title ?? draft.title).trim(),
+    moral: String(parsed.moral ?? draft.moral).trim(),
+    fullText,
+    reviewNotes: String(parsed.review_notes ?? "revisão leve").trim(),
+  };
 }
 
-/** Passo 3 — fracionar em 5–10 atos com prompts de imagem únicos. */
+/** Split em atos (mini). */
 async function splitIntoChapters(
   cast: StoryCast,
   reviewed: {
@@ -245,6 +294,7 @@ async function splitIntoChapters(
 ): Promise<StoryChapter[] | null> {
   const parsed = await chatJson({
     userId: opts?.userId,
+    model: STORY_AUX_MODEL,
     operation: "split_chapters",
     temperature: 0.4,
     system: `${STORYTELLER_SKILL}
@@ -287,6 +337,7 @@ ${reviewed.fullText}
 """
 
 Fracione agora. Garanta image_prompts distintos por ato.`,
+    timeoutMs: 120_000,
   });
   if (!parsed) return null;
   const pagesRaw = Array.isArray(parsed.pages) ? parsed.pages : [];
@@ -318,8 +369,8 @@ export type GeneratePipelineResult = {
 };
 
 /**
- * Pipeline: rascunho → revisão → 5–10 atos.
- * Imagens ainda placeholder; quem preenche é generateStoryImages.
+ * Pipeline custo-otimizado:
+ * template hit → personaliza; senão outline(mini) → expand(forte) → review(mini) → split(mini).
  */
 export async function generateStoryPipeline(input: {
   cast: StoryCast;
@@ -329,9 +380,48 @@ export async function generateStoryPipeline(input: {
   const theme = input.theme.trim();
   const cast = input.cast;
   const opts = input.options;
+  const childName = opts?.protagonistName?.trim() || cast.childName;
+  const friendName = cast.friendName;
 
-  const draft = await draftFullStory(cast, theme, opts);
-  if (!draft) {
+  // 1) Cache de template
+  const matched = await findMatchingTemplate({
+    theme,
+    userId: opts?.userId,
+  });
+  if (matched && matched.score >= 0.45) {
+    const personalized = personalizeSkeleton(
+      matched.skeleton,
+      childName,
+      friendName,
+      matched.title,
+    );
+    const chapters: StoryChapter[] = personalized.pages.map((p) => ({
+      index: p.index,
+      title: p.title,
+      text: p.text,
+      imagePrompt:
+        p.imagePrompt ||
+        `Walt Disney / Pixar 3D still of ${childName} and ${friendName}, beat ${p.index + 1}, unique framing, no text`,
+    }));
+    if (chapters.length >= MIN_STORY_PAGES) {
+      return packResult(
+        {
+          title: personalized.title,
+          moral: personalized.moral,
+          fullText: personalized.fullText,
+          reviewNotes: `template cache hit (score ${matched.score.toFixed(2)})`,
+          templateId: matched.id,
+          fromTemplate: true,
+        },
+        chapters.slice(0, MAX_STORY_PAGES),
+        "openai-storyteller-template",
+      );
+    }
+  }
+
+  // 2) Outline (mini) → expand (forte) → light review (mini) → split (mini)
+  const outline = await outlineStory(cast, theme, opts);
+  if (!outline) {
     return {
       story: generateMockStory({
         childName: cast.childName,
@@ -349,30 +439,70 @@ export async function generateStoryPipeline(input: {
     };
   }
 
-  const reviewed =
-    (await reviewStory(cast, theme, draft, opts)) ?? {
-      ...draft,
-      reviewNotes: "revisão pulada — usando rascunho",
+  const expanded = await expandNarrative(cast, theme, outline, opts);
+  if (!expanded) {
+    return {
+      story: generateMockStory({
+        childName: cast.childName,
+        friendName: cast.friendName,
+        theme,
+      }),
+      pipeline: {
+        title: outline.title,
+        moral: outline.moral,
+        pages: [],
+        fullText: "",
+        reviewNotes: "expand failed",
+      },
+      engine: "mock-v1",
     };
-
-  const chapters = await splitIntoChapters(cast, reviewed, opts);
-  if (!chapters) {
-    const words = reviewed.fullText.split(/\s+/);
-    const chunks = 6;
-    const size = Math.ceil(words.length / chunks);
-    const fallback: StoryChapter[] = Array.from({ length: chunks }, (_, i) => {
-      const text = words.slice(i * size, (i + 1) * size).join(" ");
-      return {
-        index: i,
-        title: `Parte ${i + 1}`,
-        text,
-        imagePrompt: `Walt Disney / Pixar 3D animated still of ${cast.childName} and ${cast.friendName}, unique scene ${i + 1} of ${chunks}, distinct framing, wholesome, do not repeat previous framing, no text`,
-      };
-    });
-    return packResult(reviewed, fallback, "openai-storyteller-v1");
   }
 
-  return packResult(reviewed, chapters, "openai-storyteller-v1");
+  const reviewed = await lightReview(cast, theme, expanded, opts);
+
+  const chapters = await splitIntoChapters(cast, reviewed, opts);
+  const finalChapters =
+    chapters ??
+    (() => {
+      const words = reviewed.fullText.split(/\s+/);
+      const chunks = 6;
+      const size = Math.ceil(words.length / chunks);
+      return Array.from({ length: chunks }, (_, i) => {
+        const text = words.slice(i * size, (i + 1) * size).join(" ");
+        return {
+          index: i,
+          title: `Parte ${i + 1}`,
+          text,
+          imagePrompt: `Walt Disney / Pixar 3D animated still of ${cast.childName} and ${cast.friendName}, unique scene ${i + 1} of ${chunks}, distinct framing, wholesome, do not repeat previous framing, no text`,
+        } satisfies StoryChapter;
+      });
+    })();
+
+  // 3) Salvar template anonimizado (inédito)
+  let templateId: string | null = null;
+  if (opts?.userId) {
+    templateId = await saveStoryTemplate({
+      userId: opts.userId,
+      theme,
+      title: reviewed.title,
+      moral: reviewed.moral,
+      fullText: reviewed.fullText,
+      pages: finalChapters,
+      childName,
+      friendName,
+      storyType: opts.storyType,
+    });
+  }
+
+  return packResult(
+    {
+      ...reviewed,
+      templateId,
+      fromTemplate: false,
+    },
+    finalChapters,
+    "openai-storyteller-v1",
+  );
 }
 
 function packResult(
@@ -381,6 +511,8 @@ function packResult(
     moral: string;
     fullText: string;
     reviewNotes: string;
+    templateId?: string | null;
+    fromTemplate?: boolean;
   },
   chapters: StoryChapter[],
   engine: StoryEngine,
@@ -403,6 +535,8 @@ function packResult(
         moral: reviewed.moral,
         reviewNotes: reviewed.reviewNotes,
         fullText: reviewed.fullText,
+        templateId: reviewed.templateId ?? null,
+        fromTemplate: Boolean(reviewed.fromTemplate),
         pages: pages.map((p) => ({
           index: p.pageIndex,
           title: p.chapterTitle,
@@ -417,6 +551,8 @@ function packResult(
       pages: chapters,
       fullText: reviewed.fullText,
       reviewNotes: reviewed.reviewNotes,
+      templateId: reviewed.templateId ?? null,
+      fromTemplate: Boolean(reviewed.fromTemplate),
     },
     engine,
   };

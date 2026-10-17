@@ -10,12 +10,20 @@ import {
   shotForPage,
 } from "@/lib/stories/image-hash";
 import {
+  hashPrompt,
+  normalizePromptForHash,
+} from "@/lib/stories/prompt-hash";
+import {
   estimateImageUsd,
   recordUsageEvent,
 } from "@/lib/usage/openai-meter";
 
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
-const REF_EDGE = 1024;
+/** Qualidade intermediária = custo↓ sem matar fidelidade dos avatares. */
+const IMAGE_QUALITY =
+  (process.env.OPENAI_IMAGE_QUALITY?.trim() as "low" | "medium" | "high") ||
+  "low";
+const REF_EDGE = 768;
 const MAX_UNIQUENESS_RETRIES = 2;
 
 function apiKey(): string | null {
@@ -42,7 +50,7 @@ async function prepareJpeg(bytes: Buffer): Promise<Buffer> {
       fit: "inside",
       withoutEnlargement: true,
     })
-    .jpeg({ quality: 85, mozjpeg: true })
+    .jpeg({ quality: 82, mozjpeg: true })
     .toBuffer();
 }
 
@@ -69,6 +77,28 @@ async function loadRefs(cast: StoryCast): Promise<Buffer[]> {
   return out;
 }
 
+async function findCachedImageUrl(
+  userId: string,
+  promptHash: string,
+): Promise<string | null> {
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return null;
+  try {
+    const { data } = await db
+      .from("story_images")
+      .select("image_url, prompt_used")
+      .eq("parent_id", userId)
+      .like("prompt_used", `ph:${promptHash}|%`)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const url = data?.image_url;
+    return url && url.length > 8 ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 async function callImageEdit(
   prompt: string,
   images: Buffer[],
@@ -82,7 +112,7 @@ async function callImageEdit(
   form.set("model", IMAGE_MODEL);
   form.set("prompt", prompt);
   form.set("size", "1024x1024");
-  form.set("quality", "medium");
+  form.set("quality", IMAGE_QUALITY);
   form.set("output_format", "jpeg");
   if (IMAGE_MODEL.includes("gpt-image-1")) {
     form.set("input_fidelity", "high");
@@ -107,13 +137,15 @@ async function callImageEdit(
   if (!res.ok) {
     throw new Error(json.error?.message || `OpenAI images/edits ${res.status}`);
   }
+  const qualityMul =
+    IMAGE_QUALITY === "low" ? 0.5 : IMAGE_QUALITY === "high" ? 1.5 : 1;
   await recordUsageEvent({
     userId,
     category: "story_image",
     model: IMAGE_MODEL,
     operation: "story_page_image",
-    estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1),
-    meta: { pageIndex: pageIndex ?? null },
+    estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1) * qualityMul,
+    meta: { pageIndex: pageIndex ?? null, quality: IMAGE_QUALITY },
   });
   const b64 = json.data?.[0]?.b64_json;
   if (b64) return Buffer.from(b64, "base64");
@@ -202,9 +234,13 @@ function scenePrompt(
     .join(" ");
 }
 
+export function promptUsedTag(promptHash: string, prompt: string): string {
+  return `ph:${promptHash}|${prompt.slice(0, 240)}`;
+}
+
 /**
- * Gera 1 imagem Pixar por página, com refs dos avatares.
- * Rejeita quase-duplicatas via dHash e regenera com ângulo diferente.
+ * Gera 1 imagem Pixar por página (qualidade intermediária).
+ * Reusa URL se hash de prompt idêntico; rejeita quase-duplicatas via dHash.
  */
 export async function generateStoryPageImages(input: {
   userId: string;
@@ -218,14 +254,50 @@ export async function generateStoryPageImages(input: {
   const out: GeneratedPage[] = [];
   const hashes: string[] = [];
   const framingNotes: string[] = [];
+  const names = [input.cast.childName, input.cast.friendName];
 
   for (let i = 0; i < input.pages.length; i++) {
     const page = input.pages[i];
     let imageUrl = page.imageUrl || "";
+    let promptUsed = "";
     try {
       if (apiKey() && refs.length > 0) {
+        const basePrompt = scenePrompt(
+          input.cast,
+          page,
+          input.storyTitle,
+          i,
+          input.pages.length,
+          framingNotes,
+          0,
+        );
+        const ph = hashPrompt(normalizePromptForHash(basePrompt, names));
+
+        // Cache: prompt hash idêntico → reusa URL (sem nova chamada OpenAI)
+        const cached = await findCachedImageUrl(input.userId, ph);
+        if (cached) {
+          // Ainda checa dHash visual se já temos bytes… mas só temos URL.
+          // Evita reuso se a mesma URL já foi usada nesta história (anti-repeat).
+          const alreadyInStory = out.some((p) => p.imageUrl === cached);
+          if (!alreadyInStory) {
+            imageUrl = cached;
+            promptUsed = promptUsedTag(ph, basePrompt);
+            framingNotes.push(`beat${i + 1}:cache-hit`);
+            out.push({
+              ...page,
+              imageUrl,
+              imagePrompt: page.imagePrompt
+                ? `${promptUsed} :: ${page.imagePrompt}`
+                : promptUsed,
+            });
+            input.onProgress?.(i + 1, input.pages.length);
+            continue;
+          }
+        }
+
         let jpeg: Buffer | null = null;
         let chosenHash = "";
+        let usedPrompt = basePrompt;
         for (let attempt = 0; attempt <= MAX_UNIQUENESS_RETRIES; attempt++) {
           const prompt = scenePrompt(
             input.cast,
@@ -236,6 +308,7 @@ export async function generateStoryPageImages(input: {
             framingNotes,
             attempt,
           );
+          usedPrompt = prompt;
           const candidate = await callImageEdit(
             prompt,
             refs.slice(0, 4),
@@ -243,7 +316,10 @@ export async function generateStoryPageImages(input: {
             page.pageIndex,
           );
           const hash = await differenceHash(candidate);
-          if (!isNearDuplicate(hash, hashes) || attempt === MAX_UNIQUENESS_RETRIES) {
+          if (
+            !isNearDuplicate(hash, hashes) ||
+            attempt === MAX_UNIQUENESS_RETRIES
+          ) {
             jpeg = candidate;
             chosenHash = hash;
             break;
@@ -258,15 +334,23 @@ export async function generateStoryPageImages(input: {
             attempt: hashes.length,
           });
           hashes.push(chosenHash);
-          framingNotes.push(
-            `beat${i + 1}:${shotForPage(i).slice(0, 48)}`,
+          framingNotes.push(`beat${i + 1}:${shotForPage(i).slice(0, 48)}`);
+          const finalHash = hashPrompt(
+            normalizePromptForHash(usedPrompt, names),
           );
+          promptUsed = promptUsedTag(finalHash, usedPrompt);
         }
       }
     } catch {
       // mantém vazio — UI ainda mostra o texto
     }
-    out.push({ ...page, imageUrl });
+    out.push({
+      ...page,
+      imageUrl,
+      imagePrompt: promptUsed
+        ? `${promptUsed}${page.imagePrompt ? ` :: ${page.imagePrompt}` : ""}`
+        : page.imagePrompt,
+    });
     input.onProgress?.(i + 1, input.pages.length);
   }
 

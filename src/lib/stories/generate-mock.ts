@@ -15,6 +15,8 @@ export type GeneratedStory = {
     moral?: string;
     reviewNotes?: string;
     fullText?: string;
+    templateId?: string | null;
+    fromTemplate?: boolean;
     pages: {
       index: number;
       text: string;
