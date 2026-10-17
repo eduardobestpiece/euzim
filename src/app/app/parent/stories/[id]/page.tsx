@@ -65,7 +65,7 @@ export default async function StoryReaderPage({
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Página {page.pageIndex + 1}
                 </p>
-                <p className="text-base leading-relaxed md:text-lg">
+                <p className="whitespace-pre-wrap text-base leading-relaxed md:text-lg">
                   {page.text}
                 </p>
               </div>

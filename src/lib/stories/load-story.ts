@@ -39,11 +39,17 @@ export async function loadStoryForParent(
         const textPages =
           (
             story.text_content as {
-              pages?: { index: number; text: string }[];
+              pages?: { index: number; text: string; title?: string }[];
             } | null
           )?.pages ?? [];
 
-        const pages = [0, 1, 2, 3].map((pageIndex) => {
+        const pageCount = Math.max(
+          textPages.length,
+          images?.length ?? 0,
+          1,
+        );
+
+        const pages = Array.from({ length: pageCount }, (_, pageIndex) => {
           const text =
             textPages.find((p) => p.index === pageIndex)?.text ??
             textPages[pageIndex]?.text ??

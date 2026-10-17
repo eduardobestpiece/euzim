@@ -1,0 +1,133 @@
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
+import { readMockOnboarding } from "@/lib/auth/mock-session";
+
+export type StoryCast = {
+  childId: string;
+  childName: string;
+  childAgeYears: number | null;
+  childGender: "boy" | "girl" | "other" | null;
+  friendName: string;
+  friendKind: "pet" | "toy";
+  childHeroUrl: string | null;
+  friendHeroUrl: string | null;
+  childFaceSheetUrl: string | null;
+  childBodySheetUrl: string | null;
+  friendSheetUrl: string | null;
+  characterId: string | null;
+};
+
+function ageFromBirth(birth: string | null | undefined): number | null {
+  if (!birth) return null;
+  const d = new Date(birth);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
+  return age >= 0 && age < 18 ? age : null;
+}
+
+/** Carrega elenco + folhas Pixar do filho principal. */
+export async function loadStoryCast(parentId: string): Promise<StoryCast | null> {
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) {
+    const onboarding = await readMockOnboarding();
+    if (!onboarding?.child?.displayName) return null;
+    return {
+      childId: "mock-child",
+      childName: onboarding.child.displayName,
+      childAgeYears: onboarding.child.ageYears ?? null,
+      childGender: onboarding.child.gender ?? null,
+      friendName: onboarding.friend?.displayName || "Amigo",
+      friendKind: onboarding.friend?.kind === "toy" ? "toy" : "pet",
+      childHeroUrl: isPixarGeneratedUrl(onboarding.childAvatarUrl)
+        ? onboarding.childAvatarUrl!
+        : null,
+      friendHeroUrl: isPixarGeneratedUrl(onboarding.friendAvatarUrl)
+        ? onboarding.friendAvatarUrl!
+        : null,
+      childFaceSheetUrl: isPixarGeneratedUrl(onboarding.childFaceSheetUrl)
+        ? onboarding.childFaceSheetUrl!
+        : null,
+      childBodySheetUrl: isPixarGeneratedUrl(onboarding.childBodySheetUrl)
+        ? onboarding.childBodySheetUrl!
+        : null,
+      friendSheetUrl: isPixarGeneratedUrl(onboarding.friendSheetUrl)
+        ? onboarding.friendSheetUrl!
+        : null,
+      characterId: null,
+    };
+  }
+
+  const { data: children } = await db
+    .from("children")
+    .select("id, display_name, birth_date, gender, avatar_url, preferences")
+    .eq("parent_id", parentId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  const child = children?.[0];
+  if (!child) return null;
+
+  const prefs = (child.preferences ?? {}) as {
+    friend?: { kind?: string; displayName?: string };
+    age_years?: number;
+    pixar?: {
+      child_hero?: string;
+      friend_hero?: string;
+      child_face_sheet?: string;
+      child_body_sheet?: string;
+      friend_sheet?: string;
+    };
+  };
+
+  const { data: chars } = await db
+    .from("characters")
+    .select("id, name, avatar_url, is_primary")
+    .eq("parent_id", parentId)
+    .order("created_at", { ascending: true });
+
+  const primary = chars?.find((c) => c.is_primary) ?? chars?.[0];
+  const friendChar = chars?.find((c) => !c.is_primary);
+
+  const friendName =
+    prefs.friend?.displayName || friendChar?.name || "Amigo";
+  const friendKind: "pet" | "toy" =
+    prefs.friend?.kind === "toy" ? "toy" : "pet";
+
+  return {
+    childId: child.id,
+    childName: child.display_name,
+    childAgeYears: prefs.age_years ?? ageFromBirth(child.birth_date),
+    childGender:
+      child.gender === "boy" || child.gender === "girl" || child.gender === "other"
+        ? child.gender
+        : null,
+    friendName,
+    friendKind,
+    childHeroUrl: isPixarGeneratedUrl(prefs.pixar?.child_hero)
+      ? prefs.pixar!.child_hero!
+      : isPixarGeneratedUrl(child.avatar_url)
+        ? child.avatar_url!
+        : isPixarGeneratedUrl(primary?.avatar_url)
+          ? primary!.avatar_url!
+          : null,
+    friendHeroUrl: isPixarGeneratedUrl(prefs.pixar?.friend_hero)
+      ? prefs.pixar!.friend_hero!
+      : isPixarGeneratedUrl(friendChar?.avatar_url)
+        ? friendChar!.avatar_url!
+        : null,
+    childFaceSheetUrl: isPixarGeneratedUrl(prefs.pixar?.child_face_sheet)
+      ? prefs.pixar!.child_face_sheet!
+      : null,
+    childBodySheetUrl: isPixarGeneratedUrl(prefs.pixar?.child_body_sheet)
+      ? prefs.pixar!.child_body_sheet!
+      : null,
+    friendSheetUrl: isPixarGeneratedUrl(prefs.pixar?.friend_sheet)
+      ? prefs.pixar!.friend_sheet!
+      : null,
+    characterId: primary?.id ?? null,
+  };
+}

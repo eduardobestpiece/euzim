@@ -55,7 +55,7 @@ export function StoryFlipbook({
             />
           ) : null}
           <div className="space-y-3 p-6 md:p-8">
-            <p className="text-base leading-relaxed md:text-lg md:leading-8">
+            <p className="whitespace-pre-wrap text-base leading-relaxed md:text-lg md:leading-8">
               {page.text}
             </p>
           </div>

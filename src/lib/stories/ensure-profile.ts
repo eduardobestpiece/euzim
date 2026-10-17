@@ -20,6 +20,10 @@ export async function ensureParentChildContext(
 
   const onboarding = await readMockOnboarding();
 
+  const pin =
+    onboarding?.securityPin && /^[0-9]{4,6}$/.test(onboarding.securityPin)
+      ? onboarding.securityPin
+      : null;
   await admin.from("users").upsert(
     {
       id: user.id,
@@ -27,7 +31,7 @@ export async function ensureParentChildContext(
       full_name: user.fullName ?? onboarding?.child?.displayName ?? null,
       role: user.role,
       onboarding_completed: true,
-      security_pin: onboarding?.securityPin || null,
+      ...(pin ? { security_pin: pin } : {}),
     },
     { onConflict: "id" },
   );

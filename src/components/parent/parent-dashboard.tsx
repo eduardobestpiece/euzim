@@ -45,6 +45,7 @@ export function ParentDashboard({
   const remaining = Math.max(0, usage.limit - usage.used);
   const primary =
     characters.find((c) => c.isPrimary) ?? characters[0] ?? null;
+  const friend = characters.find((c) => !c.isPrimary) ?? null;
   const heroUrl = childAvatarUrl || primary?.avatarUrl || null;
   const heroName = childName || primary?.name || "sua criança";
 
@@ -103,7 +104,11 @@ export function ParentDashboard({
         </TabsList>
 
         <TabsContent value="create" className="space-y-4" id="criar-historia">
-          <NewStoryForm childName={childName} remaining={remaining} />
+          <NewStoryForm
+            childName={childName}
+            friendName={friend?.name ?? null}
+            remaining={remaining}
+          />
         </TabsContent>
 
         <TabsContent value="library" className="space-y-4">

@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Wand2 } from "lucide-react";
+import { BookOpen, Sparkles, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,40 +13,76 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  generateStoryAction,
-  type GenerateStoryResult,
-} from "@/lib/stories/generate-story-action";
-
-const initial: GenerateStoryResult = {};
+import { STORY_BUILD } from "@/lib/stories/build";
 
 const SUGGESTIONS = [
-  "a floresta encantada",
-  "o castelo das nuvens",
-  "o fundo do mar",
-  "a cidade dos brinquedos",
+  "medo de moradores de rua e aprender compaixão",
+  "a floresta encantada da coragem",
+  "o primeiro dia na escola",
+  "perder o brinquedo favorito e encontrar amigos",
 ];
 
 export function NewStoryForm({
   childName,
+  friendName,
   remaining,
 }: {
   childName?: string | null;
+  friendName?: string | null;
   remaining: number;
 }) {
   const router = useRouter();
-  const [state, formAction, pending] = useActionState(
-    generateStoryAction,
-    initial,
-  );
-
-  useEffect(() => {
-    if (state.success && state.storyId) {
-      router.push(`/app/parent/stories/${state.storyId}`);
-    }
-  }, [state.success, state.storyId, router]);
-
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const disabled = remaining <= 0;
+
+  function onSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setStatus(null);
+    const theme = String(new FormData(e.currentTarget).get("theme") ?? "").trim();
+    if (!theme) {
+      setError("Escreva o tema ou o desejo da história.");
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        setStatus("1/4 Contador Sábio escrevendo o rascunho…");
+        // A API faz todo o pipeline (pode levar alguns minutos)
+        const res = await fetch("/api/stories/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ theme }),
+        });
+        const body = (await res.json()) as {
+          error?: string;
+          storyId?: string;
+          redirectTo?: string;
+          pages?: number;
+          title?: string;
+        };
+        if (!res.ok || body.error) {
+          setError(body.error || `Falha (${res.status}).`);
+          setStatus(null);
+          return;
+        }
+        setStatus(
+          `Pronta: “${body.title ?? "História"}” · ${body.pages ?? "?"} atos Pixar`,
+        );
+        router.push(body.redirectTo || `/app/parent/stories/${body.storyId}`);
+        router.refresh();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Falha de rede ao gerar a história.",
+        );
+        setStatus(null);
+      }
+    });
+  }
 
   return (
     <Card className="shadow-none">
@@ -56,21 +92,27 @@ export function NewStoryForm({
           Nova História
         </CardTitle>
         <CardDescription>
-          Gera 4 páginas com texto mock e imagens Unsplash
-          {childName ? ` para ${childName}` : ""}. Restam {remaining} neste
-          mês.
+          <span className="font-mono text-[10px] font-semibold text-emerald-800">
+            {STORY_BUILD}
+          </span>
+          {" · "}
+          Pipeline Contador Sábio: rascunho → revisão → 5–10 atos → imagens
+          Disney/Pixar
+          {childName ? ` com ${childName}` : ""}
+          {friendName ? ` e ${friendName}` : ""} como protagonistas. Restam{" "}
+          {remaining} neste mês. Pode levar 2–5 minutos.
         </CardDescription>
       </CardHeader>
-      <form action={formAction}>
+      <form onSubmit={onSubmit}>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="theme">Tema da aventura</Label>
+            <Label htmlFor="theme">Tema ou desejo dos pais</Label>
             <Input
               id="theme"
               name="theme"
               required
               disabled={disabled || pending}
-              placeholder="ex.: a floresta encantada"
+              placeholder="ex.: meu filho tem medo de… e quero que aprenda…"
               list="theme-suggestions"
             />
             <datalist id="theme-suggestions">
@@ -98,14 +140,25 @@ export function NewStoryForm({
             ))}
           </div>
 
-          {state.error ? (
+          <ul className="space-y-1 text-xs text-muted-foreground">
+            <li className="flex items-center gap-1.5">
+              <BookOpen className="size-3.5" />
+              História profunda, oral, com diálogos e parábolas leves
+            </li>
+            <li className="flex items-center gap-1.5">
+              <Sparkles className="size-3.5" />
+              Ilustrações Pixar por ato, com os avatares da criança e do amigo
+            </li>
+          </ul>
+
+          {error ? (
             <p className="text-sm text-destructive" role="alert">
-              {state.error}
+              {error}
             </p>
           ) : null}
-          {state.success ? (
-            <p className="text-sm text-emerald-700">
-              História criada ({state.persistedTo}) — abrindo…
+          {status ? (
+            <p className="text-sm text-amber-800" role="status">
+              {status}
             </p>
           ) : null}
 
@@ -117,7 +170,7 @@ export function NewStoryForm({
           >
             <Wand2 className="size-4" />
             {pending
-              ? "Gerando…"
+              ? "Gerando história Pixar…"
               : disabled
                 ? "Limite mensal atingido"
                 : "Gerar história"}
