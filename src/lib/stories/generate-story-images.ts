@@ -4,6 +4,10 @@ import type { StoryCast } from "@/lib/stories/story-cast";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import {
+  estimateImageUsd,
+  recordUsageEvent,
+} from "@/lib/usage/openai-meter";
 
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
 const REF_EDGE = 1024;
@@ -62,6 +66,8 @@ async function loadRefs(cast: StoryCast): Promise<Buffer[]> {
 async function callImageEdit(
   prompt: string,
   images: Buffer[],
+  userId?: string | null,
+  pageIndex?: number,
 ): Promise<Buffer> {
   const key = apiKey();
   if (!key) throw new Error("OPENAI_API_KEY ausente.");
@@ -95,6 +101,14 @@ async function callImageEdit(
   if (!res.ok) {
     throw new Error(json.error?.message || `OpenAI images/edits ${res.status}`);
   }
+  await recordUsageEvent({
+    userId,
+    category: "story_image",
+    model: IMAGE_MODEL,
+    operation: "story_page_image",
+    estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1),
+    meta: { pageIndex: pageIndex ?? null },
+  });
   const b64 = json.data?.[0]?.b64_json;
   if (b64) return Buffer.from(b64, "base64");
   const url = json.data?.[0]?.url;
@@ -133,12 +147,15 @@ function scenePrompt(
   cast: StoryCast,
   page: GeneratedPage,
   storyTitle: string,
+  pageIndex: number,
+  totalPages: number,
 ): string {
   const base =
     page.imagePrompt?.trim() ||
     `Scene from the children's story "${storyTitle}"`;
   return [
     base,
+    `This is beat ${pageIndex + 1} of ${totalPages} — do not repeat previous framing; match this beat exactly.`,
     `Walt Disney / Pixar quality 3D animated cinematic still.`,
     `Feature THIS exact child character "${cast.childName}" and THIS exact ${cast.friendKind} companion "${cast.friendName}" from the reference images as the clear protagonists.`,
     `Preserve their Pixar look, colors, and identity from the references with high fidelity.`,
@@ -168,8 +185,16 @@ export async function generateStoryPageImages(input: {
     try {
       if (apiKey() && refs.length > 0) {
         const jpeg = await callImageEdit(
-          scenePrompt(input.cast, page, input.storyTitle),
+          scenePrompt(
+            input.cast,
+            page,
+            input.storyTitle,
+            i,
+            input.pages.length,
+          ),
           refs.slice(0, 4),
+          input.userId,
+          page.pageIndex,
         );
         imageUrl = await uploadStoryJpeg({
           userId: input.userId,

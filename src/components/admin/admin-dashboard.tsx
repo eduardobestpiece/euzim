@@ -44,6 +44,21 @@ function fmtDuration(sec: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+function fmtMoney(n: number, currency: "USD" | "BRL"): string {
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
 export function AdminDashboard({
   kpis,
   accounts,
@@ -131,6 +146,18 @@ export function AdminDashboard({
       label: "Filhos / avatares",
       value: `${kpis.totalChildren} / ${kpis.totalCharacters}`,
     },
+    {
+      label: "Gasto mês (USD)",
+      value: fmtMoney(kpis.monthSpendUsd, "USD"),
+    },
+    {
+      label: "Gasto mês (BRL)",
+      value: fmtMoney(kpis.monthSpendBrl, "BRL"),
+    },
+    {
+      label: "Tokens no mês",
+      value: fmtTokens(kpis.monthTokens),
+    },
   ];
 
   return (
@@ -141,7 +168,7 @@ export function AdminDashboard({
             Admin PLG
           </h1>
           <p className="text-sm text-muted-foreground">
-            Contas, engajamento e ações operacionais.
+            Contas, engajamento, custos OpenAI e ações operacionais.
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
@@ -247,6 +274,9 @@ export function AdminDashboard({
               <th className="px-3 py-2">Filhos</th>
               <th className="px-3 py-2">Chars</th>
               <th className="px-3 py-2">Hist.</th>
+              <th className="px-3 py-2">Tokens</th>
+              <th className="px-3 py-2">USD</th>
+              <th className="px-3 py-2">BRL</th>
               <th className="px-3 py-2">Ativo</th>
               <th className="px-3 py-2">História</th>
               <th className="px-3 py-2">Onb.</th>
@@ -276,6 +306,13 @@ export function AdminDashboard({
                 <td className="px-3 py-2">{row.childrenCount}</td>
                 <td className="px-3 py-2">{row.charactersCount}</td>
                 <td className="px-3 py-2">{row.storiesCount}</td>
+                <td className="px-3 py-2 text-xs">{fmtTokens(row.usageTokens)}</td>
+                <td className="px-3 py-2 text-xs">
+                  {fmtMoney(row.usageUsd, "USD")}
+                </td>
+                <td className="px-3 py-2 text-xs">
+                  {fmtMoney(row.usageBrl, "BRL")}
+                </td>
                 <td className="px-3 py-2 text-xs">{fmtDate(row.lastActiveAt)}</td>
                 <td className="px-3 py-2 text-xs">{fmtDate(row.lastStoryAt)}</td>
                 <td className="px-3 py-2">
@@ -293,7 +330,7 @@ export function AdminDashboard({
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={13}
                   className="px-3 py-8 text-center text-muted-foreground"
                 >
                   Nenhuma conta com esses filtros.
@@ -464,6 +501,62 @@ export function AdminDashboard({
                     Reutilizar materiais
                   </Button>
                 </div>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">Custos OpenAI</h3>
+                <p className="text-xs text-muted-foreground">
+                  Total: {fmtTokens(selected.usageTokens)} ·{" "}
+                  {fmtMoney(selected.usageUsd, "USD")} ·{" "}
+                  {fmtMoney(selected.usageBrl, "BRL")}
+                </p>
+                {selected.usageByCategory.length > 0 ? (
+                  <ul className="space-y-1 text-xs">
+                    {selected.usageByCategory.map((c) => (
+                      <li
+                        key={c.category}
+                        className="flex justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1"
+                      >
+                        <span>
+                          {c.category} · {c.events} evt ·{" "}
+                          {fmtTokens(c.tokens)}
+                        </span>
+                        <span>
+                          {fmtMoney(c.usd, "USD")} / {fmtMoney(c.brl, "BRL")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Sem eventos ainda (só a partir deste deploy).
+                  </p>
+                )}
+                {selected.recentUsage.length > 0 ? (
+                  <details className="rounded-lg border border-border/60 p-2">
+                    <summary className="cursor-pointer text-xs font-medium">
+                      Últimos eventos ({selected.recentUsage.length})
+                    </summary>
+                    <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-[11px]">
+                      {selected.recentUsage.map((ev) => (
+                        <li
+                          key={ev.id}
+                          className="border-b border-border/40 py-1 last:border-0"
+                        >
+                          <div className="font-medium">
+                            {fmtDate(ev.createdAt)} · {ev.category}
+                          </div>
+                          <div className="text-muted-foreground">
+                            {ev.model || "—"} · {ev.operation || "—"} ·{" "}
+                            {fmtTokens(ev.totalTokens)} ·{" "}
+                            {fmtMoney(ev.estimatedUsd, "USD")} ·{" "}
+                            {fmtMoney(ev.estimatedBrl, "BRL")}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
               </section>
 
               <section className="space-y-2">

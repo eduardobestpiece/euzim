@@ -5,7 +5,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { generateStoryPipeline } from "@/lib/stories/generate-pipeline";
 import { generateStoryPageImages } from "@/lib/stories/generate-story-images";
+import { generateStoryQuiz } from "@/lib/stories/generate-story-quiz";
 import { loadStoryCast } from "@/lib/stories/story-cast";
+import {
+  STORY_TYPES,
+  WORD_VOLUME_TARGETS,
+  type StoryType,
+  type WordVolume,
+} from "@/lib/stories/storyteller-skill";
+import { PLATFORM_BUILD } from "@/lib/platform-build";
 import {
   countMockStoriesThisMonth,
   readMockStories,
@@ -17,7 +25,15 @@ import { cookies } from "next/headers";
 
 export const maxDuration = 300;
 
-/** Pipeline completo: rascunho → revisão → atos → imagens Pixar. */
+function isStoryType(v: string): v is StoryType {
+  return (STORY_TYPES as readonly string[]).includes(v);
+}
+
+function isWordVolume(v: string): v is WordVolume {
+  return v === "curta" || v === "media" || v === "longa";
+}
+
+/** Pipeline completo: rascunho → revisão → atos → imagens Pixar → quiz. */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
@@ -25,9 +41,43 @@ export async function POST(request: Request) {
   }
 
   let theme = "";
+  let storyType: StoryType | undefined;
+  let wordVolume: WordVolume | undefined;
+  let wordTarget: number | undefined;
+  let answers: Record<string, string> = {};
+  let characterIds: string[] = [];
+  let protagonistId: string | undefined;
+
   try {
-    const body = (await request.json()) as { theme?: string };
+    const body = (await request.json()) as {
+      theme?: string;
+      storyType?: string;
+      wordTarget?: number;
+      wordVolume?: string;
+      answers?: Record<string, string>;
+      characterIds?: string[];
+      protagonistId?: string;
+    };
     theme = String(body.theme ?? "").trim();
+    if (body.storyType && isStoryType(body.storyType)) {
+      storyType = body.storyType;
+    }
+    if (body.wordVolume && isWordVolume(body.wordVolume)) {
+      wordVolume = body.wordVolume;
+      wordTarget = WORD_VOLUME_TARGETS[wordVolume].words;
+    }
+    if (typeof body.wordTarget === "number" && body.wordTarget > 0) {
+      wordTarget = Math.round(body.wordTarget);
+    }
+    if (body.answers && typeof body.answers === "object") {
+      answers = Object.fromEntries(
+        Object.entries(body.answers).map(([k, v]) => [k, String(v)]),
+      );
+    }
+    if (Array.isArray(body.characterIds)) {
+      characterIds = body.characterIds.map(String);
+    }
+    if (body.protagonistId) protagonistId = String(body.protagonistId);
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
@@ -61,9 +111,37 @@ export async function POST(request: Request) {
     );
   }
 
+  // Resolve nomes do elenco selecionado (opcional)
+  let castNames: string[] | undefined;
+  let protagonistName: string | undefined;
+  const adminForChars = createAdminClient() ?? (await createClient());
+  if (adminForChars && characterIds.length > 0) {
+    const { data: chars } = await adminForChars
+      .from("characters")
+      .select("id, name, is_primary")
+      .eq("parent_id", user.id)
+      .in("id", characterIds);
+    castNames = (chars ?? []).map((c) => c.name);
+    const protag = (chars ?? []).find((c) => c.id === protagonistId);
+    if (protag) protagonistName = protag.name;
+    else if ((chars ?? []).some((c) => c.is_primary)) {
+      protagonistName = (chars ?? []).find((c) => c.is_primary)?.name;
+    }
+  }
+  if (!protagonistName) protagonistName = cast.childName;
+
   const { story: drafted, pipeline, engine } = await generateStoryPipeline({
     cast,
     theme,
+    options: {
+      userId: user.id,
+      storyType,
+      wordTarget,
+      wordVolume,
+      clarifyAnswers: answers,
+      castNames,
+      protagonistName,
+    },
   });
 
   if (engine === "mock-v1") {
@@ -117,6 +195,17 @@ export async function POST(request: Request) {
     })),
   };
 
+  const questionsData = await generateStoryQuiz({
+    userId: user.id,
+    title: drafted.title,
+    moral: pipeline.moral,
+    fullText: pipeline.fullText || "",
+    pages: pages.map((p) => ({
+      title: p.chapterTitle,
+      text: p.text,
+    })),
+  });
+
   const admin = createAdminClient();
   const userClient = await createClient();
   const db = admin ?? userClient;
@@ -133,16 +222,20 @@ export async function POST(request: Request) {
           status: "ready",
           is_public: true,
           text_content: textContent,
-          questions_data: [],
+          questions_data: questionsData,
           cover_image_url: coverImageUrl,
           generation_meta: {
             engine,
             theme,
+            storyType: storyType ?? null,
+            wordTarget: wordTarget ?? null,
+            wordVolume: wordVolume ?? null,
             pages: pages.length,
-            pipeline: "draft-review-split-pixar",
+            quizCount: questionsData.length,
+            pipeline: "draft-review-split-pixar-quiz",
             friend: { name: cast.friendName, kind: cast.friendKind },
             moral: pipeline.moral,
-            stamp: "v17-storyteller-live",
+            stamp: PLATFORM_BUILD,
           },
           published_at: new Date().toISOString(),
         })
@@ -172,6 +265,7 @@ export async function POST(request: Request) {
           engine,
           title: drafted.title,
           pages: pages.length,
+          quizCount: questionsData.length,
           redirectTo: `/app/parent/stories/${story.id}`,
         });
       }
@@ -189,6 +283,7 @@ export async function POST(request: Request) {
     textContent,
     coverImageUrl: coverImageUrl || "",
     pages,
+    questionsData,
     createdAt: new Date().toISOString(),
   };
   const existing = await readMockStories();
@@ -208,6 +303,7 @@ export async function POST(request: Request) {
     engine,
     title: drafted.title,
     pages: pages.length,
+    quizCount: questionsData.length,
     redirectTo: `/app/parent/stories/${record.id}`,
   });
 }

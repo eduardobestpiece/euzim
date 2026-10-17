@@ -19,24 +19,40 @@ fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca 
 - Pais/cuidadores e figuras secundárias só entram se fizerem sentido narrativo.
 - Nunca substitua a criança ou o amigo por outros heróis.
 
+## Segurança parental (obrigatório em temas públicos/estranhos)
+- Em cenas com desconhecidos, rua, praça, comércio ou pessoas em vulnerabilidade:
+  um pai, mãe ou cuidador de confiança DEVE estar presente e atento.
+- Nunca mostre a criança sozinha ajudando um desconhecido ou entrando em risco.
+- Compaixão é ensinada COM segurança: observar à distância, conversar com o cuidador,
+  oferecer ajuda mediada pelo adulto (doação, sorriso, palavra gentil).
+- Medo no início é válido (ex.: medo à distância), mas a resolução é segura e esperançosa.
+
+## Adequação ética (anti-agenda)
+- Sem violência gráfica, sem terror, sem temas adultos, sem religião dogmática.
+- PROIBIDO: identidade de gênero, transição, ideologia política, "woke", agenda sexual
+  ou qualquer doutrina de identidade — mantenha diversidade humana NATURAL (famílias,
+  cores de pele, idades, cultura) sem pregar, sem slogans, sem aulas de ideologia.
+- Nunca ridicularize pessoas em situação de rua, diferenças ou vulnerabilidades —
+  humanize e ensine compaixão com segurança.
+
 ## Craft narrativo
-1. Gancho emocional claro nas primeiras linhas.
+1. Gancho emocional claro nas primeiras linhas (emoção do INÍCIO, não o clímax).
 2. Desejo + obstáculo + escolha corajosa + transformação.
 3. Analogias e parábolas leves (ex.: medo como nuvem que passa, coragem como lanterna).
 4. Diálogos naturais entre criança e amigo; sensações (cheiro, luz, som, toque).
 5. Resolução esperançosa, sem magia "deus ex machina" barata — a criança AGE.
 6. Tom Disney/Pixar: caloroso, cinematográfico, humor gentil, zero cinismo.
 
-## Adequação
+## Adequação etária
 - Idade típica 4–9 anos: vocabulário acessível, frases claras, ritmo oral.
-- Sem violência gráfica, sem terror, sem temas adultos, sem religião dogmática.
 - Medos reais (rua, escuro, separação) tratados com empatia e segurança emocional.
-- Nunca ridicularize pessoas em situação de rua, diferenças ou vulnerabilidades —
-  humanize e ensine compaixão.
 
-## Qualidade (anti-raso)
+## Qualidade (anti-raso) + batidas visuais únicas
 - Evite "e então eles foram felizes" sem jornada.
-- Cada ato precisa de cena concreta (lugar, ação, fala, escolha).
+- Cada ato precisa de cena concreta (lugar, ação, fala, escolha) e batida VISUAL ÚNICA.
+- Ato 1 / imagem 1 = emoção do início (ex.: medo à distância), NÃO o clímax.
+- Cada image_prompt deve especificar: lugar distinto, personagens presentes,
+  presença parental se aplicável, framing diferente dos atos anteriores.
 - A moral emerge da cena; não escreva "a lição é…".
 `.trim();
 
@@ -47,3 +63,59 @@ export const MIN_STORY_PAGES = 5;
 export const MAX_STORY_PAGES = 10;
 /** Meta: ~150–220 palavras por página → ~8–15 min de leitura total. */
 export const TARGET_WORDS_PER_PAGE = 180;
+
+export const STORY_TYPES = [
+  "aventura",
+  "valores",
+  "hora_dormir",
+  "amizade",
+  "coragem",
+] as const;
+
+export type StoryType = (typeof STORY_TYPES)[number];
+
+export const STORY_TYPE_LABELS: Record<StoryType, string> = {
+  aventura: "Aventura",
+  valores: "Valores / Moral",
+  hora_dormir: "Hora de dormir",
+  amizade: "Amizade",
+  coragem: "Coragem / Medos",
+};
+
+export type WordVolume = "curta" | "media" | "longa";
+
+export const WORD_VOLUME_TARGETS: Record<
+  WordVolume,
+  { words: number; label: string }
+> = {
+  curta: { words: 600, label: "Curta (~600)" },
+  media: { words: 1200, label: "Média (~1200)" },
+  longa: { words: 1800, label: "Longa (~1800)" },
+};
+
+/** Recomenda volume pela idade da criança. */
+export function recommendWordVolume(ageYears: number | null): WordVolume {
+  if (ageYears == null) return "media";
+  if (ageYears <= 5) return "curta";
+  if (ageYears <= 8) return "media";
+  return "longa";
+}
+
+export function storyTypeGuidance(type: StoryType): string {
+  switch (type) {
+    case "aventura":
+      return "Tom de aventura leve: descoberta, mapa emocional, desafio explorável.";
+    case "valores":
+      return "Foque um valor moral vivido em cena (compaixão, honestidade, gratidão).";
+    case "hora_dormir":
+      return "Ritmo calmo, linguagem aconchegante, resolução suave para dormir.";
+    case "amizade":
+      return "Celebre vínculo criança+amigo, cooperação e empatia entre amigos.";
+    case "coragem":
+      return "Nomeie o medo com carinho e mostre um passo corajoso concreto.";
+    default: {
+      const _exhaustive: never = type;
+      return _exhaustive;
+    }
+  }
+}

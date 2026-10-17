@@ -32,6 +32,7 @@ export function ParentDashboard({
   characters,
   childName,
   childAvatarUrl,
+  childAgeYears,
   stories,
   billing,
 }: {
@@ -39,6 +40,7 @@ export function ParentDashboard({
   characters: CharacterRow[];
   childName?: string | null;
   childAvatarUrl?: string | null;
+  childAgeYears?: number | null;
   stories: StoryListItem[];
   billing: BillingSnapshot;
 }) {
@@ -108,6 +110,8 @@ export function ParentDashboard({
             childName={childName}
             friendName={friend?.name ?? null}
             remaining={remaining}
+            characters={characters}
+            childAgeYears={childAgeYears ?? null}
           />
         </TabsContent>
 

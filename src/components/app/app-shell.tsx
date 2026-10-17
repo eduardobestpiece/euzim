@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { PinGuardButton } from "@/components/kids/pin-guard";
 import { signOutAction } from "@/lib/auth/actions";
 import type { AuthUser } from "@/lib/auth/types";
+import { PLATFORM_BUILD } from "@/lib/platform-build";
 
 const links = [
   { href: "/app/parent", label: "Pais", icon: Users },
@@ -70,6 +71,12 @@ export function AppShell({
                   Alterar senha
                 </Link>
               </Button>
+              <span
+                className="hidden font-mono text-[10px] font-semibold text-emerald-800 sm:inline"
+                title="Versão da plataforma"
+              >
+                {PLATFORM_BUILD}
+              </span>
               <form action={signOutAction}>
                 <Button type="submit" variant="outline" size="sm">
                   Sair

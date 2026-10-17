@@ -1,6 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readMockStories } from "@/lib/stories/mock-store";
+import {
+  buildQuizFromPages,
+  normalizeQuizQuestions,
+  type QuizQuestion,
+} from "@/lib/stories/quiz";
 
 export type StoryDetail = {
   id: string;
@@ -9,6 +14,7 @@ export type StoryDetail = {
   pages: { pageIndex: number; text: string; imageUrl: string; altText: string }[];
   source: "supabase" | "mock";
   shareToken?: string | null;
+  questions: QuizQuestion[];
 };
 
 export async function loadStoryForParent(
@@ -24,7 +30,7 @@ export async function loadStoryForParent(
       const { data: story, error } = await db
         .from("stories")
         .select(
-          "id, title, cover_image_url, text_content, parent_id, share_token",
+          "id, title, cover_image_url, text_content, questions_data, parent_id, share_token",
         )
         .eq("id", storyId)
         .maybeSingle();
@@ -63,6 +69,12 @@ export async function loadStoryForParent(
           };
         });
 
+        const saved = normalizeQuizQuestions(story.questions_data);
+        const questions =
+          saved.length > 0
+            ? saved
+            : buildQuizFromPages(story.title, pages);
+
         return {
           id: story.id,
           title: story.title,
@@ -70,6 +82,7 @@ export async function loadStoryForParent(
           pages,
           source: "supabase",
           shareToken: story.share_token,
+          questions,
         };
       }
     } catch {
@@ -81,6 +94,12 @@ export async function loadStoryForParent(
   const mock = mocks.find((s) => s.id === storyId && s.parentId === parentId);
   if (!mock) return null;
 
+  const saved = normalizeQuizQuestions(mock.questionsData);
+  const questions =
+    saved.length > 0
+      ? saved
+      : buildQuizFromPages(mock.title, mock.pages);
+
   return {
     id: mock.id,
     title: mock.title,
@@ -88,6 +107,7 @@ export async function loadStoryForParent(
     pages: mock.pages,
     source: "mock",
     shareToken: mock.id,
+    questions,
   };
 }
 

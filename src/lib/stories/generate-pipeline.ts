@@ -7,7 +7,12 @@ import {
   STORYTELLER_SKILL,
   STORY_TEXT_MODEL,
   TARGET_WORDS_PER_PAGE,
+  storyTypeGuidance,
+  type StoryType,
+  type WordVolume,
+  WORD_VOLUME_TARGETS,
 } from "@/lib/stories/storyteller-skill";
+import { meteredChatCompletion } from "@/lib/usage/openai-meter";
 
 export type StoryEngine =
   | "openai-storyteller-v1"
@@ -29,25 +34,28 @@ export type PipelineStory = {
   reviewNotes: string;
 };
 
-function apiKey(): string | null {
-  return process.env.OPENAI_API_KEY?.trim() || null;
-}
+export type PipelineOptions = {
+  userId?: string | null;
+  storyType?: StoryType;
+  wordTarget?: number;
+  wordVolume?: WordVolume;
+  clarifyAnswers?: Record<string, string>;
+  castNames?: string[];
+  protagonistName?: string;
+};
 
 async function chatJson(input: {
+  userId?: string | null;
+  operation: string;
   system: string;
   user: string;
   temperature?: number;
 }): Promise<Record<string, unknown> | null> {
-  const key = apiKey();
-  if (!key) return null;
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  const result = await meteredChatCompletion({
+    userId: input.userId,
+    category: "story_text",
+    operation: input.operation,
+    body: {
       model: STORY_TEXT_MODEL,
       temperature: input.temperature ?? 0.75,
       response_format: { type: "json_object" },
@@ -55,32 +63,68 @@ async function chatJson(input: {
         { role: "system", content: input.system },
         { role: "user", content: input.user },
       ],
-    }),
-    signal: AbortSignal.timeout(180_000),
+    },
+    timeoutMs: 180_000,
   });
 
-  if (!res.ok) return null;
-  const payload = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const raw = payload.choices?.[0]?.message?.content;
-  if (!raw) return null;
+  if (!result.ok || !result.content) return null;
   try {
-    return JSON.parse(raw) as Record<string, unknown>;
+    return JSON.parse(result.content) as Record<string, unknown>;
   } catch {
     return null;
   }
 }
 
-function castBrief(cast: StoryCast): string {
+function castBrief(cast: StoryCast, opts?: PipelineOptions): string {
   const age =
     cast.childAgeYears != null ? `${cast.childAgeYears} anos` : "idade infantil";
   const friendLabel =
     cast.friendKind === "pet" ? "pet companheiro" : "brinquedo favorito";
+  const protagonist =
+    opts?.protagonistName?.trim() || cast.childName;
+  const castLine =
+    opts?.castNames && opts.castNames.length > 0
+      ? `Elenco selecionado: ${opts.castNames.join(", ")}.`
+      : "";
   return [
-    `Criança protagonista: ${cast.childName} (${age}${cast.childGender ? `, ${cast.childGender}` : ""}).`,
+    `Criança protagonista: ${protagonist} (${age}${cast.childGender ? `, ${cast.childGender}` : ""}).`,
     `Co-protagonista: ${cast.friendName} (${friendLabel}).`,
+    castLine,
     `Os dois precisam estar juntos na essência de quase todas as cenas.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function volumeBrief(opts?: PipelineOptions): {
+  min: number;
+  max: number;
+  target: number;
+} {
+  const target =
+    opts?.wordTarget ??
+    (opts?.wordVolume
+      ? WORD_VOLUME_TARGETS[opts.wordVolume].words
+      : 1200);
+  const min = Math.max(400, Math.round(target * 0.85));
+  const max = Math.round(target * 1.2);
+  return { min, max, target };
+}
+
+function typeBrief(opts?: PipelineOptions): string {
+  if (!opts?.storyType) return "";
+  return `Tipo de história: ${opts.storyType}. ${storyTypeGuidance(opts.storyType)}`;
+}
+
+function clarifyBrief(opts?: PipelineOptions): string {
+  if (!opts?.clarifyAnswers || Object.keys(opts.clarifyAnswers).length === 0) {
+    return "";
+  }
+  return [
+    "Respostas de esclarecimento dos pais:",
+    ...Object.entries(opts.clarifyAnswers).map(
+      ([q, a]) => `- ${q}: ${a}`,
+    ),
   ].join("\n");
 }
 
@@ -88,8 +132,12 @@ function castBrief(cast: StoryCast): string {
 async function draftFullStory(
   cast: StoryCast,
   theme: string,
+  opts?: PipelineOptions,
 ): Promise<{ title: string; moral: string; fullText: string } | null> {
+  const vol = volumeBrief(opts);
   const parsed = await chatJson({
+    userId: opts?.userId,
+    operation: "draft_story",
     temperature: 0.85,
     system: `${STORYTELLER_SKILL}
 
@@ -97,22 +145,27 @@ Responda SOMENTE JSON:
 {
   "title": string,
   "moral": string (1 frase suave, sem "a lição é"),
-  "full_text": string (história completa contínua, OBRIGATÓRIO 1100–1800 palavras, com diálogos e cenas)
+  "full_text": string (história completa contínua, OBRIGATÓRIO ${vol.min}–${vol.max} palavras, com diálogos e cenas)
 }
-Se o texto tiver menos de 1100 palavras, continue expandindo cenas antes de responder.`,
-    user: `${castBrief(cast)}
+Meta de volume: ~${vol.target} palavras. Se o texto tiver menos de ${vol.min} palavras, continue expandindo cenas antes de responder.`,
+    user: `${castBrief(cast, opts)}
+
+${typeBrief(opts)}
+${clarifyBrief(opts)}
 
 Pedido / tema dos pais:
 """${theme}"""
 
 Escreva a história completa (ainda sem dividir em páginas). Profunda, oral, cinematográfica.
-Mínimo 1100 palavras. Inclua pelo menos 6 cenas distintas e vários diálogos entre a criança e o amigo.`,
+Meta ~${vol.target} palavras. Inclua cenas distintas e diálogos entre a criança e o amigo.
+Se o tema envolve rua/desconhecidos/vulnerabilidade, inclua pais/cuidadores presentes.`,
   });
   if (!parsed) return null;
   const title = String(parsed.title ?? "").trim();
   const moral = String(parsed.moral ?? "").trim();
   const fullText = String(parsed.full_text ?? "").trim();
-  if (!title || fullText.split(/\s+/).length < 700) return null;
+  const minWords = Math.min(700, Math.round(vol.min * 0.7));
+  if (!title || fullText.split(/\s+/).length < minWords) return null;
   return { title, moral, fullText };
 }
 
@@ -121,21 +174,27 @@ async function reviewStory(
   cast: StoryCast,
   theme: string,
   draft: { title: string; moral: string; fullText: string },
+  opts?: PipelineOptions,
 ): Promise<{
   title: string;
   moral: string;
   fullText: string;
   reviewNotes: string;
 } | null> {
+  const vol = volumeBrief(opts);
   const parsed = await chatJson({
+    userId: opts?.userId,
+    operation: "review_story",
     temperature: 0.55,
     system: `${STORYTELLER_SKILL}
 
 Você agora é o EDITOR-SÁBIO. Critique e REESCREVA.
 
 Checklist obrigatório:
-- Protagonistas corretos (${cast.childName} + ${cast.friendName})?
+- Protagonistas corretos (${opts?.protagonistName || cast.childName} + ${cast.friendName})?
 - Tema dos pais atendido com profundidade (não raso)?
+- Segurança parental em cenas públicas/estranhos?
+- Sem agenda de identidade de gênero / ideologia?
 - Arco completo (desejo, obstáculo, escolha, transformação)?
 - Adequado a criança? Empático?
 - Linguagem oral, rica, sem moral pregada?
@@ -144,10 +203,13 @@ Responda SOMENTE JSON:
 {
   "title": string,
   "moral": string,
-  "full_text": string (versão FINAL melhorada, 900–1600 palavras),
+  "full_text": string (versão FINAL melhorada, ~${vol.target} palavras),
   "review_notes": string (o que melhorou, em 2–4 frases)
 }`,
-    user: `${castBrief(cast)}
+    user: `${castBrief(cast, opts)}
+
+${typeBrief(opts)}
+${clarifyBrief(opts)}
 
 Tema dos pais: """${theme}"""
 
@@ -170,7 +232,7 @@ Reescreva a melhor versão possível.`,
   return { title, moral, fullText, reviewNotes };
 }
 
-/** Passo 3 — fracionar em 5–10 atos com prompts de imagem. */
+/** Passo 3 — fracionar em 5–10 atos com prompts de imagem únicos. */
 async function splitIntoChapters(
   cast: StoryCast,
   reviewed: {
@@ -179,8 +241,11 @@ async function splitIntoChapters(
     fullText: string;
     reviewNotes: string;
   },
+  opts?: PipelineOptions,
 ): Promise<StoryChapter[] | null> {
   const parsed = await chatJson({
+    userId: opts?.userId,
+    operation: "split_chapters",
     temperature: 0.4,
     system: `${STORYTELLER_SKILL}
 
@@ -188,9 +253,13 @@ Divida a história FINAL em ${MIN_STORY_PAGES} a ${MAX_STORY_PAGES} ATOS/página
 Cada ato: ~${TARGET_WORDS_PER_PAGE} palavras (±40), com começo/meio/fim de cena,
 diálogos quando couber, e um image_prompt em INGLÊS para ilustração Walt Disney/Pixar 3D.
 
-Regras do image_prompt:
-- Citar visualmente a criança "${cast.childName}" e o amigo "${cast.friendName}" (${cast.friendKind}).
+Regras do image_prompt (CRÍTICO):
+- Cada ato tem batida visual ÚNICA: lugar, pose, framing e emoção diferentes.
+- Ato 1 = emoção do INÍCIO da história (ex.: medo à distância), NÃO o clímax.
+- Citar visualmente a criança "${opts?.protagonistName || cast.childName}" e o amigo "${cast.friendName}" (${cast.friendKind}).
+- Se a cena for pública/com desconhecido: incluir pai/mãe/cuidador presente na imagem.
 - Estilo: "Walt Disney / Pixar 3D animated still, cinematic soft lighting, wholesome"
+- Explicit: "do not repeat previous framing; match this beat exactly"
 - Sem texto na imagem, sem watermark, family-friendly.
 
 Responda SOMENTE JSON:
@@ -213,7 +282,7 @@ HISTÓRIA FINAL:
 ${reviewed.fullText}
 """
 
-Fracione agora.`,
+Fracione agora. Garanta image_prompts distintos por ato.`,
   });
   if (!parsed) return null;
   const pagesRaw = Array.isArray(parsed.pages) ? parsed.pages : [];
@@ -231,7 +300,7 @@ Fracione agora.`,
       text,
       imagePrompt:
         imagePrompt ||
-        `Walt Disney / Pixar 3D animated still of child ${cast.childName} with ${cast.friendKind} ${cast.friendName}, wholesome cinematic lighting, no text`,
+        `Walt Disney / Pixar 3D animated still of child ${cast.childName} with ${cast.friendKind} ${cast.friendName}, unique beat ${chapters.length + 1}, wholesome cinematic lighting, do not repeat previous framing, no text`,
     });
   }
   if (chapters.length < MIN_STORY_PAGES) return null;
@@ -251,11 +320,13 @@ export type GeneratePipelineResult = {
 export async function generateStoryPipeline(input: {
   cast: StoryCast;
   theme: string;
+  options?: PipelineOptions;
 }): Promise<GeneratePipelineResult> {
   const theme = input.theme.trim();
   const cast = input.cast;
+  const opts = input.options;
 
-  const draft = await draftFullStory(cast, theme);
+  const draft = await draftFullStory(cast, theme, opts);
   if (!draft) {
     return {
       story: generateMockStory({
@@ -275,14 +346,13 @@ export async function generateStoryPipeline(input: {
   }
 
   const reviewed =
-    (await reviewStory(cast, theme, draft)) ?? {
+    (await reviewStory(cast, theme, draft, opts)) ?? {
       ...draft,
       reviewNotes: "revisão pulada — usando rascunho",
     };
 
-  const chapters = await splitIntoChapters(cast, reviewed);
+  const chapters = await splitIntoChapters(cast, reviewed, opts);
   if (!chapters) {
-    // Divide o texto revisado em 6 blocos simples
     const words = reviewed.fullText.split(/\s+/);
     const chunks = 6;
     const size = Math.ceil(words.length / chunks);
@@ -292,7 +362,7 @@ export async function generateStoryPipeline(input: {
         index: i,
         title: `Parte ${i + 1}`,
         text,
-        imagePrompt: `Walt Disney / Pixar 3D animated still of ${cast.childName} and ${cast.friendName}, scene ${i + 1}, wholesome, no text`,
+        imagePrompt: `Walt Disney / Pixar 3D animated still of ${cast.childName} and ${cast.friendName}, unique scene ${i + 1} of ${chunks}, distinct framing, wholesome, do not repeat previous framing, no text`,
       };
     });
     return packResult(reviewed, fallback, "openai-storyteller-v1");

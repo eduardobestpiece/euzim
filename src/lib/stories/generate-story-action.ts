@@ -9,7 +9,9 @@ import { createClient } from "@/lib/supabase/server";
 import { generateStoryPipeline } from "@/lib/stories/generate-pipeline";
 import type { StoryEngine } from "@/lib/stories/generate-pipeline";
 import { generateStoryPageImages } from "@/lib/stories/generate-story-images";
+import { generateStoryQuiz } from "@/lib/stories/generate-story-quiz";
 import { loadStoryCast } from "@/lib/stories/story-cast";
+import { PLATFORM_BUILD } from "@/lib/platform-build";
 import {
   countMockStoriesThisMonth,
   readMockStories,
@@ -30,7 +32,7 @@ export type GenerateStoryResult = {
 };
 
 /**
- * Mesmo pipeline da API (rascunho → revisão → atos → Pixar).
+ * Mesmo pipeline da API (rascunho → revisão → atos → Pixar → quiz).
  * Mantido para compatibilidade; o form prefere /api/stories/generate.
  */
 export async function generateStoryAction(
@@ -63,6 +65,7 @@ export async function generateStoryAction(
   const { story: drafted, pipeline, engine } = await generateStoryPipeline({
     cast,
     theme,
+    options: { userId: user.id },
   });
 
   if (engine === "mock-v1") {
@@ -110,6 +113,17 @@ export async function generateStoryAction(
     })),
   };
 
+  const questionsData = await generateStoryQuiz({
+    userId: user.id,
+    title: drafted.title,
+    moral: pipeline.moral,
+    fullText: pipeline.fullText || "",
+    pages: pages.map((p) => ({
+      title: p.chapterTitle,
+      text: p.text,
+    })),
+  });
+
   const admin = createAdminClient();
   const userClient = await createClient();
   const db = admin ?? userClient;
@@ -126,16 +140,17 @@ export async function generateStoryAction(
           status: "ready",
           is_public: true,
           text_content: textContent,
-          questions_data: [],
+          questions_data: questionsData,
           cover_image_url: coverImageUrl,
           generation_meta: {
             engine,
             theme,
             pages: pages.length,
-            pipeline: "draft-review-split-pixar",
+            quizCount: questionsData.length,
+            pipeline: "draft-review-split-pixar-quiz",
             friend: { name: cast.friendName, kind: cast.friendKind },
             moral: pipeline.moral,
-            stamp: "v17-storyteller-live",
+            stamp: PLATFORM_BUILD,
           },
           published_at: new Date().toISOString(),
         })
@@ -184,6 +199,7 @@ export async function generateStoryAction(
     textContent,
     coverImageUrl: coverImageUrl || "",
     pages,
+    questionsData,
     createdAt: new Date().toISOString(),
   };
   const existing = await readMockStories();

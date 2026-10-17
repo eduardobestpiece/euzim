@@ -2,6 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readMockStories } from "@/lib/stories/mock-store";
 import type { StoryDetail } from "@/lib/stories/load-story";
+import {
+  buildQuizFromPages,
+  normalizeQuizQuestions,
+} from "@/lib/stories/quiz";
 
 function mapPages(
   textContent: unknown,
@@ -42,7 +46,7 @@ export async function loadStoryByShareToken(
       const { data: story, error } = await db
         .from("stories")
         .select(
-          "id, title, cover_image_url, text_content, share_token, is_public, status",
+          "id, title, cover_image_url, text_content, questions_data, share_token, is_public, status",
         )
         .eq("share_token", shareToken)
         .eq("is_public", true)
@@ -56,13 +60,25 @@ export async function loadStoryByShareToken(
           .eq("story_id", story.id)
           .order("page_index", { ascending: true });
 
+        const pages = mapPages(
+          story.text_content,
+          images,
+          story.cover_image_url,
+        );
+        const saved = normalizeQuizQuestions(story.questions_data);
+        const questions =
+          saved.length > 0
+            ? saved
+            : buildQuizFromPages(story.title, pages);
+
         return {
           id: story.id,
           title: story.title,
           coverImageUrl: story.cover_image_url,
-          pages: mapPages(story.text_content, images, story.cover_image_url),
+          pages,
           source: "supabase",
           shareToken: story.share_token,
+          questions,
         };
       }
     } catch {
@@ -74,6 +90,12 @@ export async function loadStoryByShareToken(
   const mock = mocks.find((s) => s.id === shareToken);
   if (!mock) return null;
 
+  const saved = normalizeQuizQuestions(mock.questionsData);
+  const questions =
+    saved.length > 0
+      ? saved
+      : buildQuizFromPages(mock.title, mock.pages);
+
   return {
     id: mock.id,
     title: mock.title,
@@ -81,5 +103,6 @@ export async function loadStoryByShareToken(
     pages: mock.pages,
     source: "mock",
     shareToken: mock.id,
+    questions,
   };
 }

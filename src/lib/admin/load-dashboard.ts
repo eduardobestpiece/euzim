@@ -12,6 +12,30 @@ export type AdminKpis = {
   incompleteOnboarding: number;
   totalChildren: number;
   totalCharacters: number;
+  monthSpendUsd: number;
+  monthSpendBrl: number;
+  monthTokens: number;
+};
+
+export type UsageCategoryBreakdown = {
+  category: string;
+  events: number;
+  tokens: number;
+  usd: number;
+  brl: number;
+};
+
+export type UsageEventRow = {
+  id: string;
+  category: string;
+  model: string | null;
+  operation: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedUsd: number;
+  estimatedBrl: number;
+  createdAt: string;
 };
 
 export type AdminAccountRow = {
@@ -32,12 +56,22 @@ export type AdminAccountRow = {
   storiesCount: number;
   sessionSeconds7d: number;
   lastSignInAt: string | null;
+  usageTokens: number;
+  usageUsd: number;
+  usageBrl: number;
+  usageByCategory: UsageCategoryBreakdown[];
+  recentUsage: UsageEventRow[];
 };
 
 function daysAgo(n: number): Date {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return d;
+}
+
+function monthStartIso(): string {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
 }
 
 export async function loadAdminDashboard(): Promise<{
@@ -68,16 +102,28 @@ export async function loadAdminDashboard(): Promise<{
   const rows = users ?? [];
   const parentRows = rows.filter((u) => u.role === "parent");
 
-  const [{ data: children }, { data: characters }, { data: stories }, { data: sessions }] =
-    await Promise.all([
-      admin.from("children").select("id, parent_id"),
-      admin.from("characters").select("id, parent_id"),
-      admin.from("stories").select("id, parent_id, created_at"),
-      admin
-        .from("analytics_sessions")
-        .select("user_id, duration_seconds, last_seen_at")
-        .gte("last_seen_at", daysAgo(7).toISOString()),
-    ]);
+  const [
+    { data: children },
+    { data: characters },
+    { data: stories },
+    { data: sessions },
+    { data: usageEvents },
+  ] = await Promise.all([
+    admin.from("children").select("id, parent_id"),
+    admin.from("characters").select("id, parent_id"),
+    admin.from("stories").select("id, parent_id, created_at"),
+    admin
+      .from("analytics_sessions")
+      .select("user_id, duration_seconds, last_seen_at")
+      .gte("last_seen_at", daysAgo(7).toISOString()),
+    admin
+      .from("usage_events")
+      .select(
+        "id, user_id, category, model, operation, prompt_tokens, completion_tokens, total_tokens, estimated_usd, estimated_brl, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(5000),
+  ]);
 
   const childCount = new Map<string, number>();
   for (const c of children ?? []) {
@@ -111,7 +157,75 @@ export async function loadAdminDashboard(): Promise<{
     sessionUsers += 1;
   }
 
-  // Auth last_sign_in_at
+  type UsageAgg = {
+    tokens: number;
+    usd: number;
+    brl: number;
+    byCategory: Map<string, UsageCategoryBreakdown>;
+    recent: UsageEventRow[];
+  };
+  const usageByUser = new Map<string, UsageAgg>();
+  const monthStart = new Date(monthStartIso()).getTime();
+  let monthSpendUsd = 0;
+  let monthSpendBrl = 0;
+  let monthTokens = 0;
+
+  for (const ev of usageEvents ?? []) {
+    const usd = Number(ev.estimated_usd) || 0;
+    const brl = Number(ev.estimated_brl) || 0;
+    const tokens = Number(ev.total_tokens) || 0;
+    const created = new Date(ev.created_at).getTime();
+    if (created >= monthStart) {
+      monthSpendUsd += usd;
+      monthSpendBrl += brl;
+      monthTokens += tokens;
+    }
+
+    let agg = usageByUser.get(ev.user_id);
+    if (!agg) {
+      agg = {
+        tokens: 0,
+        usd: 0,
+        brl: 0,
+        byCategory: new Map(),
+        recent: [],
+      };
+      usageByUser.set(ev.user_id, agg);
+    }
+    agg.tokens += tokens;
+    agg.usd += usd;
+    agg.brl += brl;
+
+    const cat = String(ev.category);
+    const prev = agg.byCategory.get(cat) ?? {
+      category: cat,
+      events: 0,
+      tokens: 0,
+      usd: 0,
+      brl: 0,
+    };
+    prev.events += 1;
+    prev.tokens += tokens;
+    prev.usd += usd;
+    prev.brl += brl;
+    agg.byCategory.set(cat, prev);
+
+    if (agg.recent.length < 12) {
+      agg.recent.push({
+        id: ev.id,
+        category: cat,
+        model: ev.model,
+        operation: ev.operation,
+        promptTokens: Number(ev.prompt_tokens) || 0,
+        completionTokens: Number(ev.completion_tokens) || 0,
+        totalTokens: tokens,
+        estimatedUsd: usd,
+        estimatedBrl: brl,
+        createdAt: ev.created_at,
+      });
+    }
+  }
+
   const signInMap = new Map<string, string | null>();
   try {
     let page = 1;
@@ -132,7 +246,6 @@ export async function loadAdminDashboard(): Promise<{
     // ignore
   }
 
-  const now = Date.now();
   const active7d = parentRows.filter((u) => {
     const t = u.last_active_at ? new Date(u.last_active_at).getTime() : 0;
     return t >= story7;
@@ -156,27 +269,37 @@ export async function loadAdminDashboard(): Promise<{
       ? 0
       : Math.round((withoutStories / parentRows.length) * 100);
 
-  const accounts: AdminAccountRow[] = rows.map((u) => ({
-    id: u.id,
-    email: u.email,
-    fullName: u.full_name,
-    role: u.role,
-    subscriptionStatus: u.subscription_status,
-    subscriptionPlanId: u.subscription_plan_id,
-    complimentaryUntil: u.complimentary_until,
-    onboardingCompleted: Boolean(u.onboarding_completed),
-    onboardingResetMode: u.onboarding_reset_mode,
-    lastActiveAt: u.last_active_at,
-    lastStoryAt: u.last_story_at,
-    adminNotes: u.admin_notes,
-    childrenCount: childCount.get(u.id) ?? 0,
-    charactersCount: charCount.get(u.id) ?? 0,
-    storiesCount: storyCount.get(u.id) ?? 0,
-    sessionSeconds7d: sessionSec.get(u.id) ?? 0,
-    lastSignInAt: signInMap.get(u.id) ?? null,
-  }));
-
-  void now;
+  const accounts: AdminAccountRow[] = rows.map((u) => {
+    const usage = usageByUser.get(u.id);
+    return {
+      id: u.id,
+      email: u.email,
+      fullName: u.full_name,
+      role: u.role,
+      subscriptionStatus: u.subscription_status,
+      subscriptionPlanId: u.subscription_plan_id,
+      complimentaryUntil: u.complimentary_until,
+      onboardingCompleted: Boolean(u.onboarding_completed),
+      onboardingResetMode: u.onboarding_reset_mode,
+      lastActiveAt: u.last_active_at,
+      lastStoryAt: u.last_story_at,
+      adminNotes: u.admin_notes,
+      childrenCount: childCount.get(u.id) ?? 0,
+      charactersCount: charCount.get(u.id) ?? 0,
+      storiesCount: storyCount.get(u.id) ?? 0,
+      sessionSeconds7d: sessionSec.get(u.id) ?? 0,
+      lastSignInAt: signInMap.get(u.id) ?? null,
+      usageTokens: usage?.tokens ?? 0,
+      usageUsd: usage?.usd ?? 0,
+      usageBrl: usage?.brl ?? 0,
+      usageByCategory: usage
+        ? Array.from(usage.byCategory.values()).sort((a, b) =>
+            a.category.localeCompare(b.category),
+          )
+        : [],
+      recentUsage: usage?.recent ?? [],
+    };
+  });
 
   return {
     kpis: {
@@ -193,6 +316,9 @@ export async function loadAdminDashboard(): Promise<{
         .length,
       totalChildren: children?.length ?? 0,
       totalCharacters: characters?.length ?? 0,
+      monthSpendUsd,
+      monthSpendBrl,
+      monthTokens,
     },
     accounts,
   };
@@ -211,5 +337,8 @@ function emptyKpis(): AdminKpis {
     incompleteOnboarding: 0,
     totalChildren: 0,
     totalCharacters: 0,
+    monthSpendUsd: 0,
+    monthSpendBrl: 0,
+    monthTokens: 0,
   };
 }

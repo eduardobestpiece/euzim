@@ -52,6 +52,7 @@ import {
 } from "@/lib/onboarding/child-profile";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
+import { MagicalLoading } from "@/components/ui/magical-loading";
 import type { OnboardingState } from "@/lib/auth/types";
 
 type Step =
@@ -773,17 +774,15 @@ export function OnboardingWizard({
 
       {step === "generating" ? (
         <Card className="shadow-none">
-          <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
-            <Sparkles className="size-8 animate-pulse text-amber-600" />
-            <div className="space-y-1">
-              <p className="font-heading text-xl font-semibold">
-                Criando magia Disney/Pixar…
-              </p>
-              <p className="text-sm text-muted-foreground">
-                A IA está transformando as fotos em folhas de personagem 3D.
-                Isso pode levar cerca de 1–2 minutos.
-              </p>
-            </div>
+          <CardContent className="py-8">
+            <MagicalLoading
+              messages={[
+                "Contador Sábio despertando a magia…",
+                "Pintando o avatar da criança…",
+                "Criando folhas de personagem…",
+                "Desenhando o amigo Pixar…",
+              ]}
+            />
           </CardContent>
         </Card>
       ) : null}

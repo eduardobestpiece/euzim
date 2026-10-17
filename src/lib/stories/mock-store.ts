@@ -18,6 +18,7 @@ export type MockStoryRecord = {
   textContent: { pages: { index: number; text: string }[] };
   coverImageUrl: string;
   pages: MockStoryPage[];
+  questionsData?: unknown[];
   createdAt: string;
 };
 

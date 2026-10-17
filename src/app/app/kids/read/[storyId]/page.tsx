@@ -7,7 +7,6 @@ import { StoryFlipbook } from "@/components/kids/story-flipbook";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { loadStoryForParent } from "@/lib/stories/load-story";
-import { buildQuizFromPages } from "@/lib/stories/quiz";
 import { getQuizProgress } from "@/lib/stories/games-store";
 
 export default async function KidsReadPage({
@@ -22,7 +21,7 @@ export default async function KidsReadPage({
   const story = await loadStoryForParent(storyId, user.id);
   if (!story) notFound();
 
-  const questions = buildQuizFromPages(story.title, story.pages);
+  const questions = story.questions;
   const progress = await getQuizProgress(storyId, user.id);
 
   return (

@@ -7,6 +7,10 @@ import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import {
+  estimateImageUsd,
+  recordUsageEvent,
+} from "@/lib/usage/openai-meter";
 
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
 const MAX_REFS = 6;
@@ -164,6 +168,8 @@ async function callImageEdit(input: {
   images: Buffer[];
   size?: "1024x1024" | "1024x1536" | "1536x1024";
   quality?: "low" | "medium" | "high";
+  userId?: string | null;
+  operation?: string;
 }): Promise<Buffer> {
   const key = apiKey();
   if (!key) throw new Error("OPENAI_API_KEY ausente.");
@@ -202,6 +208,14 @@ async function callImageEdit(input: {
     throw new Error(json.error?.message || `OpenAI images/edits ${res.status}`);
   }
 
+  await recordUsageEvent({
+    userId: input.userId,
+    category: "avatar_pixar",
+    model: IMAGE_MODEL,
+    operation: input.operation ?? "pixar_avatar",
+    estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1),
+  });
+
   const b64 = json.data?.[0]?.b64_json;
   if (b64) return Buffer.from(b64, "base64");
 
@@ -219,6 +233,8 @@ async function callImageEditWithSafetyFallback(input: {
   images: Buffer[];
   size?: "1024x1024" | "1024x1536" | "1536x1024";
   quality?: "low" | "medium" | "high";
+  userId?: string | null;
+  operation?: string;
 }): Promise<Buffer> {
   let lastError: Error | null = null;
   for (const prompt of input.prompts) {
@@ -228,6 +244,8 @@ async function callImageEditWithSafetyFallback(input: {
         images: input.images,
         size: input.size,
         quality: input.quality,
+        userId: input.userId,
+        operation: input.operation,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -306,6 +324,8 @@ export async function generateChildPixarAvatars(input: {
     images: faceRefs.slice(0, 3),
     size: "1024x1024",
     quality: "medium",
+    userId: input.userId,
+    operation: "child_hero",
   });
   const heroUrl = await uploadGeneratedJpeg({
     userId: input.userId,
@@ -321,6 +341,8 @@ export async function generateChildPixarAvatars(input: {
       images: faceRefs,
       size: "1536x1024",
       quality: "medium",
+      userId: input.userId,
+      operation: "child_face_sheet",
     });
     faceSheetUrl = await uploadGeneratedJpeg({
       userId: input.userId,
@@ -343,6 +365,8 @@ export async function generateChildPixarAvatars(input: {
         images: bodyRefs,
         size: "1536x1024",
         quality: "medium",
+        userId: input.userId,
+        operation: "child_body_sheet",
       });
       bodySheetUrl = await uploadGeneratedJpeg({
         userId: input.userId,
@@ -391,6 +415,8 @@ export async function generateFriendPixarAvatar(input: {
     images: refs.slice(0, 4),
     size: "1024x1024",
     quality: "medium",
+    userId: input.userId,
+    operation: "friend_hero",
   });
   const heroUrl = await uploadGeneratedJpeg({
     userId: input.userId,
@@ -408,6 +434,8 @@ export async function generateFriendPixarAvatar(input: {
       images: refs,
       size: "1536x1024",
       quality: "medium",
+      userId: input.userId,
+      operation: "friend_sheet",
     });
     faceSheetUrl = await uploadGeneratedJpeg({
       userId: input.userId,

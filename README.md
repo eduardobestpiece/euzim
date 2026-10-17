@@ -36,7 +36,9 @@ O SQL da Fase 1 está em [`supabase/schema.sql`](./supabase/schema.sql).
 
 **Não aplica automaticamente.** Revise e execute manualmente no SQL Editor do Supabase após aprovação.
 
-Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story_images`, `games`, `subscription_limits` — com FKs e RLS.
+Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story_images`, `games`, `subscription_limits`, `usage_events`, `analytics_sessions` — com FKs e RLS.
+
+Migrações incrementais em [`supabase/migrations/`](./supabase/migrations/). Cotação admin: `USD_BRL_RATE` (default `5.70`).
 
 ## Auth e onboarding (Fase 2)
 
@@ -59,7 +61,8 @@ Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story
 - **Fase 2** — Auth + onboarding + rotas protegidas ✅
 - **Fase 3** — Painel Pais (tracker 15), Personagens upsell, Kids + PIN Guard ✅
 - **Fase 4** — Motor gerador mock (Nova História, 4 páginas + Unsplash) ✅
-- Fases 5+ — quiz, share, Stripe
+- **Contador Sábio + Pixar v2** — pipeline draft→review→atos→imagens→quiz IA, wizard (tipo/volume/elenco/clarify), admin de custos (`usage_events`), MagicalLoading, wallpaper, stamp `v18-admin-costs-story` ✅
+- Fases seguintes — share, Stripe live
 
 ## Schema remoto
 

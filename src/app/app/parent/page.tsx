@@ -42,6 +42,7 @@ export default async function ParentPage() {
   }[] = [];
   let childName: string | null = null;
   let childAvatarUrl: string | null = null;
+  let childAgeYears: number | null = null;
   let billing: BillingSnapshot = {
     subscriptionStatus: "none",
     planId: null,
@@ -55,8 +56,16 @@ export default async function ParentPage() {
   if (!isSupabaseConfigured() || user.isMock) {
     const onboarding = await readMockOnboarding();
     childName = onboarding?.child?.displayName ?? null;
+    childAgeYears = onboarding?.child?.ageYears ?? null;
     if (childName) {
       characters = [{ id: "mock-primary", name: childName, isPrimary: true }];
+      if (onboarding?.friend?.displayName) {
+        characters.push({
+          id: "mock-friend",
+          name: onboarding.friend.displayName,
+          isPrimary: false,
+        });
+      }
     }
   } else {
     const db = createAdminClient() ?? (await createClient());
@@ -78,13 +87,28 @@ export default async function ParentPage() {
 
       const { data: children } = await db
         .from("children")
-        .select("display_name, avatar_url")
+        .select("display_name, avatar_url, birth_date, preferences")
         .eq("parent_id", user.id)
         .order("created_at", { ascending: true })
         .limit(1);
 
       childName = children?.[0]?.display_name ?? null;
       childAvatarUrl = children?.[0]?.avatar_url ?? null;
+      const prefs = (children?.[0]?.preferences ?? {}) as {
+        age_years?: number;
+      };
+      if (typeof prefs.age_years === "number") {
+        childAgeYears = prefs.age_years;
+      } else if (children?.[0]?.birth_date) {
+        const d = new Date(children[0].birth_date);
+        if (!Number.isNaN(d.getTime())) {
+          const now = new Date();
+          let age = now.getFullYear() - d.getFullYear();
+          const m = now.getMonth() - d.getMonth();
+          if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
+          if (age >= 0 && age < 18) childAgeYears = age;
+        }
+      }
 
       const { data: profile } = await db
         .from("users")
@@ -128,6 +152,7 @@ export default async function ParentPage() {
           characters={characters}
           childName={childName}
           childAvatarUrl={childAvatarUrl}
+          childAgeYears={childAgeYears}
           stories={stories}
           billing={billing}
         />
