@@ -331,10 +331,11 @@ Regras do image_prompt (CRÍTICO):
 - NUNCA repita o mesmo close-up da criança abraçando o amigo.
 - Ato 1 = emoção do INÍCIO da história (ex.: medo à distância), NÃO o clímax.
 - Citar visualmente a criança "${opts?.protagonistName || cast.childName}" e o amigo "${cast.friendName}" (${cast.friendKind}).
+- No image_prompt, descreva a ROUPA coerente com o beat (pijama na cama, chapéu/casaco no parque, outra roupa em visitas) — NÃO a blusa fixa do avatar sheet.
 - Se a cena for pública/com desconhecido: incluir pai/mãe/cuidador presente na imagem.
 - Pais/irmãos SEM avatar na plataforma: body-only (de costas / rosto oculto) — nunca inventar rosto.
 - Estilo: "Walt Disney / Pixar 3D animated still, cinematic soft lighting, wholesome"
-- Explicit: "do not repeat previous framing; match this beat exactly"
+- Explicit: "do not repeat previous framing; match this beat exactly; clothing matches scene not avatar sheet"
 - Sem texto na imagem, sem watermark, family-friendly.
 
 Responda SOMENTE JSON:

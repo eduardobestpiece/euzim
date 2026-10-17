@@ -1,2 +1,2 @@
 /** Versão única da plataforma — exibida ao lado de Sair / headers. */
-export const PLATFORM_BUILD = "v19";
+export const PLATFORM_BUILD = "v21-story-outfits";

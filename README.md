@@ -6,7 +6,7 @@ Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supaba
 
 **Porta do app: `5050`.** A porta `8080` é reservada para BP Sales — não use neste Project.
 
-Stamp da plataforma: `v19` (`src/lib/platform-build.ts`).
+Stamp da plataforma: `v21-story-outfits` (`src/lib/platform-build.ts`).
 
 ## Pré-requisitos
 

@@ -217,25 +217,37 @@ function scenePrompt(
       ? `REGENERATION ${retryBoost}: previous result looked too similar — change LOCATION details, CAMERA ANGLE, POSE, and FOREGROUND OBJECTS dramatically while keeping the same story beat.`
       : "";
 
-  // Continuity locks já vêm embutidos em page.imagePrompt (Scene Continuity Bible).
+  // Continuity + wardrobe já vêm embutidos em page.imagePrompt (Scene Continuity Bible).
   const continuityHint = page.imagePrompt?.includes("CONTINUITY BEAT")
-    ? "Obey CONTINUITY BEAT / PROP LOCKS / MUST SHOW / MUST NOT SHOW from the prompt above."
+    ? "Obey CONTINUITY BEAT / WARDROBE OUTFIT / PROP LOCKS / MUST SHOW / MUST NOT SHOW from the prompt above."
     : "";
+  const wardrobeHint = page.imagePrompt?.includes("WARDROBE OUTFIT")
+    ? [
+        `WARDROBE RULE: dress "${cast.childName}" in the WARDROBE OUTFIT specified for THIS act.`,
+        `Reference images are for FACE, HAIR, BODY SHAPE and Pixar identity ONLY — do NOT copy the default shirt/clothes from the turnaround sheet.`,
+        `If the story beat is park/outdoors, use outdoor clothes (and hat if locked); if bedtime, pajamas; if visits/snack, a different casual outfit — clothing must match the scene text.`,
+      ].join(" ")
+    : [
+        `WARDROBE RULE: clothing must match this story beat/scene, not the default outfit on the avatar reference sheet.`,
+        `Use references only for face, hair, and body identity.`,
+      ].join(" ");
 
   return [
     base,
     continuityHint,
+    wardrobeHint,
     `Mandatory camera: ${shot}.`,
     `This is beat ${pageIndex + 1} of ${totalPages} — unique composition required.`,
     avoid,
     uniqueness,
     `Walt Disney / Pixar quality 3D animated cinematic still.`,
     `Feature THIS exact child character "${cast.childName}" and THIS exact ${cast.friendKind} companion "${cast.friendName}" from the reference images as the clear protagonists.`,
-    `Preserve their Pixar look, colors, and identity from the references with high fidelity.`,
-    `Do not invent avatar details that contradict the reference sheets.`,
+    `Preserve Pixar face, hair, skin tone, and body identity from the references with high fidelity.`,
+    `Do NOT lock clothing to the reference sheet blouse — change outfit when the story context changes.`,
+    `Do not invent avatar face/hair details that contradict the reference sheets.`,
     familyFaceRule(cast),
     pageIndex === totalPages - 1
-      ? `Final beat: prefer a rich closing scene when the text allows (park, snack, joy, companions) — avoid only a bed close-up if the story covers more.`
+      ? `Final beat: prefer a rich closing scene when the text allows (park, snack, joy, companions) — avoid only a bed close-up if the story covers more; outfit should match that closing context.`
       : "",
     `Soft cinematic lighting, wholesome family-friendly mood, rich storybook composition.`,
     `No text, no captions, no watermark, no logos, no photorealistic humans.`,

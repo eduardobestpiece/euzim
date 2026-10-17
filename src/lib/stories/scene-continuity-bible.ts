@@ -1,4 +1,9 @@
 import type { StoryCast } from "@/lib/stories/story-cast";
+import {
+  STORY_AUX_MODEL,
+  STORYTELLER_SKILL,
+} from "@/lib/stories/storyteller-skill";
+import { meteredChatCompletion } from "@/lib/usage/openai-meter";
 
 type ChapterLike = {
   index: number;
@@ -6,22 +11,23 @@ type ChapterLike = {
   text: string;
   imagePrompt: string;
 };
-import {
-  STORY_AUX_MODEL,
-  STORYTELLER_SKILL,
-} from "@/lib/stories/storyteller-skill";
-import { meteredChatCompletion } from "@/lib/usage/openai-meter";
+
+export type SceneWardrobe = {
+  /** Descrição explícita da roupa do ato (ex.: "yellow raincoat + hat", "striped pajamas"). */
+  outfit: string;
+  hat: boolean | null;
+  backpack: boolean | null;
+  companionInsideBag: boolean | null;
+  notes: string;
+  /** Se true, manter a mesma outfit do ato anterior (texto não mudou de contexto). */
+  keepFromPrevious: boolean;
+};
 
 export type SceneBibleEntry = {
   actIndex: number;
   beat: string;
   expression: string;
-  wardrobe: {
-    hat: boolean | null;
-    backpack: boolean | null;
-    companionInsideBag: boolean | null;
-    notes: string;
-  };
+  wardrobe: SceneWardrobe;
   castVisible: string[];
   environment: string;
   mustShow: string[];
@@ -54,6 +60,15 @@ function parseAct(raw: unknown, index: number): SceneBibleEntry | null {
       : {};
   const beat = String(r.beat ?? "").trim();
   if (!beat) return null;
+
+  const outfit = String(
+    wardrobeRaw.outfit ??
+      wardrobeRaw.clothing ??
+      wardrobeRaw.clothes ??
+      wardrobeRaw.notes ??
+      "",
+  ).trim();
+
   return {
     actIndex: Number.isInteger(Number(r.actIndex ?? r.index))
       ? Number(r.actIndex ?? r.index)
@@ -61,12 +76,18 @@ function parseAct(raw: unknown, index: number): SceneBibleEntry | null {
     beat,
     expression: String(r.expression ?? "atenta").trim() || "atenta",
     wardrobe: {
+      outfit,
       hat: parseBoolish(wardrobeRaw.hat ?? wardrobeRaw.chapeu),
       backpack: parseBoolish(wardrobeRaw.backpack ?? wardrobeRaw.mochila),
       companionInsideBag: parseBoolish(
         wardrobeRaw.companionInsideBag ?? wardrobeRaw.bingoInside,
       ),
       notes: String(wardrobeRaw.notes ?? "").trim(),
+      keepFromPrevious: Boolean(
+        wardrobeRaw.keepFromPrevious ??
+          wardrobeRaw.keep_from_previous ??
+          wardrobeRaw.sameAsPrevious,
+      ),
     },
     castVisible: Array.isArray(r.cast_visible)
       ? r.cast_visible.map(String)
@@ -95,7 +116,7 @@ function parseAct(raw: unknown, index: number): SceneBibleEntry | null {
 
 /**
  * Após o split dos atos, gera a Scene Continuity Bible (JSON por ato)
- * e acumula prop locks (chapéu, mochila, Bingo dentro/fora…).
+ * com wardrobe explícito + prop locks acumulados.
  */
 export async function buildSceneContinuityBible(input: {
   userId?: string | null;
@@ -125,15 +146,24 @@ export async function buildSceneContinuityBible(input: {
 
 Você é o diretor de continuidade visual (Scene Continuity Bible).
 Para CADA ato, produza um JSON estruturado que a ilustração DEVE obedecer.
-Regras:
+
+## Identidade vs roupa (CRÍTICO)
+- O avatar Pixar define ROSTO, CABELO, CORPO e identidade — NÃO a roupa do turnaround/sheet.
+- A ROUPA (wardrobe.outfit) DEVE seguir o beat/texto do ato e o contexto da cena.
+  Exemplos: chapéu + casaco no parque; pijama na cama; outra roupa em visitas/lanche; roupa de passeio na rua.
+- NUNCA force "sempre a mesma blusa do avatar". Se o texto muda de cena/contexto, mude a roupa.
+- Se o texto mantém a mesma saída/atividade, use keepFromPrevious=true e a MESMA outfit.
+
+## Outras regras
 - beat = ação literal do texto (não invente).
 - expression: preocupada | resistente | atenta | alegre | curiosa | corajosa | emocionada…
-- wardrobe: chapéu sim/não, mochila, companheiro (pet/toy) dentro/fora da bolsa.
-- Se o texto coloca o chapéu no ato N, ele permanece nos atos seguintes até o texto dizer o contrário.
+- wardrobe.outfit: descrição CURTA em inglês da roupa completa do ato (cores + peças).
+- wardrobe: hat, backpack, companionInsideBag (pet/toy dentro/fora da bolsa).
+- Se o texto coloca o chapéu no ato N, permanece nos atos seguintes até o texto dizer o contrário.
 - NPCs vulneráveis (ex.: morador de rua): realistas — cobertores, pertences, aparência desgastada; NÃO "vovô limpo".
 - must_show / must_not_show: props e elementos obrigatórios / proibidos.
-- Último ato: cena rica se o texto cobrir (parque, lanche, alegria, amigos) — não só close-up na cama.
-- Não contradiga o avatar da criança (sem inventar olhos de botão etc.).
+- Último ato: cena rica se o texto cobrir (parque, lanche, alegria) — não só close-up na cama.
+- Não invente detalhes de rosto/cabelo que contradigam o avatar.
 
 Responda SOMENTE JSON:
 {
@@ -143,9 +173,11 @@ Responda SOMENTE JSON:
       "beat": string,
       "expression": string,
       "wardrobe": {
+        "outfit": string,
         "hat": boolean|null,
         "backpack": boolean|null,
         "companionInsideBag": boolean|null,
+        "keepFromPrevious": boolean,
         "notes": string
       },
       "cast_visible": string[],
@@ -167,7 +199,7 @@ Título: ${input.title}
 ATOS:
 ${digest}
 
-Gere a Continuity Bible agora.`,
+Gere a Continuity Bible agora. Outfit por ato coerente com o texto (não a blusa fixa do sheet).`,
         },
       ],
     },
@@ -185,19 +217,65 @@ Gere a Continuity Bible agora.`,
     }
     if (acts.length === 0) return null;
 
-    // Acumula locks de wardrobe ao longo dos atos
+    // Acumula locks de wardrobe / outfit ao longo dos atos
     const cumulativeLocks: string[] = [];
     let hatOn: boolean | null = null;
     let backpackOn: boolean | null = null;
     let companionIn: boolean | null = null;
+    let lockedOutfit: string | null = null;
 
-    for (const act of acts) {
+    for (let i = 0; i < acts.length; i++) {
+      const act = acts[i];
       if (act.wardrobe.hat != null) hatOn = act.wardrobe.hat;
       if (act.wardrobe.backpack != null) backpackOn = act.wardrobe.backpack;
       if (act.wardrobe.companionInsideBag != null) {
         companionIn = act.wardrobe.companionInsideBag;
       }
+
+      // Outfit: lock se keepFromPrevious ou se texto não trocou e já havia outfit
+      if (act.wardrobe.keepFromPrevious && lockedOutfit) {
+        act.wardrobe.outfit = lockedOutfit;
+      } else if (act.wardrobe.outfit) {
+        lockedOutfit = act.wardrobe.outfit;
+      } else if (lockedOutfit) {
+        act.wardrobe.outfit = lockedOutfit;
+        act.wardrobe.keepFromPrevious = true;
+      } else if (!act.wardrobe.outfit) {
+        // Fallback mínimo por ambiente se o modelo omitir
+        const env = act.environment.toLowerCase();
+        const beat = act.beat.toLowerCase();
+        if (
+          env.includes("bed") ||
+          env.includes("cama") ||
+          beat.includes("pijama") ||
+          beat.includes("pajama") ||
+          beat.includes("dorm")
+        ) {
+          act.wardrobe.outfit = "cozy striped pajamas";
+        } else if (
+          env.includes("park") ||
+          env.includes("parque") ||
+          beat.includes("chapéu") ||
+          beat.includes("hat")
+        ) {
+          act.wardrobe.outfit =
+            "casual outdoor play clothes with a matching hat";
+        } else {
+          act.wardrobe.outfit =
+            "age-appropriate casual clothes matching this scene (not the default avatar shirt)";
+        }
+        lockedOutfit = act.wardrobe.outfit;
+      }
+
       const locks: string[] = [...act.propLocks];
+      if (act.wardrobe.outfit) {
+        locks.push(
+          `child outfit THIS act: ${act.wardrobe.outfit}` +
+            (act.wardrobe.keepFromPrevious
+              ? " (same as previous act — continuity lock)"
+              : " (changed for this scene/context)"),
+        );
+      }
       if (hatOn === true) locks.push("child wearing the same hat from earlier acts");
       if (hatOn === false) locks.push("child without hat");
       if (backpackOn === true) locks.push("child wearing the same backpack");
@@ -208,7 +286,9 @@ Gere a Continuity Bible agora.`,
         );
       }
       if (companionIn === false) {
-        locks.push(`${input.cast.friendName} visible beside the child, outside bag`);
+        locks.push(
+          `${input.cast.friendName} visible beside the child, outside bag`,
+        );
       }
       act.propLocks = Array.from(new Set(locks));
       for (const lock of act.propLocks) {
@@ -222,7 +302,7 @@ Gere a Continuity Bible agora.`,
   }
 }
 
-/** Injeta bible + locks no image_prompt de cada capítulo. */
+/** Injeta bible + wardrobe + locks no image_prompt de cada capítulo. */
 export function applyBibleToChapters<T extends ChapterLike>(
   chapters: T[],
   bible: ContinuityBible | null,
@@ -242,16 +322,25 @@ export function applyBibleToChapters<T extends ChapterLike>(
       ? `MUST NOT SHOW: ${act.mustNotShow.join("; ")}.`
       : "";
     const npc = act.npcNotes ? `NPC NOTES: ${act.npcNotes}.` : "";
+    const outfitLine = act.wardrobe.outfit
+      ? `WARDROBE OUTFIT: ${act.wardrobe.outfit}.${
+          act.wardrobe.keepFromPrevious
+            ? " Keep same outfit as previous act."
+            : " Outfit follows THIS story beat/scene — not the default avatar shirt from the reference sheet."
+        }`
+      : "";
     const enrichment = [
       `CONTINUITY BEAT: ${act.beat}`,
       `EXPRESSION: ${act.expression}`,
+      outfitLine,
       `ENVIRONMENT: ${act.environment || "match story text"}`,
       `CAST VISIBLE: ${act.castVisible.join(", ") || "as in text"}`,
       lockLine,
       must,
       mustNot,
       npc,
-      "Match the literal story beat; do not invent contradictory avatar details.",
+      "Identity from avatar refs (face, hair, body). Clothing from WARDROBE OUTFIT for this act.",
+      "Match the literal story beat; do not invent contradictory avatar face/hair details.",
     ]
       .filter(Boolean)
       .join(" ");
@@ -274,6 +363,9 @@ export function biblePromptFragment(
   return [
     `Continuity beat: ${act.beat}.`,
     `Child expression: ${act.expression}.`,
+    act.wardrobe.outfit
+      ? `Wardrobe outfit: ${act.wardrobe.outfit}.`
+      : "",
     act.propLocks.length ? `Locked props: ${act.propLocks.join("; ")}.` : "",
     act.mustShow.length ? `Must show: ${act.mustShow.join("; ")}.` : "",
     act.mustNotShow.length
