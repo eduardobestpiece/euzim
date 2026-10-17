@@ -18,6 +18,7 @@ import {
   writeMockStories,
   type MockStoryRecord,
 } from "@/lib/stories/mock-store";
+import { insertStoryResilient } from "@/lib/stories/persist-helpers";
 import { getStoryUsage } from "@/lib/stories/usage";
 
 export type GenerateStoryResult = {
@@ -132,36 +133,30 @@ export async function generateStoryAction(
 
   if (db && cast.childId !== "mock-child") {
     try {
-      const { data: story, error: storyError } = await db
-        .from("stories")
-        .insert({
-          parent_id: user.id,
-          child_id: cast.childId,
-          character_id: cast.characterId,
-          title: drafted.title,
-          status: "ready",
-          visibility: "private",
-          is_public: false,
-          text_content: textContent,
-          questions_data: questionsData,
-          cover_image_url: coverImageUrl,
-          template_id: pipeline.templateId ?? null,
-          generation_meta: {
-            engine,
-            theme,
-            pages: pages.length,
-            quizCount: questionsData.length,
-            pipeline: "outline-expand-split-pixar-quiz",
-            fromTemplate: Boolean(pipeline.fromTemplate),
-            templateId: pipeline.templateId ?? null,
-            friend: { name: cast.friendName, kind: cast.friendKind },
-            moral: pipeline.moral,
-            stamp: PLATFORM_BUILD,
-          },
-          published_at: new Date().toISOString(),
-        })
-        .select("id, share_token")
-        .single();
+      const { data: story, error: storyError } = await insertStoryResilient(db, {
+        parent_id: user.id,
+        child_id: cast.childId,
+        character_id: cast.characterId,
+        title: drafted.title,
+        status: "ready",
+        text_content: textContent,
+        questions_data: questionsData,
+        cover_image_url: coverImageUrl,
+        template_id: pipeline.templateId ?? null,
+        generation_meta: {
+          engine,
+          theme,
+          pages: pages.length,
+          quizCount: questionsData.length,
+          pipeline: "outline-expand-split-pixar-quiz",
+          fromTemplate: Boolean(pipeline.fromTemplate),
+          templateId: pipeline.templateId ?? null,
+          friend: { name: cast.friendName, kind: cast.friendKind },
+          moral: pipeline.moral,
+          stamp: PLATFORM_BUILD,
+        },
+        published_at: new Date().toISOString(),
+      });
 
       if (!storyError && story?.id) {
         await db.from("story_images").insert(

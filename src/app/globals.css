@@ -9,9 +9,9 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --font-story-display: var(--font-story-display), ui-rounded, system-ui, sans-serif;
-  --font-story-body: var(--font-story-body), ui-rounded, system-ui, sans-serif;
+  --font-heading: var(--font-fredoka), "Fredoka", ui-rounded, system-ui, sans-serif;
+  --font-story-display: var(--font-fredoka), "Fredoka", ui-rounded, system-ui, sans-serif;
+  --font-story-body: var(--font-nunito), "Nunito", ui-rounded, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -163,11 +163,11 @@
 }
 
 .font-story-display {
-  font-family: var(--font-story-display);
+  font-family: var(--font-fredoka), "Fredoka", ui-rounded, system-ui, sans-serif;
 }
 
 .font-story-body {
-  font-family: var(--font-story-body);
+  font-family: var(--font-nunito), "Nunito", ui-rounded, system-ui, sans-serif;
 }
 
 /* ─── Landing Home (marketing) ─── */
@@ -283,25 +283,32 @@
   animation: landing-star-twinkle 2.4s ease-in-out infinite;
 }
 
-.landing-hero-brand {
-  animation: landing-fade-up 640ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 .landing-hero-title {
-  animation: landing-fade-up 700ms 70ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: landing-fade-up 700ms 40ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .landing-hero-copy > .font-story-body,
 .landing-hero-copy > div.font-story-body {
-  animation: landing-fade-up 720ms 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: landing-fade-up 720ms 100ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .landing-hero-cta {
-  animation: landing-fade-up 760ms 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: landing-fade-up 760ms 160ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-trust {
+  animation: landing-fade-up 800ms 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-hero-visual {
+  /* free cutout: sem card, sem sombra-caixa */
+  background: transparent;
 }
 
 .landing-hero-image {
   animation: landing-float 5.5s ease-in-out infinite;
+  filter: drop-shadow(0 22px 28px rgba(72, 40, 120, 0.12));
+  background: transparent;
 }
 
 .landing-purpose {
@@ -366,11 +373,11 @@
   .landing-hero-atmosphere,
   .landing-hero-image,
   .landing-cta-star,
-  .landing-hero-brand,
   .landing-hero-title,
   .landing-hero-copy > .font-story-body,
   .landing-hero-copy > div.font-story-body,
   .landing-hero-cta,
+  .landing-trust,
   .landing-purpose-item {
     animation: none !important;
   }

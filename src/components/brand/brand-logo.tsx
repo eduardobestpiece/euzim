@@ -3,21 +3,25 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const VARIANTS = {
-  /** Purple + star — default on light UI */
+  /** Purple + star - default on light UI */
   color: "/brand/euzim-logo-color.png",
-  /** Black strokes — light backgrounds when color is too busy */
+  /** Black strokes - light backgrounds when color is too busy */
   mono: "/brand/euzim-logo-mono.png",
-  /** White wordmark — dark / immersive backgrounds */
+  /** Logo preta sólida - branding em textos / fundos claros */
+  black: "/brand/euzim-logo-black.png",
+  /** White wordmark - dark / immersive backgrounds */
   onDark: "/brand/euzim-logo-on-dark.png",
 } as const;
 
 const SIZES = {
   /** App shell / marketing header */
   header: { height: 36, width: 96, className: "h-8 w-auto sm:h-9" },
-  /** Login / signup / landing hero */
+  /** Login / signup */
   auth: { height: 72, width: 192, className: "h-14 w-auto sm:h-16" },
   /** Compact chips, onboarding pill, reader chrome */
   compact: { height: 28, width: 72, className: "h-6 w-auto sm:h-7" },
+  /** Inline no fluxo de texto (~1em via className) */
+  inline: { height: 28, width: 72, className: "h-[1.05em] w-auto" },
 } as const;
 
 export type BrandLogoVariant = keyof typeof VARIANTS;

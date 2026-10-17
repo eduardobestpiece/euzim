@@ -12,16 +12,16 @@ const fontMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-/** Display amigável para títulos do livro (modo leitura). */
+/** Display lúdico e legível (títulos marketing + livro). */
 const fontStoryDisplay = Fredoka({
-  variable: "--font-story-display",
+  variable: "--font-fredoka",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
-/** Corpo arredondado e legível para texto infantil. */
+/** Corpo arredondado, altamente legível para texto infantil. */
 const fontStoryBody = Nunito({
-  variable: "--font-story-body",
+  variable: "--font-nunito",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
 });
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     template: "%s · Euzim",
   },
   description:
-    "Crie histórias onde a sua criança é a protagonista. O Euzim constrói o hábito da leitura — e nós fazemos tudo por você.",
+    "Crie histórias onde a sua criança é a protagonista. O Euzim constrói o hábito da leitura, e nós fazemos tudo por você.",
   applicationName: "Euzim",
   icons: {
     icon: [
@@ -45,9 +45,9 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Euzim",
     description:
-      "Crie histórias onde a sua criança é a protagonista. O Euzim constrói o hábito da leitura — e nós fazemos tudo por você.",
+      "Crie histórias onde a sua criança é a protagonista. O Euzim constrói o hábito da leitura, e nós fazemos tudo por você.",
     siteName: "Euzim",
-    images: [{ url: "/brand/euzim-hero-serena-boy.jpg" }],
+    images: [{ url: "/brand/euzim-hero-serena-boy.png" }],
   },
 };
 
@@ -61,7 +61,7 @@ export default function RootLayout({
     >
       {/* suppressHydrationWarning: extensões (ex. ColorZilla cz-shortcut-listen) alteram o <body> */}
       <body
-        className="flex min-h-full flex-col font-sans"
+        className="flex min-h-full flex-col font-story-body antialiased"
         suppressHydrationWarning
       >
         {children}

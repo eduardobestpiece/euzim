@@ -28,7 +28,7 @@ function IconShell({
   );
 }
 
-/** Escudo + estrela — vencer medos */
+/** Escudo + estrela - vencer medos */
 export function IconOvercomeFears({ className }: { className?: string }) {
   return (
     <IconShell className={cn("bg-[var(--euzim-mint-soft)]", className)}>
@@ -49,7 +49,7 @@ export function IconOvercomeFears({ className }: { className?: string }) {
   );
 }
 
-/** Livro aberto — bons hábitos */
+/** Livro aberto - bons hábitos */
 export function IconGoodHabits({ className }: { className?: string }) {
   return (
     <IconShell className={cn("bg-[var(--euzim-star-soft)]", className)}>
@@ -76,7 +76,7 @@ export function IconGoodHabits({ className }: { className?: string }) {
   );
 }
 
-/** Coração + caminho — valores */
+/** Coração + caminho - valores */
 export function IconBuildValues({ className }: { className?: string }) {
   return (
     <IconShell className={cn("bg-[var(--euzim-sky-soft)]", className)}>

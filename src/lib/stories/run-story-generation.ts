@@ -19,6 +19,7 @@ import {
   writeMockStories,
   type MockStoryRecord,
 } from "@/lib/stories/mock-store";
+import { insertStoryResilient } from "@/lib/stories/persist-helpers";
 import { attachUsageToStory } from "@/lib/usage/openai-meter";
 import { mergeUsageContext } from "@/lib/usage/usage-context";
 import { loadCharactersByIdsForStory } from "@/lib/social/friend-cast";
@@ -274,53 +275,47 @@ export async function runStoryGeneration(input: {
 
   if (db && cast.childId !== "mock-child") {
     try {
-      const { data: story, error: storyError } = await db
-        .from("stories")
-        .insert({
-          parent_id: userId,
-          child_id: cast.childId,
-          character_id: cast.characterId,
-          title: drafted.title,
-          status: "ready",
-          visibility: "private",
-          is_public: false,
-          text_content: textContent,
-          questions_data: questionsData,
-          cover_image_url: coverImageUrl,
-          template_id: pipeline.templateId ?? null,
-          generation_meta: {
-            engine,
-            theme,
-            storyType: payload.storyType ?? null,
-            wordTarget: payload.wordTarget ?? null,
-            wordVolume: payload.wordVolume ?? null,
-            languageLevel: payload.languageLevel ?? null,
-            christianValues: Boolean(payload.christianValues),
-            pages: pages.length,
-            quizCount: questionsData.length,
-            pipeline: "outline-expand-split-bible-pixar-quiz",
-            fromTemplate: Boolean(pipeline.fromTemplate),
-            templateId: pipeline.templateId ?? null,
-            friend: {
-              name: cast.friendName,
-              kind: cast.friendKind,
-              gender: cast.friendGender,
-            },
-            characterIds: payload.characterIds ?? [],
-            guestCharacterIds,
-            friendParentId: payload.friendParentId ?? null,
-            coPlayNames: castNames ?? [],
-            moral: pipeline.moral,
-            stamp: PLATFORM_BUILD,
-            auxModel: "gpt-4o-mini",
-            textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
-            jobId: input.jobId ?? null,
-            generationKey: storyKey,
+      const { data: story, error: storyError } = await insertStoryResilient(db, {
+        parent_id: userId,
+        child_id: cast.childId,
+        character_id: cast.characterId,
+        title: drafted.title,
+        status: "ready",
+        text_content: textContent,
+        questions_data: questionsData,
+        cover_image_url: coverImageUrl,
+        template_id: pipeline.templateId ?? null,
+        generation_meta: {
+          engine,
+          theme,
+          storyType: payload.storyType ?? null,
+          wordTarget: payload.wordTarget ?? null,
+          wordVolume: payload.wordVolume ?? null,
+          languageLevel: payload.languageLevel ?? null,
+          christianValues: Boolean(payload.christianValues),
+          pages: pages.length,
+          quizCount: questionsData.length,
+          pipeline: "outline-expand-split-bible-pixar-quiz",
+          fromTemplate: Boolean(pipeline.fromTemplate),
+          templateId: pipeline.templateId ?? null,
+          friend: {
+            name: cast.friendName,
+            kind: cast.friendKind,
+            gender: cast.friendGender,
           },
-          published_at: new Date().toISOString(),
-        })
-        .select("id, share_token")
-        .single();
+          characterIds: payload.characterIds ?? [],
+          guestCharacterIds,
+          friendParentId: payload.friendParentId ?? null,
+          coPlayNames: castNames ?? [],
+          moral: pipeline.moral,
+          stamp: PLATFORM_BUILD,
+          auxModel: "gpt-4o-mini",
+          textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
+          jobId: input.jobId ?? null,
+          generationKey: storyKey,
+        },
+        published_at: new Date().toISOString(),
+      });
 
       if (!storyError && story?.id) {
         mergeUsageContext({ storyId: story.id });

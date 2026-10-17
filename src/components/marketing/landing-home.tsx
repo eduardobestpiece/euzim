@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/brand-logo";
+import { InlineBrand } from "@/components/brand/inline-brand";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -9,24 +10,35 @@ import {
 import { Button } from "@/components/ui/button";
 import { formatBrl } from "@/lib/billing/character-packs";
 import { STARTER_SUBSCRIPTION } from "@/lib/billing/plans";
+import type { ComponentType, ReactNode } from "react";
 
-const PURPOSES = [
+const PURPOSES: {
+  title: string;
+  body: ReactNode;
+  Icon: ComponentType;
+}[] = [
   {
     title: "Vencer medos",
-    body: "Escuro, agulha, primeira noite longe de casa… Nas histórias do Euzim, a criança se vê superando o que a assusta — com coragem e carinho.",
+    body: (
+      <>
+        Escuro, agulha, primeira noite longe de casa… Nas histórias do{" "}
+        <InlineBrand />, a criança se vê superando o que a assusta, com coragem
+        e carinho.
+      </>
+    ),
     Icon: IconOvercomeFears,
   },
   {
     title: "Criar bons hábitos",
-    body: "Troque a ansiedade dos jogos e dos vídeos curtos pela leitura que treina foco, calma e imaginação — um hábito que cresce com ela.",
+    body: "Troque a ansiedade dos jogos e dos vídeos curtos pela leitura que treina foco, calma e imaginação - um hábito que cresce com ela.",
     Icon: IconGoodHabits,
   },
   {
     title: "Construir valores",
-    body: "Aventuras leves que ensinam caminhos da família — respeito, generosidade, coragem — sem sermão, só história boa de viver juntos.",
+    body: "Aventuras leves que ensinam caminhos da família: respeito, generosidade, coragem. Sem sermão, só história boa de viver juntos.",
     Icon: IconBuildValues,
   },
-] as const;
+];
 
 export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
   const priceLabel = formatBrl(STARTER_SUBSCRIPTION.priceBrl);
@@ -56,21 +68,14 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
 
         <div className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 items-center gap-6 px-5 pb-10 pt-2 sm:px-8 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:gap-4 md:px-12 md:pb-16 lg:gap-8">
           <div className="landing-hero-copy flex flex-col items-start gap-5 md:gap-6">
-            <BrandLogo
-              size="auth"
-              href={null}
-              priority
-              className="landing-hero-brand h-[3.25rem] w-auto sm:h-16 md:h-[4.5rem]"
-            />
-
             <h1 className="landing-hero-title font-story-display max-w-[18ch] text-[1.85rem] leading-[1.12] tracking-tight text-[var(--euzim-ink)] sm:text-4xl md:text-[2.75rem] lg:text-[3.15rem]">
               Crie histórias onde a sua criança é a protagonista
             </h1>
 
             <div className="font-story-body max-w-md space-y-3 text-[0.98rem] leading-relaxed text-[var(--euzim-ink-soft)] sm:text-base md:max-w-lg md:text-[1.05rem]">
               <p>
-                Se o celular prende a atenção com jogos e vídeos sem fim, o
-                Euzim constrói o{" "}
+                Se o celular prende a atenção com jogos e vídeos sem fim, o{" "}
+                <InlineBrand /> constrói o{" "}
                 <span className="font-semibold text-[var(--euzim-ink)]">
                   hábito da leitura
                 </span>{" "}
@@ -81,12 +86,12 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
                 .
               </p>
               <p className="landing-hero-reassure">
-                E não se preocupe: você não precisa criar nenhuma história —{" "}
+                E não se preocupe: você não precisa criar nenhuma história.{" "}
                 <mark className="landing-mark">nós fazemos tudo por você</mark>.
               </p>
             </div>
 
-            <div className="landing-hero-cta pt-1">
+            <div className="landing-hero-cta flex flex-col items-start gap-2.5 pt-1">
               <Button
                 asChild
                 size="lg"
@@ -97,11 +102,14 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
                   Começar a Criar Histórias · {priceLabel}
                 </Link>
               </Button>
+              <p className="landing-trust font-story-body text-[0.78rem] tracking-wide text-[var(--euzim-ink-soft)] sm:text-[0.82rem]">
+                Compra Segura - Stripe - Acesso Imediato
+              </p>
             </div>
 
             {mockMode ? (
               <p className="font-story-body text-sm text-amber-800/90">
-                Modo demo — configure `.env.local` para login real.
+                Modo demo - configure `.env.local` para login real.
               </p>
             ) : null}
           </div>
@@ -109,15 +117,15 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
           <div className="landing-hero-visual relative mx-auto w-full max-w-lg md:mx-0 md:max-w-none md:justify-self-end">
             <div
               aria-hidden
-              className="landing-hero-blob pointer-events-none absolute -inset-[8%] -z-10"
+              className="landing-hero-blob pointer-events-none absolute -inset-[12%] -z-10"
             />
             <Image
-              src="/brand/euzim-hero-serena-boy.jpg"
-              alt="Serena e um menino vivendo aventuras juntos — protagonistas de uma história Euzim"
-              width={1280}
-              height={720}
+              src="/brand/euzim-hero-serena-boy.png"
+              alt="Serena e um menino correndo juntos, protagonistas de uma história Euzim"
+              width={878}
+              height={665}
               priority
-              className="landing-hero-image h-auto w-full object-contain object-bottom drop-shadow-[0_18px_40px_rgba(72,40,120,0.14)]"
+              className="landing-hero-image h-auto w-full object-contain object-bottom"
               sizes="(max-width: 768px) 92vw, 48vw"
             />
           </div>
@@ -138,9 +146,10 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
           <div className="mx-auto max-w-2xl text-center">
             <h2
               id="proposito-heading"
-              className="font-story-display text-2xl tracking-tight text-[var(--euzim-ink)] sm:text-3xl md:text-[2.1rem]"
+              className="font-story-display inline-flex flex-wrap items-center justify-center gap-x-2 text-2xl tracking-tight text-[var(--euzim-ink)] sm:text-3xl md:text-[2.1rem]"
             >
-              Para que serve o Euzim
+              <span>Para que serve o</span>
+              <InlineBrand className="h-[1.15em] translate-y-[-0.04em]" />
             </h2>
             <p className="font-story-body mt-3 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
               Três caminhos simples: menos medo, melhores hábitos, valores que
