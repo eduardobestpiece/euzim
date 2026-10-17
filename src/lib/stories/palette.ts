@@ -16,6 +16,9 @@ export type StoryPalette = {
   panelBg: string;
   panelBorder: string;
   glow: string;
+  /** Papel opaco do livro (sem transparência). */
+  paper: string;
+  paperEdge: string;
 };
 
 function clamp(n: number, min = 0, max = 255): number {
@@ -142,12 +145,19 @@ export function buildPaletteFromColors(
   dominant: Rgb,
   accent: Rgb,
 ): StoryPalette {
-  const soft = mix(dominant, { r: 255, g: 252, b: 248 }, 0.55);
-  const deep = mix(saturate(dominant, 1.15), { r: 20, g: 18, b: 30 }, 0.35);
-  const panel = mix(soft, { r: 255, g: 255, b: 255 }, 0.42);
-  const ink = contrastInk(panel);
-  const muted = mix(ink, panel, 0.42);
+  // Mantém mais cor da ilustração (evita lavar para branco puro).
+  const soft = mix(dominant, { r: 255, g: 248, b: 240 }, 0.38);
+  const deep = mix(saturate(dominant, 1.2), { r: 32, g: 22, b: 18 }, 0.42);
+  const paperRgb = mix(dominant, { r: 255, g: 246, b: 232 }, 0.48);
+  const panel = mix(paperRgb, { r: 255, g: 252, b: 246 }, 0.18);
+  // Tinta escura o suficiente para contraste forte no papel claro.
+  const ink =
+    luminance(paperRgb) > 0.55
+      ? { r: 42, g: 28, b: 20 }
+      : contrastInk(paperRgb);
+  const muted = mix(ink, paperRgb, 0.38);
   const glow = saturate(accent, 1.25);
+  const edge = mix(deep, accent, 0.35);
 
   return {
     dominant: rgbToCss(dominant),
@@ -156,9 +166,11 @@ export function buildPaletteFromColors(
     deep: rgbToCss(deep),
     text: rgbToCss(ink),
     textMuted: rgbToCss(muted),
-    panelBg: rgbToRgba(panel, 0.92),
-    panelBorder: rgbToRgba(mix(accent, dominant, 0.5), 0.35),
-    glow: rgbToRgba(glow, 0.45),
+    panelBg: rgbToRgba(panel, 0.97),
+    panelBorder: rgbToRgba(mix(accent, dominant, 0.5), 0.28),
+    glow: rgbToRgba(glow, 0.4),
+    paper: rgbToCss(paperRgb),
+    paperEdge: rgbToCss(edge),
   };
 }
 
@@ -167,13 +179,26 @@ export const DEFAULT_PALETTE: StoryPalette = buildPaletteFromColors(
   { r: 118, g: 168, b: 196 },
 );
 
-/** Estilo CSS inline para o fundo mágico da leitura. */
+/** Estilo CSS inline para o ambiente ao redor do livro. */
 export function paletteBackgroundStyle(palette: StoryPalette): CSSProperties {
   return {
     background: `
-      radial-gradient(ellipse 90% 60% at 15% 0%, ${palette.glow}, transparent 55%),
-      radial-gradient(ellipse 80% 50% at 95% 20%, ${palette.accent}55, transparent 50%),
-      linear-gradient(165deg, ${palette.soft} 0%, ${palette.dominant} 48%, ${palette.deep} 100%)
+      radial-gradient(ellipse 70% 45% at 12% 8%, ${palette.glow}, transparent 58%),
+      radial-gradient(ellipse 60% 40% at 92% 18%, ${palette.accent}44, transparent 52%),
+      radial-gradient(ellipse 80% 55% at 50% 100%, ${palette.deep}55, transparent 60%),
+      linear-gradient(168deg, ${palette.soft} 0%, ${palette.dominant} 42%, ${palette.deep} 100%)
+    `,
+  };
+}
+
+/** Papel opaco da página — contraste estável sob o texto. */
+export function palettePaperStyle(palette: StoryPalette): CSSProperties {
+  return {
+    backgroundColor: palette.paper,
+    color: palette.text,
+    boxShadow: `
+      inset 0 1px 0 rgba(255,255,255,0.55),
+      inset 0 -18px 40px ${palette.deep}14
     `,
   };
 }

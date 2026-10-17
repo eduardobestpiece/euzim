@@ -25,8 +25,8 @@ export default async function KidsReadPage({
   const progress = await getQuizProgress(storyId, user.id);
 
   return (
-    <AppShell user={user} title="Ler história" kidsMode>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <AppShell user={user} title="Ler história" kidsMode wide>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
         <Button asChild variant="ghost" size="sm">
           <Link href="/app/kids" className="gap-1.5">
             <ArrowLeft className="size-3.5" />

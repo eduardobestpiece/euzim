@@ -9,7 +9,7 @@ type Page = {
   altText: string;
 };
 
-/** Leitura pública — mesmo modo leitura (setas / swipe / imagem sticky). */
+/** Leitura pública — mesmo modo livro (setas / swipe / página ilustrada). */
 export function PublicStoryReader({
   title,
   pages,

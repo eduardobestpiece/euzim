@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fredoka, Geist, Geist_Mono, Nunito } from "next/font/google";
 import "./globals.css";
 
 const fontSans = Geist({
@@ -10,6 +10,20 @@ const fontSans = Geist({
 const fontMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+/** Display amigável para títulos do livro (modo leitura). */
+const fontStoryDisplay = Fredoka({
+  variable: "--font-story-display",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+/** Corpo arredondado e legível para texto infantil. */
+const fontStoryBody = Nunito({
+  variable: "--font-story-body",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -24,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${fontSans.variable} ${fontMono.variable} h-full antialiased`}
+      className={`${fontSans.variable} ${fontMono.variable} ${fontStoryDisplay.variable} ${fontStoryBody.variable} h-full antialiased`}
     >
       {/* suppressHydrationWarning: extensões (ex. ColorZilla cz-shortcut-listen) alteram o <body> */}
       <body

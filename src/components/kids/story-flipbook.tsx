@@ -14,6 +14,7 @@ import { QuizTherapy } from "@/components/kids/quiz-therapy";
 import { useImagePalette } from "@/hooks/use-image-palette";
 import {
   paletteBackgroundStyle,
+  palettePaperStyle,
   type StoryPalette,
 } from "@/lib/stories/palette";
 import type { QuizQuestion } from "@/lib/stories/quiz";
@@ -35,18 +36,67 @@ function ReadingShell({
 }) {
   return (
     <div
-      className="relative min-h-[70vh] w-full transition-[background] duration-700 md:min-h-[75vh]"
+      className="relative w-full overflow-hidden rounded-[1.75rem] transition-[background] duration-700 md:rounded-[2rem]"
       style={paletteBackgroundStyle(palette)}
     >
       <div
-        className="pointer-events-none absolute inset-0 opacity-45"
+        className="pointer-events-none absolute inset-0 opacity-50"
         style={{
-          backgroundImage: `radial-gradient(circle at 20% 10%, ${palette.glow}, transparent 42%), radial-gradient(circle at 85% 70%, ${palette.accent}40, transparent 40%)`,
+          backgroundImage: `
+            radial-gradient(circle at 18% 12%, ${palette.glow}, transparent 42%),
+            radial-gradient(circle at 88% 78%, ${palette.accent}33, transparent 38%)
+          `,
+        }}
+        aria-hidden
+      />
+      {/* textura suave de papel no ambiente */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-multiply"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`,
         }}
         aria-hidden
       />
       <div className="relative z-10">{children}</div>
     </div>
+  );
+}
+
+function NavOrb({
+  label,
+  disabled,
+  onClick,
+  side,
+  palette,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  side: "left" | "right";
+  palette: StoryPalette;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`fixed top-1/2 z-40 hidden size-12 -translate-y-1/2 items-center justify-center rounded-full shadow-lg transition duration-300 hover:scale-105 disabled:pointer-events-none disabled:opacity-25 md:flex ${
+        side === "left" ? "left-3 lg:left-5" : "right-3 lg:right-5"
+      }`}
+      style={{
+        background: palette.paper,
+        color: palette.deep,
+        border: `2px solid ${palette.paperEdge}55`,
+        boxShadow: `0 10px 28px ${palette.deep}33`,
+      }}
+    >
+      {side === "left" ? (
+        <ChevronLeft className="size-6" />
+      ) : (
+        <ChevronRight className="size-6" />
+      )}
+    </button>
   );
 }
 
@@ -57,7 +107,7 @@ export function StoryFlipbook({
   questions,
   initialQuizScore,
   shareToken,
-  readingMode = true,
+  readingMode: _readingMode = true,
   showTitle = true,
 }: {
   storyId: string;
@@ -66,6 +116,7 @@ export function StoryFlipbook({
   questions: QuizQuestion[];
   initialQuizScore?: number | null;
   shareToken?: string | null;
+  /** Mantido por compatibilidade — layout sempre usa página de livro. */
   readingMode?: boolean;
   showTitle?: boolean;
 }) {
@@ -76,7 +127,6 @@ export function StoryFlipbook({
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
-  // index === pages.length means quiz (if questions exist)
   const quizIndex = pages.length;
   const hasQuiz = questions.length > 0;
   const isQuiz = hasQuiz && index >= quizIndex;
@@ -113,9 +163,7 @@ export function StoryFlipbook({
     const dy = t.clientY - touchStartY.current;
     touchStartX.current = null;
     touchStartY.current = null;
-    // Horizontal swipe dominates
     if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
-    // right→left (dx < 0) = próxima; left→right (dx > 0) = anterior
     if (dx < 0) goNext();
     else goPrev();
   }
@@ -129,57 +177,71 @@ export function StoryFlipbook({
     }
   }
 
-  if (!readingMode) {
-    // fallback mínimo — mesma UX de leitura
-  }
+  const atLastStoryPage = index >= pages.length - 1;
+  const nextDisabled = isQuiz || (!hasQuiz && atLastStoryPage);
 
   return (
     <ReadingShell palette={palette}>
       <div
-        className="relative mx-auto flex w-full max-w-3xl flex-col"
+        className="relative mx-auto flex w-full max-w-3xl flex-col px-3 py-4 md:px-5 md:py-6"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Desktop fixed arrows */}
-        <button
-          type="button"
-          aria-label="Página anterior"
+        <NavOrb
+          label="Página anterior"
           disabled={index === 0}
           onClick={goPrev}
-          className="fixed left-3 top-1/2 z-40 hidden size-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/25 text-white shadow-lg backdrop-blur transition hover:bg-black/40 disabled:opacity-30 md:flex lg:left-6"
-        >
-          <ChevronLeft className="size-6" />
-        </button>
-        <button
-          type="button"
-          aria-label="Próxima página"
-          disabled={isQuiz || (!hasQuiz && index >= pages.length - 1)}
+          side="left"
+          palette={palette}
+        />
+        <NavOrb
+          label="Próxima página"
+          disabled={nextDisabled}
           onClick={goNext}
-          className="fixed right-3 top-1/2 z-40 hidden size-12 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-black/25 text-white shadow-lg backdrop-blur transition hover:bg-black/40 disabled:opacity-30 md:flex lg:right-6"
-        >
-          <ChevronRight className="size-6" />
-        </button>
+          side="right"
+          palette={palette}
+        />
 
         {showTitle ? (
-          <div className="space-y-1 px-4 pb-3 pt-4 text-center md:px-6">
+          <header className="mb-4 space-y-1.5 px-2 text-center md:mb-5">
+            <p
+              className="font-story-body text-[0.7rem] font-extrabold uppercase tracking-[0.22em]"
+              style={{ color: palette.deep, opacity: 0.75 }}
+            >
+              Estúdio Mágico
+            </p>
             <h1
-              className="font-heading text-2xl font-semibold tracking-tight md:text-3xl"
-              style={{ color: palette.text }}
+              className="font-story-display text-[1.65rem] font-semibold leading-tight tracking-tight md:text-3xl"
+              style={{ color: palette.deep }}
             >
               {title}
             </h1>
-            <p className="text-sm" style={{ color: palette.textMuted }}>
+            <p
+              className="font-story-body text-sm font-bold tracking-wide"
+              style={{ color: palette.deep, opacity: 0.72 }}
+            >
               {isQuiz
                 ? "Hora do quiz!"
-                : `Ato ${index + 1} de ${pages.length}`}
+                : `Página ${index + 1} de ${pages.length}`}
             </p>
-          </div>
+          </header>
         ) : null}
 
         {!isQuiz && page ? (
-          <>
-            {/* Sticky image blending into page */}
-            <div className="sticky top-0 z-0 -mx-0 overflow-hidden">
+          <article
+            key={`page-${index}-${page.imageUrl}`}
+            className="storybook-page-enter overflow-hidden rounded-[1.35rem] shadow-2xl md:rounded-[1.6rem]"
+            style={{
+              background: palette.paper,
+              boxShadow: `
+                0 4px 0 ${palette.paperEdge}33,
+                0 22px 48px ${palette.deep}40,
+                0 2px 0 rgba(255,255,255,0.35) inset
+              `,
+            }}
+          >
+            {/* Ilustração — sem sticky, sem overlap com o texto */}
+            <figure className="relative m-0 overflow-hidden">
               {page.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -192,54 +254,103 @@ export function StoryFlipbook({
               ) : (
                 <div
                   className="aspect-[4/3] w-full md:aspect-[16/10]"
-                  style={{ background: palette.panelBg }}
+                  style={{ background: palette.soft }}
                 />
               )}
+              {/* Vinheta só dentro da imagem — não invade o papel */}
               <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
                 style={{
-                  background: `linear-gradient(to bottom, transparent, ${palette.soft})`,
+                  background: `linear-gradient(to top, ${palette.deep}33, transparent)`,
                 }}
                 aria-hidden
               />
-            </div>
+            </figure>
 
-            {/* Scrollable text */}
+            {/* Faixa de transição ilustração → papel */}
             <div
-              className="relative z-10 -mt-10 min-h-[40vh] px-5 pb-28 pt-2 md:px-8"
-              style={{ color: palette.text }}
+              className="h-2 w-full"
+              style={{
+                background: `linear-gradient(90deg, ${palette.accent}55, ${palette.soft}, ${palette.accent}55)`,
+              }}
+              aria-hidden
+            />
+
+            {/* Papel opaco — tipografia com contraste forte */}
+            <div
+              className="storybook-text-enter relative px-5 pb-7 pt-5 md:px-9 md:pb-9 md:pt-6"
+              style={palettePaperStyle(palette)}
             >
-              <p className="whitespace-pre-wrap text-base leading-relaxed md:text-lg md:leading-8">
+              <div
+                className="mb-4 flex items-center justify-center gap-2"
+                aria-hidden
+              >
+                <span
+                  className="h-px w-8"
+                  style={{ background: `${palette.paperEdge}55` }}
+                />
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{ background: palette.accent }}
+                />
+                <span
+                  className="h-px w-8"
+                  style={{ background: `${palette.paperEdge}55` }}
+                />
+              </div>
+
+              <p
+                className="font-story-body whitespace-pre-wrap text-[1.125rem] font-medium leading-[1.75] md:text-[1.3rem] md:leading-[1.8]"
+                style={{ color: palette.text }}
+              >
                 {page.text}
               </p>
 
-              <div className="mt-8 flex items-center justify-between gap-3 md:hidden">
+              <div className="mt-8 flex items-center justify-between gap-3">
                 <Button
                   type="button"
                   variant="outline"
-                  className="gap-1 border-0 bg-white/70 backdrop-blur"
+                  className="font-story-body gap-1 border-0 shadow-sm"
+                  style={{
+                    background: `${palette.soft}`,
+                    color: palette.text,
+                  }}
                   disabled={index === 0}
                   onClick={goPrev}
                 >
                   <ChevronLeft className="size-4" />
                   Voltar
                 </Button>
+                <p
+                  className="font-story-body hidden text-xs font-bold tracking-[0.18em] uppercase sm:block"
+                  style={{ color: palette.textMuted }}
+                >
+                  {index + 1} / {pages.length}
+                </p>
                 <Button
                   type="button"
-                  className="gap-1"
-                  style={{ background: palette.deep, color: "#fffaf3" }}
+                  className="font-story-body gap-1 border-0 shadow-md"
+                  style={{ background: palette.deep, color: palette.paper }}
                   onClick={goNext}
+                  disabled={nextDisabled && !hasQuiz}
                 >
-                  {index === pages.length - 1 && hasQuiz ? "Quiz" : "Próxima"}
+                  {atLastStoryPage && hasQuiz ? "Quiz" : "Próxima"}
                   <ChevronRight className="size-4" />
                 </Button>
               </div>
             </div>
-          </>
+          </article>
         ) : (
-          <div className="relative z-10 px-4 pb-28 pt-4 md:px-6">
+          <div
+            key="quiz"
+            className="storybook-page-enter relative z-10 rounded-[1.35rem] p-3 md:rounded-[1.6rem] md:p-4"
+            style={{
+              background: palette.paper,
+              boxShadow: `0 22px 48px ${palette.deep}40`,
+            }}
+          >
             <div
-              className="rounded-3xl p-2"
+              className="rounded-3xl p-1"
               style={{
                 background: palette.panelBg,
                 border: `1px solid ${palette.panelBorder}`,
@@ -252,11 +363,12 @@ export function StoryFlipbook({
                 initialScore={initialQuizScore}
               />
             </div>
-            <div className="mt-4 flex justify-center md:hidden">
+            <div className="mt-4 flex justify-center">
               <Button
                 type="button"
                 variant="outline"
-                className="border-0 bg-white/70"
+                className="font-story-body border-0"
+                style={{ background: palette.soft, color: palette.text }}
                 onClick={() => setIndex(pages.length - 1)}
               >
                 Rever história
@@ -265,18 +377,22 @@ export function StoryFlipbook({
           </div>
         )}
 
-        {/* Share — fixed bottom-right, non-blocking */}
         {shareToken ? (
           <button
             type="button"
             aria-label="Compartilhar história"
             onClick={() => void onShare()}
-            className="fixed bottom-5 right-5 z-50 flex size-12 items-center justify-center rounded-full border border-border/60 bg-background/90 text-foreground shadow-lg backdrop-blur transition hover:scale-105 active:scale-95"
+            className="fixed bottom-5 right-5 z-50 flex size-12 items-center justify-center rounded-full shadow-lg transition hover:scale-105 active:scale-95"
+            style={{
+              background: palette.paper,
+              color: palette.deep,
+              border: `2px solid ${palette.paperEdge}44`,
+            }}
           >
             {shareState === "idle" ? (
               <Share2 className="size-5" />
             ) : (
-              <Check className="size-5 text-emerald-600" />
+              <Check className="size-5" style={{ color: palette.accent }} />
             )}
           </button>
         ) : null}
@@ -284,12 +400,12 @@ export function StoryFlipbook({
         {shareState !== "idle" ? (
           <p
             role="status"
-            className="fixed bottom-20 right-5 z-50 rounded-full bg-background/95 px-3 py-1 text-xs shadow"
+            className="font-story-body fixed bottom-20 right-5 z-50 rounded-full px-3 py-1 text-xs font-semibold shadow"
+            style={{ background: palette.paper, color: palette.text }}
           >
             {shareState === "copied" ? "Link copiado" : "Compartilhado"}
           </p>
         ) : null}
-
       </div>
     </ReadingShell>
   );

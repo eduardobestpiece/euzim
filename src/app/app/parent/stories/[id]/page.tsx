@@ -27,8 +27,8 @@ export default async function StoryReaderPage({
     .find((p) => Boolean(p.imageUrl));
 
   return (
-    <AppShell user={user} title="História">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+    <AppShell user={user} title="História" wide>
+      <div className="mb-3 flex flex-wrap items-center gap-3 px-1">
         <Button asChild variant="ghost" size="sm">
           <Link href="/app/parent" className="gap-1.5">
             <ArrowLeft className="size-3.5" />

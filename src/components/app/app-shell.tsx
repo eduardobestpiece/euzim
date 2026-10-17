@@ -10,11 +10,14 @@ export function AppShell({
   user,
   title,
   kidsMode = false,
+  wide = false,
   children,
 }: {
   user: AuthUser;
   title: string;
   kidsMode?: boolean;
+  /** Conteúdo mais largo / menos padding — modo leitura. */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   const links = [
@@ -95,7 +98,13 @@ export function AppShell({
           {user.role === "admin" ? " · admin" : ""}
         </div>
       ) : null}
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 md:px-8">
+      <main
+        className={
+          wide
+            ? "mx-auto w-full max-w-5xl flex-1 px-2 py-4 md:px-4 md:py-6"
+            : "mx-auto w-full max-w-4xl flex-1 px-4 py-8 md:px-8"
+        }
+      >
         {children}
       </main>
     </div>
