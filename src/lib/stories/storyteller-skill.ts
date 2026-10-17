@@ -52,8 +52,16 @@ fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca 
 - Cada ato precisa de cena concreta (lugar, ação, fala, escolha) e batida VISUAL ÚNICA.
 - Ato 1 / imagem 1 = emoção do início (ex.: medo à distância), NÃO o clímax.
 - Cada image_prompt deve especificar: lugar distinto, personagens presentes,
-  presença parental se aplicável, framing diferente dos atos anteriores.
+  presença parental se aplicável, framing/câmera DIFERENTE dos atos anteriores
+  (wide / medium / over-shoulder / close-up / low-angle / high-angle — sem repetir).
+- Nunca descreva a mesma pose de close-up da criança+amigo em atos consecutivos.
 - A moral emerge da cena; não escreva "a lição é…".
+
+## Rostos de família nas ilustrações
+- Pais, mães, cuidadores, irmãos ou irmãs: se NÃO houver avatar Pixar deles na plataforma,
+  mostre apenas o CORPO (de costas, ombro, fora de foco, rosto virado/oculto).
+- Só mostre o rosto de pai/mãe/irmão se existir avatar correspondente na plataforma.
+- A criança protagonista e o amigo (pet/brinquedo) SEMPRE podem mostrar o rosto (têm avatar).
 `.trim();
 
 export const STORY_TEXT_MODEL =

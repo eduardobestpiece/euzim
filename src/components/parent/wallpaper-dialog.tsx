@@ -11,6 +11,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+/** Formato típico de tela de celular (9:19.5 ≈ iPhone). */
+const PHONE_W = 1080;
+const PHONE_H = 2340;
+
+function coverDraw(
+  ctx: CanvasRenderingContext2D,
+  bitmap: ImageBitmap,
+  cw: number,
+  ch: number,
+) {
+  const scale = Math.max(cw / bitmap.width, ch / bitmap.height);
+  const w = bitmap.width * scale;
+  const h = bitmap.height * scale;
+  const x = (cw - w) / 2;
+  const y = (ch - h) / 2;
+  ctx.drawImage(bitmap, x, y, w, h);
+}
+
 export function WallpaperDialog({
   imageUrl,
   title,
@@ -20,27 +38,48 @@ export function WallpaperDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  async function buildPhoneCanvas(): Promise<HTMLCanvasElement> {
+    const res = await fetch(imageUrl);
+    const blob = await res.blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = PHONE_W;
+    canvas.height = PHONE_H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas indisponível");
+
+    // Fundo desfocado suave (preenche bordas se a arte for landscape)
+    ctx.filter = "blur(28px) saturate(1.1)";
+    coverDraw(ctx, bitmap, PHONE_W, PHONE_H);
+    ctx.filter = "none";
+    // Camada principal em cover
+    coverDraw(ctx, bitmap, PHONE_W, PHONE_H);
+    return canvas;
+  }
+
+  async function ensurePreview() {
+    if (previewUrl) return;
+    try {
+      const canvas = await buildPhoneCanvas();
+      setPreviewUrl(canvas.toDataURL("image/jpeg", 0.9));
+    } catch {
+      setPreviewUrl(imageUrl);
+    }
+  }
 
   async function download(format: "png" | "jpeg") {
     setBusy(true);
     try {
-      const res = await fetch(imageUrl);
-      const blob = await res.blob();
-      const bitmap = await createImageBitmap(blob);
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas indisponível");
-      ctx.drawImage(bitmap, 0, 0);
+      const canvas = await buildPhoneCanvas();
       const mime = format === "png" ? "image/png" : "image/jpeg";
       const dataUrl = canvas.toDataURL(mime, 0.92);
       const a = document.createElement("a");
       a.href = dataUrl;
-      a.download = `${title.replace(/[^\w\-]+/g, "_").slice(0, 40) || "wallpaper"}.${format === "png" ? "png" : "jpg"}`;
+      a.download = `${title.replace(/[^\w\-]+/g, "_").slice(0, 40) || "wallpaper"}-phone.${format === "png" ? "png" : "jpg"}`;
       a.click();
     } catch {
-      // fallback: open image
       window.open(imageUrl, "_blank", "noopener,noreferrer");
     } finally {
       setBusy(false);
@@ -54,26 +93,31 @@ export function WallpaperDialog({
         variant="secondary"
         size="sm"
         className="gap-1.5"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          void ensurePreview();
+        }}
       >
         <ImageIcon className="size-3.5" />
         Usar como wallpaper
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[95vh] overflow-hidden border-0 bg-black/95 p-0 text-white sm:max-w-4xl">
+        <DialogContent className="max-h-[95vh] overflow-hidden border-0 bg-zinc-950 p-0 text-white sm:max-w-lg">
           <DialogHeader className="px-4 pt-4 text-left">
-            <DialogTitle>Wallpaper</DialogTitle>
+            <DialogTitle>Wallpaper do celular</DialogTitle>
             <DialogDescription className="text-white/70">
-              Baixe a última ilustração da história em tela cheia.
+              Formato retrato 9:19.5 (1080×2340) — pronto para a tela do celular.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex max-h-[70vh] items-center justify-center bg-black px-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt={`Wallpaper — ${title}`}
-              className="max-h-[70vh] w-full object-contain"
-            />
+          <div className="flex max-h-[65vh] items-center justify-center bg-black px-4 py-2">
+            <div className="relative aspect-[9/19.5] h-[min(65vh,560px)] overflow-hidden rounded-[1.75rem] border-[3px] border-zinc-600 bg-black shadow-2xl">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl || imageUrl}
+                alt={`Wallpaper — ${title}`}
+                className="h-full w-full object-cover"
+              />
+            </div>
           </div>
           <div className="flex flex-wrap gap-2 px-4 py-4">
             <Button
@@ -84,7 +128,7 @@ export function WallpaperDialog({
               onClick={() => void download("png")}
             >
               <Download className="size-3.5" />
-              Baixar PNG
+              Baixar PNG celular
             </Button>
             <Button
               type="button"
@@ -95,7 +139,7 @@ export function WallpaperDialog({
               onClick={() => void download("jpeg")}
             >
               <Download className="size-3.5" />
-              Baixar JPEG
+              Baixar JPEG celular
             </Button>
           </div>
         </DialogContent>

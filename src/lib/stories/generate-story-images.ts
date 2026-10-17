@@ -5,12 +5,18 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
+  differenceHash,
+  isNearDuplicate,
+  shotForPage,
+} from "@/lib/stories/image-hash";
+import {
   estimateImageUsd,
   recordUsageEvent,
 } from "@/lib/usage/openai-meter";
 
 const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
 const REF_EDGE = 1024;
+const MAX_UNIQUENESS_RETRIES = 2;
 
 function apiKey(): string | null {
   return process.env.OPENAI_API_KEY?.trim() || null;
@@ -124,6 +130,7 @@ async function uploadStoryJpeg(input: {
   storyKey: string;
   pageIndex: number;
   jpeg: Buffer;
+  attempt?: number;
 }): Promise<string> {
   if (!isSupabaseConfigured()) {
     return `data:image/jpeg;base64,${input.jpeg.toString("base64")}`;
@@ -132,7 +139,8 @@ async function uploadStoryJpeg(input: {
   if (!db) {
     return `data:image/jpeg;base64,${input.jpeg.toString("base64")}`;
   }
-  const path = `${input.userId}/stories/${input.storyKey}/page-${input.pageIndex}.jpg`;
+  const suffix = input.attempt && input.attempt > 0 ? `-r${input.attempt}` : "";
+  const path = `${input.userId}/stories/${input.storyKey}/page-${input.pageIndex}${suffix}.jpg`;
   const { error } = await db.storage.from("avatars").upload(path, input.jpeg, {
     contentType: "image/jpeg",
     upsert: true,
@@ -143,30 +151,60 @@ async function uploadStoryJpeg(input: {
   return db.storage.from("avatars").getPublicUrl(path).data.publicUrl;
 }
 
+function familyFaceRule(cast: StoryCast): string {
+  if (cast.hasFamilyMemberAvatars) {
+    return `Parents or siblings may show faces ONLY if matching an uploaded family avatar reference; otherwise body-only.`;
+  }
+  return [
+    `CRITICAL face privacy: any parent, mother, father, caregiver, sibling, brother, or sister`,
+    `MUST be shown body-only — from behind, over-the-shoulder, cropped at shoulders, or face fully turned away / obscured.`,
+    `Never invent identifiable faces for family adults or siblings.`,
+    `Strangers in the background may be soft-focus without clear facial detail.`,
+  ].join(" ");
+}
+
 function scenePrompt(
   cast: StoryCast,
   page: GeneratedPage,
   storyTitle: string,
   pageIndex: number,
   totalPages: number,
+  previousSummaries: string[],
+  retryBoost = 0,
 ): string {
   const base =
     page.imagePrompt?.trim() ||
     `Scene from the children's story "${storyTitle}"`;
+  const shot = shotForPage(pageIndex + retryBoost);
+  const avoid =
+    previousSummaries.length > 0
+      ? `Do NOT reuse these previous framings: ${previousSummaries.join(" | ")}.`
+      : "";
+  const uniqueness =
+    retryBoost > 0
+      ? `REGENERATION ${retryBoost}: previous result looked too similar — change LOCATION details, CAMERA ANGLE, POSE, and FOREGROUND OBJECTS dramatically while keeping the same story beat.`
+      : "";
+
   return [
     base,
-    `This is beat ${pageIndex + 1} of ${totalPages} — do not repeat previous framing; match this beat exactly.`,
+    `Mandatory camera: ${shot}.`,
+    `This is beat ${pageIndex + 1} of ${totalPages} — unique composition required.`,
+    avoid,
+    uniqueness,
     `Walt Disney / Pixar quality 3D animated cinematic still.`,
     `Feature THIS exact child character "${cast.childName}" and THIS exact ${cast.friendKind} companion "${cast.friendName}" from the reference images as the clear protagonists.`,
     `Preserve their Pixar look, colors, and identity from the references with high fidelity.`,
+    familyFaceRule(cast),
     `Soft cinematic lighting, wholesome family-friendly mood, rich storybook composition.`,
     `No text, no captions, no watermark, no logos, no photorealistic humans.`,
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /**
  * Gera 1 imagem Pixar por página, com refs dos avatares.
- * Sequencial (mais estável com rate limits); páginas sem ref usam data URL vazia.
+ * Rejeita quase-duplicatas via dHash e regenera com ângulo diferente.
  */
 export async function generateStoryPageImages(input: {
   userId: string;
@@ -178,30 +216,52 @@ export async function generateStoryPageImages(input: {
 }): Promise<GeneratedPage[]> {
   const refs = await loadRefs(input.cast);
   const out: GeneratedPage[] = [];
+  const hashes: string[] = [];
+  const framingNotes: string[] = [];
 
   for (let i = 0; i < input.pages.length; i++) {
     const page = input.pages[i];
     let imageUrl = page.imageUrl || "";
     try {
       if (apiKey() && refs.length > 0) {
-        const jpeg = await callImageEdit(
-          scenePrompt(
+        let jpeg: Buffer | null = null;
+        let chosenHash = "";
+        for (let attempt = 0; attempt <= MAX_UNIQUENESS_RETRIES; attempt++) {
+          const prompt = scenePrompt(
             input.cast,
             page,
             input.storyTitle,
             i,
             input.pages.length,
-          ),
-          refs.slice(0, 4),
-          input.userId,
-          page.pageIndex,
-        );
-        imageUrl = await uploadStoryJpeg({
-          userId: input.userId,
-          storyKey: input.storyKey,
-          pageIndex: page.pageIndex,
-          jpeg,
-        });
+            framingNotes,
+            attempt,
+          );
+          const candidate = await callImageEdit(
+            prompt,
+            refs.slice(0, 4),
+            input.userId,
+            page.pageIndex,
+          );
+          const hash = await differenceHash(candidate);
+          if (!isNearDuplicate(hash, hashes) || attempt === MAX_UNIQUENESS_RETRIES) {
+            jpeg = candidate;
+            chosenHash = hash;
+            break;
+          }
+        }
+        if (jpeg) {
+          imageUrl = await uploadStoryJpeg({
+            userId: input.userId,
+            storyKey: input.storyKey,
+            pageIndex: page.pageIndex,
+            jpeg,
+            attempt: hashes.length,
+          });
+          hashes.push(chosenHash);
+          framingNotes.push(
+            `beat${i + 1}:${shotForPage(i).slice(0, 48)}`,
+          );
+        }
       }
     } catch {
       // mantém vazio — UI ainda mostra o texto

@@ -16,6 +16,11 @@ export type StoryCast = {
   childBodySheetUrl: string | null;
   friendSheetUrl: string | null;
   characterId: string | null;
+  /**
+   * True só quando existem avatares Pixar de pais/irmãos na plataforma.
+   * Sem isso, ilustrações devem esconder rostos de família.
+   */
+  hasFamilyMemberAvatars: boolean;
 };
 
 function ageFromBirth(birth: string | null | undefined): number | null {
@@ -58,6 +63,7 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
         ? onboarding.friendSheetUrl!
         : null,
       characterId: null,
+      hasFamilyMemberAvatars: false,
     };
   }
 
@@ -85,7 +91,7 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
 
   const { data: chars } = await db
     .from("characters")
-    .select("id, name, avatar_url, is_primary")
+    .select("id, name, avatar_url, is_primary, traits, description")
     .eq("parent_id", parentId)
     .order("created_at", { ascending: true });
 
@@ -96,6 +102,19 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
     prefs.friend?.displayName || friendChar?.name || "Amigo";
   const friendKind: "pet" | "toy" =
     prefs.friend?.kind === "toy" ? "toy" : "pet";
+
+  // Avatares de família (pais/irmãos): traits/description com role familiar + Pixar.
+  const familyHints =
+    /\b(pai|mãe|mae|parent|father|mother|irmão|irmao|irmã|irma|sibling|brother|sister|cuidador)\b/i;
+  const hasFamilyMemberAvatars = (chars ?? []).some((c) => {
+    if (!isPixarGeneratedUrl(c.avatar_url)) return false;
+    if (c.is_primary) return false;
+    if (c.id === friendChar?.id) return false;
+    const traits = Array.isArray(c.traits)
+      ? c.traits.map(String).join(" ")
+      : JSON.stringify(c.traits ?? "");
+    return familyHints.test(`${c.name} ${c.description ?? ""} ${traits}`);
+  });
 
   return {
     childId: child.id,
@@ -129,5 +148,6 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
       ? prefs.pixar!.friend_sheet!
       : null,
     characterId: primary?.id ?? null,
+    hasFamilyMemberAvatars,
   };
 }

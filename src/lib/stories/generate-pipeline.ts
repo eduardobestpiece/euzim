@@ -254,10 +254,14 @@ Cada ato: ~${TARGET_WORDS_PER_PAGE} palavras (±40), com começo/meio/fim de cen
 diálogos quando couber, e um image_prompt em INGLÊS para ilustração Walt Disney/Pixar 3D.
 
 Regras do image_prompt (CRÍTICO):
-- Cada ato tem batida visual ÚNICA: lugar, pose, framing e emoção diferentes.
+- Cada ato tem batida visual ÚNICA: lugar, pose, framing/câmera e emoção diferentes.
+- Atribua a cada ato um ângulo distinto (wide / medium two-shot / over-shoulder /
+  close-up emotion / low-angle / high-angle / side-profile / seated conversation).
+- NUNCA repita o mesmo close-up da criança abraçando o amigo.
 - Ato 1 = emoção do INÍCIO da história (ex.: medo à distância), NÃO o clímax.
 - Citar visualmente a criança "${opts?.protagonistName || cast.childName}" e o amigo "${cast.friendName}" (${cast.friendKind}).
 - Se a cena for pública/com desconhecido: incluir pai/mãe/cuidador presente na imagem.
+- Pais/irmãos SEM avatar na plataforma: body-only (de costas / rosto oculto) — nunca inventar rosto.
 - Estilo: "Walt Disney / Pixar 3D animated still, cinematic soft lighting, wholesome"
 - Explicit: "do not repeat previous framing; match this beat exactly"
 - Sem texto na imagem, sem watermark, family-friendly.

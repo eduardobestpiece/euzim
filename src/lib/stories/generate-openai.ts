@@ -30,6 +30,7 @@ export async function generateStoryText(input: {
     childBodySheetUrl: null,
     friendSheetUrl: null,
     characterId: null,
+    hasFamilyMemberAvatars: false,
   };
 
   const result = await generateStoryPipeline({
