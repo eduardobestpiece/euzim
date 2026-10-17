@@ -68,13 +68,29 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
           className="landing-hero-atmosphere pointer-events-none absolute inset-0"
         />
 
-        <div className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 items-center gap-6 px-5 pb-10 pt-2 sm:px-8 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:gap-4 md:px-12 md:pb-16 lg:gap-8">
-          <div className="landing-hero-copy flex flex-col items-start gap-5 md:gap-6">
-            <h1 className="landing-hero-title font-story-display max-w-[24ch] text-[1.85rem] leading-[1.05] text-[var(--euzim-ink)] uppercase sm:text-4xl md:text-[2.7rem] lg:text-[3.05rem]">
-              Crie histórias onde a sua criança é a protagonista
-            </h1>
+        <div className="landing-hero-grid relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-5 px-5 pb-10 pt-2 sm:gap-6 sm:px-8 md:gap-4 md:px-12 md:pb-16 lg:gap-8">
+          <h1 className="landing-hero-title font-story-display max-w-[24ch] text-[1.85rem] leading-[1.05] text-[var(--euzim-ink)] uppercase sm:text-4xl md:text-[2.7rem] lg:text-[3.05rem]">
+            Crie histórias onde a sua criança é a protagonista
+          </h1>
 
-            <div className="font-story-body max-w-md space-y-3 text-[0.98rem] leading-relaxed text-[var(--euzim-ink-soft)] sm:text-base md:max-w-lg md:text-[1.05rem]">
+          <div className="landing-hero-visual relative mx-auto w-full max-w-lg md:mx-0 md:max-w-none">
+            <div
+              aria-hidden
+              className="landing-hero-blob pointer-events-none absolute -inset-[12%] -z-10"
+            />
+            <Image
+              src="/brand/euzim-hero-serena-boy.png"
+              alt="Serena e um menino correndo juntos, protagonistas de uma história Euzim"
+              width={878}
+              height={665}
+              priority
+              className="landing-hero-image h-auto w-full object-contain object-bottom"
+              sizes="(max-width: 768px) 92vw, 48vw"
+            />
+          </div>
+
+          <div className="landing-hero-aside flex flex-col items-start gap-5 md:gap-6">
+            <div className="landing-hero-copy font-story-body max-w-md space-y-3 text-[0.98rem] leading-relaxed text-[var(--euzim-ink-soft)] sm:text-base md:max-w-lg md:text-[1.05rem]">
               <p>
                 Se o celular prende a atenção com jogos e vídeos sem fim, o{" "}
                 <InlineBrand /> constrói o{" "}
@@ -114,22 +130,6 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
                 Modo demo - configure `.env.local` para login real.
               </p>
             ) : null}
-          </div>
-
-          <div className="landing-hero-visual relative mx-auto w-full max-w-lg md:mx-0 md:max-w-none md:justify-self-end">
-            <div
-              aria-hidden
-              className="landing-hero-blob pointer-events-none absolute -inset-[12%] -z-10"
-            />
-            <Image
-              src="/brand/euzim-hero-serena-boy.png"
-              alt="Serena e um menino correndo juntos, protagonistas de uma história Euzim"
-              width={878}
-              height={665}
-              priority
-              className="landing-hero-image h-auto w-full object-contain object-bottom"
-              sizes="(max-width: 768px) 92vw, 48vw"
-            />
           </div>
         </div>
 

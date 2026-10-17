@@ -11,6 +11,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import { InlineBrand } from "@/components/brand/inline-brand";
+import { formatBrl } from "@/lib/billing/character-packs";
+import { STARTER_SUBSCRIPTION } from "@/lib/billing/plans";
 import { cn } from "@/lib/utils";
 
 const SERENA_PHOTOS = [
@@ -28,6 +30,10 @@ const BINGO_PHOTOS = [
 ] as const;
 
 const THEME_FULL = "Vencer o medo de agulha";
+const NAME_FULL = "Seu nome";
+const EMAIL_FULL = "seuemail@gmail.com";
+const PASS_LEN = 8;
+
 const AI_MESSAGES = [
   "Contador Sábio escrevendo…",
   "Tecendo diálogos mágicos…",
@@ -35,6 +41,17 @@ const AI_MESSAGES = [
   "Polindo a moral com carinho…",
   "Quase pronto…",
 ] as const;
+
+type SignupPhase =
+  | "cta"
+  | "cta-press"
+  | "form"
+  | "typing-name"
+  | "typing-email"
+  | "typing-pass"
+  | "ready"
+  | "submit-press"
+  | "done";
 
 function PhotoGrid({
   photos,
@@ -63,34 +80,193 @@ function PhotoGrid({
 }
 
 function SignupMock() {
+  const priceLabel = formatBrl(STARTER_SUBSCRIPTION.priceBrl);
+  const [phase, setPhase] = useState<SignupPhase>("cta");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timers: number[] = [];
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const id = window.setTimeout(() => resolve(), ms);
+        timers.push(id);
+      });
+
+    const typeText = async (
+      full: string,
+      setter: (v: string) => void,
+      speed = 48,
+    ) => {
+      for (let i = 1; i <= full.length; i++) {
+        if (cancelled) return;
+        setter(full.slice(0, i));
+        await wait(speed);
+      }
+    };
+
+    const run = async () => {
+      while (!cancelled) {
+        setPhase("cta");
+        setName("");
+        setEmail("");
+        setPass(0);
+        await wait(900);
+
+        setPhase("cta-press");
+        await wait(420);
+
+        setPhase("form");
+        await wait(500);
+
+        setPhase("typing-name");
+        await typeText(NAME_FULL, setName, 55);
+        if (cancelled) return;
+
+        setPhase("typing-email");
+        await typeText(EMAIL_FULL, setEmail, 42);
+        if (cancelled) return;
+
+        setPhase("typing-pass");
+        for (let i = 1; i <= PASS_LEN; i++) {
+          if (cancelled) return;
+          setPass(i);
+          await wait(70);
+        }
+
+        setPhase("ready");
+        await wait(450);
+
+        setPhase("submit-press");
+        await wait(480);
+
+        setPhase("done");
+        await wait(900);
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+      for (const id of timers) window.clearTimeout(id);
+    };
+  }, []);
+
+  const showForm = phase !== "cta" && phase !== "cta-press";
+  const ctaPressed = phase === "cta-press";
+  const submitPressed = phase === "submit-press" || phase === "done";
+  const activeField =
+    phase === "typing-name"
+      ? "name"
+      : phase === "typing-email"
+        ? "email"
+        : phase === "typing-pass"
+          ? "pass"
+          : null;
+
   return (
-    <div className="landing-roadmap-signup">
-      <div className="landing-roadmap-signup-brand">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/brand/euzim-logo-color.png"
-          alt=""
-          className="h-8 w-auto object-contain"
+    <div className="landing-roadmap-signup-stage" aria-hidden>
+      <div
+        className={cn(
+          "landing-roadmap-signup-cta-hero",
+          ctaPressed && "is-pressed",
+          showForm && "is-exit",
+        )}
+      >
+        <span className="landing-cta-star" aria-hidden />
+        Começar a criar a história - {priceLabel}
+        <span
+          className={cn(
+            "landing-roadmap-pointer",
+            (phase === "cta" || phase === "cta-press") && "is-visible",
+            ctaPressed && "is-tap",
+          )}
         />
-        <p className="font-story-body text-xs text-[var(--euzim-ink-soft)]">
-          Crie sua conta em segundos
-        </p>
       </div>
-      <div className="space-y-2.5">
-        <div className="landing-roadmap-field">
-          <span>Nome</span>
-          <strong>Eduardo</strong>
+
+      <div
+        className={cn(
+          "landing-roadmap-signup",
+          showForm && "is-visible",
+          phase === "done" && "is-success",
+        )}
+      >
+        <div className="landing-roadmap-signup-brand">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/euzim-logo-color.png"
+            alt=""
+            className="h-8 w-auto object-contain"
+          />
+          <p className="font-story-body text-xs text-[var(--euzim-ink-soft)]">
+            Crie sua conta em segundos
+          </p>
         </div>
-        <div className="landing-roadmap-field">
-          <span>E-mail</span>
-          <strong>eduardo@email.com</strong>
+        <div className="space-y-2.5">
+          <div
+            className={cn(
+              "landing-roadmap-field",
+              activeField === "name" && "is-active",
+            )}
+          >
+            <span>Nome</span>
+            <strong>
+              {name}
+              {activeField === "name" ? (
+                <span className="landing-roadmap-caret" />
+              ) : null}
+            </strong>
+          </div>
+          <div
+            className={cn(
+              "landing-roadmap-field",
+              activeField === "email" && "is-active",
+            )}
+          >
+            <span>E-mail</span>
+            <strong>
+              {email}
+              {activeField === "email" ? (
+                <span className="landing-roadmap-caret" />
+              ) : null}
+            </strong>
+          </div>
+          <div
+            className={cn(
+              "landing-roadmap-field",
+              activeField === "pass" && "is-active",
+            )}
+          >
+            <span>Senha</span>
+            <strong>
+              {"•".repeat(pass)}
+              {activeField === "pass" ? (
+                <span className="landing-roadmap-caret" />
+              ) : null}
+            </strong>
+          </div>
         </div>
-        <div className="landing-roadmap-field">
-          <span>Senha</span>
-          <strong>••••••••</strong>
+        <div
+          className={cn(
+            "landing-roadmap-signup-cta",
+            submitPressed && "is-pressed",
+          )}
+        >
+          Criar conta
+          <span
+            className={cn(
+              "landing-roadmap-pointer is-on-submit",
+              (phase === "ready" ||
+                phase === "submit-press" ||
+                phase === "done") &&
+                "is-visible",
+              submitPressed && "is-tap",
+            )}
+          />
         </div>
       </div>
-      <div className="landing-roadmap-signup-cta">Criar conta</div>
     </div>
   );
 }
@@ -132,18 +308,16 @@ function ThemeTypingMock() {
 
   return (
     <div className="landing-roadmap-theme">
-      <div className="landing-roadmap-avatars">
+      <div className="landing-roadmap-avatars" aria-hidden>
         <figure>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/demo/roadmap/avatars/serena.jpg" alt="Avatar Serena" />
+          <img src="/demo/roadmap/avatars/serena.jpg" alt="" />
           <figcaption>Serena</figcaption>
         </figure>
-        <span className="landing-roadmap-avatars-plus" aria-hidden>
-          +
-        </span>
+        <span className="landing-roadmap-avatars-plus">+</span>
         <figure>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/demo/roadmap/avatars/bingo.jpg" alt="Avatar Bingo" />
+          <img src="/demo/roadmap/avatars/bingo.jpg" alt="" />
           <figcaption>Bingo</figcaption>
         </figure>
       </div>
@@ -159,19 +333,21 @@ function ThemeTypingMock() {
           <span className="landing-roadmap-caret" aria-hidden />
         </div>
         <div className="landing-roadmap-chips">
-          {["Vencer o medo de agulha", "Vencer o medo de escuro", "Aprendendo a dividir"].map(
-            (chip) => (
-              <span
-                key={chip}
-                className={cn(
-                  "landing-roadmap-chip",
-                  chipPulse && chip === THEME_FULL && "is-active",
-                )}
-              >
-                {chip}
-              </span>
-            ),
-          )}
+          {[
+            "Vencer o medo de agulha",
+            "Vencer o medo de escuro",
+            "Aprendendo a dividir",
+          ].map((chip) => (
+            <span
+              key={chip}
+              className={cn(
+                "landing-roadmap-chip",
+                chipPulse && chip === THEME_FULL && "is-active",
+              )}
+            >
+              {chip}
+            </span>
+          ))}
         </div>
       </div>
     </div>
@@ -333,10 +509,7 @@ export function LandingRoadmap() {
             return (
               <li
                 key={step.n}
-                className={cn(
-                  "landing-roadmap-step",
-                  reverse && "is-reverse",
-                )}
+                className={cn("landing-roadmap-step", reverse && "is-reverse")}
               >
                 <div className="landing-roadmap-rail" aria-hidden>
                   <span className="landing-roadmap-dot">{step.n}</span>
