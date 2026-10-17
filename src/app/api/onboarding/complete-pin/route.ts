@@ -14,7 +14,6 @@ import {
 } from "@/lib/onboarding/pin-format";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 
-export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
