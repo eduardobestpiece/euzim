@@ -34,41 +34,29 @@ export default async function OnboardingPage() {
       redirect("/app/parent");
     }
 
-    if (resetMode === "reuse" && bootstrap.initialState) {
+    if (bootstrap.initialState) {
+      // DB é a fonte das fotos/avatares — cookie slim só complementa PIN/passo
+      const fromDb = bootstrap.initialState;
+      const fromCookie = cookieState;
       initialState = {
-        ...bootstrap.initialState,
         securityPin:
-          cookieState?.securityPin || bootstrap.initialState.securityPin || "",
+          fromCookie?.securityPin || fromDb.securityPin || "",
+        child: fromCookie?.child ?? fromDb.child,
         childPhotos:
-          bootstrap.initialState.childPhotos.length > 0
-            ? bootstrap.initialState.childPhotos
-            : (cookieState?.childPhotos ?? []),
+          fromDb.childPhotos.length > 0
+            ? fromDb.childPhotos
+            : (fromCookie?.childPhotos ?? []),
+        friend: fromCookie?.friend ?? fromDb.friend,
         friendPhotos:
-          cookieState?.friendPhotos ?? bootstrap.initialState.friendPhotos,
+          fromDb.friendPhotos.length > 0
+            ? fromDb.friendPhotos
+            : (fromCookie?.friendPhotos ?? []),
+        childAvatarUrl: fromDb.childAvatarUrl ?? fromCookie?.childAvatarUrl ?? null,
+        friendAvatarUrl:
+          fromDb.friendAvatarUrl ?? fromCookie?.friendAvatarUrl ?? null,
         wizardStep:
-          cookieState?.wizardStep || bootstrap.initialState.wizardStep || null,
-      };
-    } else if (bootstrap.initialState) {
-      initialState = {
-        ...(cookieState ?? {
-          securityPin: "",
-          child: null,
-          childPhotos: [],
-          friend: null,
-          friendPhotos: [],
-          completed: false,
-        }),
-        wizardStep:
-          cookieState?.wizardStep || bootstrap.initialState.wizardStep || null,
-        securityPin:
-          cookieState?.securityPin ||
-          bootstrap.initialState.securityPin ||
-          "",
-        child: cookieState?.child ?? bootstrap.initialState.child,
-        childPhotos:
-          (cookieState?.childPhotos?.length ?? 0) > 0
-            ? cookieState!.childPhotos
-            : bootstrap.initialState.childPhotos,
+          fromCookie?.wizardStep || fromDb.wizardStep || null,
+        completed: false,
       };
     } else if (user.onboardingCompleted) {
       redirect("/app/parent");

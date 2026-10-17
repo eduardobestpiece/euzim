@@ -6,6 +6,7 @@ import {
   FRIEND_PHOTO_SLOTS,
 } from "@/lib/onboarding/photo-slots";
 import { draftsFromStoredPaths } from "@/lib/onboarding/photo-persistence";
+import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 
 export type ReuseBootstrap = {
   resetMode: "full" | "reuse" | null;
@@ -45,7 +46,20 @@ export async function loadOnboardingBootstrap(
     friend_photo_paths?: { slotId?: string; path?: string; url?: string }[];
     friend?: { kind?: string; displayName?: string };
     onboarding_wizard_step?: string;
+    pixar?: {
+      child_hero?: string;
+      friend_hero?: string;
+      child_face_sheet?: string;
+      child_body_sheet?: string;
+      friend_sheet?: string;
+    };
   };
+
+  const childAvatarUrl = isPixarGeneratedUrl(prefs.pixar?.child_hero)
+    ? prefs.pixar!.child_hero!
+    : isPixarGeneratedUrl(child?.avatar_url)
+      ? child!.avatar_url!
+      : null;
   const savedStep =
     typeof prefs.onboarding_wizard_step === "string"
       ? prefs.onboarding_wizard_step
@@ -92,7 +106,10 @@ export async function loadOnboardingBootstrap(
         childPhotos,
         friend: friendFromPrefs,
         friendPhotos,
-        childAvatarUrl: child?.avatar_url || null,
+        childAvatarUrl,
+        friendAvatarUrl: isPixarGeneratedUrl(prefs.pixar?.friend_hero)
+          ? prefs.pixar!.friend_hero!
+          : null,
         wizardStep: savedStep,
         completed: false,
       },
@@ -127,8 +144,14 @@ export async function loadOnboardingBootstrap(
       ? { kind: friendKind, displayName: friend.name }
       : friendFromPrefs,
     friendPhotos,
-    childAvatarUrl: child?.avatar_url || primary?.avatar_url || null,
-    friendAvatarUrl: friend?.avatar_url || null,
+    childAvatarUrl:
+      childAvatarUrl ||
+      (isPixarGeneratedUrl(primary?.avatar_url) ? primary!.avatar_url! : null),
+    friendAvatarUrl: isPixarGeneratedUrl(prefs.pixar?.friend_hero)
+      ? prefs.pixar!.friend_hero!
+      : isPixarGeneratedUrl(friend?.avatar_url)
+        ? friend!.avatar_url!
+        : null,
     wizardStep: savedStep,
     completed: false,
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   Camera,
   Check,
@@ -31,7 +31,6 @@ import {
   saveFriendProfileAction,
   saveOnboardingPinAction,
   saveSubjectPhotosAction,
-  saveWizardStepAction,
 } from "@/lib/onboarding/actions";
 import {
   REQUIRED_CHILD_PHOTO_COUNT,
@@ -43,6 +42,7 @@ import {
   type ChildGender,
 } from "@/lib/onboarding/child-profile";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
+import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import type { OnboardingState } from "@/lib/auth/types";
 
 type Step =
@@ -175,9 +175,80 @@ export function OnboardingWizard({
   function go(next: Step) {
     setError(null);
     setStep(next);
-    // Persiste progresso (fire-and-forget) — retoma ao reabrir
-    void saveWizardStepAction(next);
+    // API leve — evita Server Action / Set-Cookie >4KB que falhava no console
+    void fetch("/api/onboarding/wizard-step", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step: next }),
+    }).catch(() => {
+      /* progresso local já atualizado */
+    });
   }
+
+  async function runPixarGeneration(): Promise<boolean> {
+    const res = await fetch("/api/onboarding/generate-avatars", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force: true }),
+    });
+    let gen: {
+      error?: string;
+      childAvatarUrl?: string;
+      friendAvatarUrl?: string;
+      childFaceSheetUrl?: string;
+      childBodySheetUrl?: string;
+      friendSheetUrl?: string;
+      engine?: string;
+    } = {};
+    try {
+      gen = (await res.json()) as typeof gen;
+    } catch {
+      setError(`Falha na geração (${res.status}).`);
+      return false;
+    }
+    if (!res.ok || gen.error) {
+      setError(gen.error || `Falha na geração (${res.status}).`);
+      return false;
+    }
+    if (
+      !isPixarGeneratedUrl(gen.childAvatarUrl) ||
+      !isPixarGeneratedUrl(gen.friendAvatarUrl)
+    ) {
+      setError(
+        "A IA não devolveu avatares Pixar. Confira OPENAI_API_KEY e tente Regenerar.",
+      );
+      return false;
+    }
+    setChildAvatarUrl(gen.childAvatarUrl ?? null);
+    setFriendAvatarUrl(gen.friendAvatarUrl ?? null);
+    setChildFaceSheetUrl(gen.childFaceSheetUrl ?? null);
+    setChildBodySheetUrl(gen.childBodySheetUrl ?? null);
+    setFriendSheetUrl(gen.friendSheetUrl ?? null);
+    setEngine(gen.engine ?? null);
+    return true;
+  }
+
+  // Se o preview abriu com foto crua (build antigo / reuse), gera Pixar na hora
+  const autoGenRef = useRef(false);
+  useEffect(() => {
+    if (step !== "preview") return;
+    if (autoGenRef.current) return;
+    const needsPixar =
+      !isPixarGeneratedUrl(childAvatarUrl) ||
+      !isPixarGeneratedUrl(friendAvatarUrl);
+    if (!needsPixar) return;
+    autoGenRef.current = true;
+    setError(null);
+    startTransition(async () => {
+      go("generating");
+      const ok = await runPixarGeneration();
+      if (!ok) {
+        setStep("preview");
+        return;
+      }
+      go("preview");
+    });
+  }, [step, childAvatarUrl, friendAvatarUrl]);
 
   function submitPin(formData: FormData) {
     setError(null);
@@ -271,31 +342,11 @@ export function OnboardingWizard({
       }
       go("generating");
       try {
-        const res = await fetch("/api/onboarding/generate-avatars", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ force: true }),
-        });
-        const gen = (await res.json()) as {
-          error?: string;
-          childAvatarUrl?: string;
-          friendAvatarUrl?: string;
-          childFaceSheetUrl?: string;
-          childBodySheetUrl?: string;
-          friendSheetUrl?: string;
-          engine?: string;
-        };
-        if (!res.ok || gen.error) {
-          setError(gen.error || `Falha na geração (${res.status}).`);
+        const ok = await runPixarGeneration();
+        if (!ok) {
           setStep("friend-photos");
           return;
         }
-        setChildAvatarUrl(gen.childAvatarUrl ?? null);
-        setFriendAvatarUrl(gen.friendAvatarUrl ?? null);
-        setChildFaceSheetUrl(gen.childFaceSheetUrl ?? null);
-        setChildBodySheetUrl(gen.childBodySheetUrl ?? null);
-        setFriendSheetUrl(gen.friendSheetUrl ?? null);
-        setEngine(gen.engine ?? null);
         go("preview");
       } catch (err) {
         setError(
@@ -645,9 +696,11 @@ export function OnboardingWizard({
                   ? "Gerando avatares…"
                   : !isReuse && friendFilled < REQUIRED_FRIEND_PHOTO_COUNT
                     ? `Faltam ${REQUIRED_FRIEND_PHOTO_COUNT - friendFilled}`
-                    : isReuse && childAvatarUrl
-                      ? "Continuar com avatares salvos"
-                      : "Gerar personagens"}
+                    : isReuse &&
+                        isPixarGeneratedUrl(childAvatarUrl) &&
+                        isPixarGeneratedUrl(friendAvatarUrl)
+                      ? "Continuar com avatares Pixar"
+                      : "Gerar personagens Pixar"}
               </Button>
             </div>
           </CardContent>
@@ -783,44 +836,12 @@ export function OnboardingWizard({
                   setError(null);
                   startTransition(async () => {
                     go("generating");
-                    try {
-                      const res = await fetch(
-                        "/api/onboarding/generate-avatars",
-                        {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ force: true }),
-                        },
-                      );
-                      const gen = (await res.json()) as {
-                        error?: string;
-                        childAvatarUrl?: string;
-                        friendAvatarUrl?: string;
-                        childFaceSheetUrl?: string;
-                        childBodySheetUrl?: string;
-                        friendSheetUrl?: string;
-                        engine?: string;
-                      };
-                      if (!res.ok || gen.error) {
-                        setError(gen.error || `Falha (${res.status}).`);
-                        setStep("preview");
-                        return;
-                      }
-                      setChildAvatarUrl(gen.childAvatarUrl ?? null);
-                      setFriendAvatarUrl(gen.friendAvatarUrl ?? null);
-                      setChildFaceSheetUrl(gen.childFaceSheetUrl ?? null);
-                      setChildBodySheetUrl(gen.childBodySheetUrl ?? null);
-                      setFriendSheetUrl(gen.friendSheetUrl ?? null);
-                      setEngine(gen.engine ?? null);
-                      go("preview");
-                    } catch (err) {
-                      setError(
-                        err instanceof Error
-                          ? err.message
-                          : "Falha ao regenerar.",
-                      );
+                    const ok = await runPixarGeneration();
+                    if (!ok) {
                       setStep("preview");
+                      return;
                     }
+                    go("preview");
                   });
                 }}
               >

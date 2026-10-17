@@ -223,8 +223,29 @@ async function loadState(): Promise<OnboardingState> {
     state.friendPhotos = dbFriendPhotos;
   }
 
-  if (!state.childAvatarUrl && row.avatarUrl) {
-    state.childAvatarUrl = row.avatarUrl;
+  const pixar = row.preferences.pixar as
+    | {
+        child_hero?: string;
+        friend_hero?: string;
+        child_face_sheet?: string;
+        child_body_sheet?: string;
+        friend_sheet?: string;
+      }
+    | undefined;
+
+  // Só aceita avatar gerado — nunca foto crua do upload
+  if (isPixarGeneratedUrl(pixar?.child_hero)) {
+    state.childAvatarUrl = pixar!.child_hero!;
+  } else if (isPixarGeneratedUrl(row.avatarUrl)) {
+    state.childAvatarUrl = row.avatarUrl!;
+  } else if (!isPixarGeneratedUrl(state.childAvatarUrl)) {
+    state.childAvatarUrl = null;
+  }
+
+  if (isPixarGeneratedUrl(pixar?.friend_hero)) {
+    state.friendAvatarUrl = pixar!.friend_hero!;
+  } else if (!isPixarGeneratedUrl(state.friendAvatarUrl)) {
+    state.friendAvatarUrl = null;
   }
 
   const friendMeta = row.preferences.friend as

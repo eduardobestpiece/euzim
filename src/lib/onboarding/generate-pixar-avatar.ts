@@ -12,7 +12,7 @@ const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
 const MAX_REFS = 6;
 const REF_MAX_EDGE = 1024;
 
-export type PixarEngine = "gpt-image-2" | "placeholder";
+export type PixarEngine = "gpt-image-2";
 
 export type PixarSheetKind = "child-face" | "child-body" | "friend";
 
@@ -121,16 +121,20 @@ function bodySheetPrompt(name: string): string {
 }
 
 function friendSheetPrompt(name: string, kind: "pet" | "toy"): string {
-  const subject =
-    kind === "pet"
-      ? `THIS exact pet named "${name}"`
-      : `THIS exact favorite toy / doll named "${name}"`;
+  if (kind === "pet") {
+    return [
+      `Create a Walt Disney / Pixar-quality 3D animated CHARACTER STUDY turnaround of THIS exact pet named "${name}" from the reference photos.`,
+      `Preserve colors, markings, shape, and distinctive details from the references with high fidelity.`,
+      `Layout: clean 2x3 grid on neutral light-grey/off-white background showing the full character in six angles (front, 3/4 right, profile right, 3/4 left, 3/4 back, back).`,
+      `Soft cinematic 3D materials, studio lighting, consistent model across panels, wholesome kids style.`,
+      `No text except optional "ESTUDO DE PERSONAGEM" / "TURN-AROUND". No watermark. No people.`,
+    ].join(" ");
+  }
   return [
-    `Create a Walt Disney / Pixar-quality 3D animated CHARACTER STUDY turnaround of ${subject} from the reference photos.`,
-    `Preserve colors, markings, shape, and distinctive details from the references with high fidelity.`,
-    `Layout: clean 2x3 grid on neutral light-grey/off-white background showing the full character in six angles (front, 3/4 right, profile right, 3/4 left, 3/4 back, back).`,
-    `Soft plush/cinematic 3D materials, studio lighting, consistent model across panels, wholesome kids style.`,
-    `No text except optional "ESTUDO DE PERSONAGEM" / "TURN-AROUND". No watermark.`,
+    `Create a Pixar-style 3D cartoon toy sidekick turnaround sheet named "${name}" inspired by the colorful plastic toys in the reference photos.`,
+    `Preserve distinctive colors, shapes, and markings. Layout: clean 2x3 grid of full-body angles on light background.`,
+    `Soft studio lighting, wholesome kids movie style, consistent model across panels.`,
+    `Optional label "ESTUDO DE PERSONAGEM". No watermark, no people, no realistic humans.`,
   ].join(" ");
 }
 
@@ -142,11 +146,16 @@ function heroPortraitPrompt(name: string, kind: "child" | "pet" | "toy"): string
       `No text, no watermark, no extra people.`,
     ].join(" ");
   }
-  const subject =
-    kind === "pet" ? `pet named "${name}"` : `favorite toy named "${name}"`;
+  if (kind === "pet") {
+    return [
+      `Create a single Walt Disney / Pixar 3D animated hero portrait of THIS exact pet named "${name}" from the reference photos.`,
+      `Preserve distinctive colors and shape. Soft studio lighting, wholesome kids style, clean background. No text, no watermark, no people.`,
+    ].join(" ");
+  }
   return [
-    `Create a single Walt Disney / Pixar 3D animated hero portrait of THIS exact ${subject} from the reference photos.`,
-    `Preserve distinctive colors and shape. Soft studio lighting, wholesome kids style, clean background. No text, no watermark.`,
+    `Transform the colorful toys in the reference photos into a single cute Walt Disney / Pixar 3D animated toy sidekick character named "${name}".`,
+    `Wholesome kids movie style, soft studio lighting, clean pastel background, friendly and playful. Family-safe.`,
+    `No text, no watermark, no people, no realistic humans.`,
   ].join(" ");
 }
 
@@ -204,6 +213,31 @@ async function callImageEdit(input: {
   throw new Error("Resposta da OpenAI sem imagem.");
 }
 
+/** Retenta com prompts alternativos quando o filtro de segurança rejeita brinquedos. */
+async function callImageEditWithSafetyFallback(input: {
+  prompts: string[];
+  images: Buffer[];
+  size?: "1024x1024" | "1024x1536" | "1536x1024";
+  quality?: "low" | "medium" | "high";
+}): Promise<Buffer> {
+  let lastError: Error | null = null;
+  for (const prompt of input.prompts) {
+    try {
+      return await callImageEdit({
+        prompt,
+        images: input.images,
+        size: input.size,
+        quality: input.quality,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      lastError = err instanceof Error ? err : new Error(message);
+      if (!/safety|rejected/i.test(message)) throw lastError;
+    }
+  }
+  throw lastError ?? new Error("Falha ao gerar imagem.");
+}
+
 async function uploadGeneratedJpeg(input: {
   userId: string;
   filename: string;
@@ -257,12 +291,13 @@ export async function generateChildPixarAvatars(input: {
     faceUrls.length ? faceUrls : pickReferenceUrls(input.photos, "any"),
   );
 
-  if (!apiKey() || faceRefs.length === 0) {
-    const fallback =
-      faceUrls[0] ||
-      input.photos.find((p) => p.publicUrl)?.publicUrl ||
-      "";
-    return { url: fallback, engine: "placeholder" };
+  if (!apiKey()) {
+    throw new Error("OPENAI_API_KEY ausente — não dá para gerar Pixar.");
+  }
+  if (faceRefs.length === 0) {
+    throw new Error(
+      "Não consegui baixar as fotos de referência da criança. Reenvie as fotos e tente de novo.",
+    );
   }
 
   // 1) Hero portrait (preview card)
@@ -336,12 +371,23 @@ export async function generateFriendPixarAvatar(input: {
   const urls = pickReferenceUrls(input.photos, "any");
   const refs = await loadPreparedRefs(urls);
 
-  if (!apiKey() || refs.length === 0) {
-    return { url: urls[0] || "", engine: "placeholder" };
+  if (!apiKey()) {
+    throw new Error("OPENAI_API_KEY ausente — não dá para gerar Pixar.");
+  }
+  if (refs.length === 0) {
+    throw new Error(
+      "Não consegui baixar as fotos de referência do amigo. Reenvie as 6 fotos de corpo e tente de novo.",
+    );
   }
 
-  const heroJpeg = await callImageEdit({
-    prompt: heroPortraitPrompt(input.name, input.kind),
+  const heroJpeg = await callImageEditWithSafetyFallback({
+    prompts:
+      input.kind === "toy"
+        ? [
+            heroPortraitPrompt(input.name, "toy"),
+            `Create a Pixar-style 3D cartoon mascot inspired by the colorful toys in the photos. Character name vibe: "${input.name}". Soft lighting, cute proportions, children's storybook character, clean background. No people, no text.`,
+          ]
+        : [heroPortraitPrompt(input.name, input.kind)],
     images: refs.slice(0, 4),
     size: "1024x1024",
     quality: "medium",
@@ -354,8 +400,11 @@ export async function generateFriendPixarAvatar(input: {
 
   let faceSheetUrl: string | undefined;
   try {
-    const sheet = await callImageEdit({
-      prompt: friendSheetPrompt(input.name, input.kind),
+    const sheet = await callImageEditWithSafetyFallback({
+      prompts: [
+        friendSheetPrompt(input.name, input.kind),
+        `Create a Pixar-style 3D cartoon toy robot character turnaround sheet named "${input.name}" based on the colorful toys in the references. 2x3 grid of full-body angles, soft lighting, kids movie style, clean background. No people, no text except ESTUDO DE PERSONAGEM.`,
+      ],
       images: refs,
       size: "1536x1024",
       quality: "medium",
@@ -376,10 +425,4 @@ export async function generateFriendPixarAvatar(input: {
   };
 }
 
-/** True se a URL parece avatar gerado (não foto crua do upload). */
-export function isPixarGeneratedUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  if (url.includes("/generated/")) return true;
-  if (url.startsWith("data:image/")) return true;
-  return false;
-}
+export { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
