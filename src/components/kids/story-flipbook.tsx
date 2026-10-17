@@ -15,7 +15,6 @@ import { useImagePalette } from "@/hooks/use-image-palette";
 import {
   paletteBackgroundStyle,
   withAlpha,
-  type StoryPalette,
 } from "@/lib/stories/palette";
 import type { QuizQuestion } from "@/lib/stories/quiz";
 import { shareStoryLink } from "@/lib/stories/share";
@@ -26,45 +25,6 @@ type Page = {
   imageUrl: string;
   altText: string;
 };
-
-function TitleBlock({
-  title,
-  subtitle,
-  palette,
-}: {
-  title: string;
-  subtitle: string;
-  palette: StoryPalette;
-}) {
-  return (
-    <header className="mx-auto w-full max-w-lg shrink-0 px-3 pb-2 pt-1 text-center">
-      <div
-        className="rounded-2xl px-4 py-3 shadow-md"
-        style={{
-          background: palette.paper,
-          color: palette.text,
-          boxShadow: `0 8px 24px ${withAlpha(palette.deep, 0.28)}`,
-        }}
-      >
-        <p
-          className="font-story-body text-[0.65rem] font-extrabold uppercase tracking-[0.2em]"
-          style={{ color: palette.textMuted }}
-        >
-          Estúdio Mágico
-        </p>
-        <h1 className="font-story-display mt-1 text-[1.35rem] font-semibold leading-tight tracking-tight md:text-2xl">
-          {title}
-        </h1>
-        <p
-          className="font-story-body mt-1 text-sm font-bold"
-          style={{ color: palette.textMuted }}
-        >
-          {subtitle}
-        </p>
-      </div>
-    </header>
-  );
-}
 
 export function StoryFlipbook({
   storyId,
@@ -105,6 +65,7 @@ export function StoryFlipbook({
   const isQuiz = hasQuiz && index >= quizIndex;
   const page = !isQuiz ? pages[index] : null;
   const palette = useImagePalette(page?.imageUrl || pages[0]?.imageUrl);
+  const showStoryTitle = showTitle && !isQuiz && index === 0;
 
   const goPrev = useCallback(() => {
     setIndex((i) => Math.max(0, i - 1));
@@ -123,7 +84,6 @@ export function StoryFlipbook({
     return () => window.removeEventListener("keydown", onKey);
   }, [goPrev, goNext]);
 
-  // Nova página → texto volta ao topo (imagem permanece fixa)
   useEffect(() => {
     textScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [index]);
@@ -157,9 +117,6 @@ export function StoryFlipbook({
 
   const atLastStoryPage = index >= pages.length - 1;
   const nextDisabled = isQuiz || (!hasQuiz && atLastStoryPage);
-  const subtitle = isQuiz
-    ? "Hora do quiz!"
-    : `Página ${index + 1} de ${pages.length}`;
 
   return (
     <div
@@ -180,8 +137,18 @@ export function StoryFlipbook({
       />
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        {backHref ? (
-          <div className="flex shrink-0 items-center px-3 pb-1 pt-3 md:px-5">
+        {/* Topo: Euzim + botão de saída na mesma linha */}
+        <div className="flex shrink-0 items-center justify-between gap-3 px-3 pb-2 pt-3 md:px-5">
+          <span
+            className="font-story-display text-lg font-semibold tracking-tight md:text-xl"
+            style={{
+              color: palette.paper,
+              textShadow: `0 1px 2px ${withAlpha(palette.deep, 0.55)}`,
+            }}
+          >
+            Euzim
+          </span>
+          {backHref ? (
             <Button
               asChild
               variant="secondary"
@@ -194,19 +161,17 @@ export function StoryFlipbook({
                 {backLabel}
               </Link>
             </Button>
-          </div>
-        ) : null}
-
-        {showTitle ? (
-          <TitleBlock title={title} subtitle={subtitle} palette={palette} />
-        ) : null}
+          ) : (
+            <span className="size-8" aria-hidden />
+          )}
+        </div>
 
         {!isQuiz && page ? (
           <>
-            {/* Imagem fixa — nunca rola */}
+            {/* Imagem fixa — título só na 1ª página, como extensão da arte */}
             <figure className="mx-auto w-full max-w-3xl shrink-0 px-3 md:px-5">
               <div
-                className="overflow-hidden rounded-t-[1.35rem] shadow-lg md:rounded-t-[1.6rem]"
+                className="relative overflow-hidden rounded-t-[1.35rem] shadow-lg md:rounded-t-[1.6rem]"
                 style={{
                   boxShadow: `0 12px 32px ${withAlpha(palette.deep, 0.28)}`,
                 }}
@@ -218,14 +183,33 @@ export function StoryFlipbook({
                     src={page.imageUrl}
                     alt={page.altText}
                     crossOrigin="anonymous"
-                    className="aspect-[16/10] max-h-[38vh] w-full object-cover sm:max-h-[42vh]"
+                    className="aspect-[16/10] max-h-[40vh] w-full object-cover sm:max-h-[44vh]"
                   />
                 ) : (
                   <div
-                    className="aspect-[16/10] max-h-[38vh] w-full sm:max-h-[42vh]"
+                    className="aspect-[16/10] max-h-[40vh] w-full sm:max-h-[44vh]"
                     style={{ background: palette.soft }}
                   />
                 )}
+
+                {showStoryTitle ? (
+                  <div
+                    className="pointer-events-none absolute inset-x-0 bottom-0 px-4 pb-4 pt-16 text-center"
+                    style={{
+                      background: `linear-gradient(to top, ${withAlpha(palette.deep, 0.88)} 0%, ${withAlpha(palette.deep, 0.45)} 55%, transparent 100%)`,
+                    }}
+                  >
+                    <h1
+                      className="font-story-display text-[1.4rem] font-semibold leading-tight tracking-tight md:text-2xl"
+                      style={{
+                        color: palette.paper,
+                        textShadow: `0 2px 12px ${withAlpha(palette.deep, 0.65)}`,
+                      }}
+                    >
+                      {title}
+                    </h1>
+                  </div>
+                ) : null}
               </div>
               <div
                 className="h-1.5 w-full"
@@ -236,7 +220,6 @@ export function StoryFlipbook({
               />
             </figure>
 
-            {/* Só o texto rola */}
             <div
               ref={textScrollRef}
               className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-3 pb-4 md:px-5"
