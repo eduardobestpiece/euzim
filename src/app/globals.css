@@ -361,10 +361,10 @@
 h1 .inline-brand,
 h2 .inline-brand,
 .font-story-display .inline-brand {
-  height: 1em !important;
-  max-height: 1em !important;
-  max-width: 3.1em !important;
-  vertical-align: -0.14em;
+  height: 1.15em !important;
+  max-height: 1.15em !important;
+  max-width: 3.45em !important;
+  vertical-align: -0.16em;
 }
 
 /* ─── Landing story book (painel tipo livro) ─── */
