@@ -3,6 +3,7 @@ import Link from "next/link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { InlineBrand } from "@/components/brand/inline-brand";
 import { LandingStoryBook } from "@/components/marketing/landing-story-book";
+import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -161,6 +162,8 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
       </section>
 
       <LandingStoryBook />
+
+      <LandingRoadmap />
     </div>
   );
 }
