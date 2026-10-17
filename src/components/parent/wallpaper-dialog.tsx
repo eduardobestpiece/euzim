@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { Download, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +59,7 @@ export function WallpaperDialog({
   title,
   triggerLabel = "Wallpaper",
   triggerClassName,
+  triggerStyle,
   size = "sm",
   variant = "secondary",
 }: {
@@ -66,6 +67,7 @@ export function WallpaperDialog({
   title: string;
   triggerLabel?: string;
   triggerClassName?: string;
+  triggerStyle?: CSSProperties;
   size?: "sm" | "default" | "lg" | "icon";
   variant?:
     | "default"
@@ -158,6 +160,7 @@ export function WallpaperDialog({
         variant={variant}
         size={size}
         className={cn("gap-1.5", triggerClassName)}
+        style={triggerStyle}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

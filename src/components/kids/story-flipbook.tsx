@@ -155,16 +155,6 @@ export function StoryFlipbook({
             Euzim
           </span>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {showWallpaper && wallpaperUrl ? (
-              <WallpaperDialog
-                imageUrl={wallpaperUrl}
-                title={title}
-                triggerLabel="Wallpaper"
-                variant="secondary"
-                size="sm"
-                triggerClassName="font-story-body border-0 shadow-sm"
-              />
-            ) : null}
             {backHref ? (
               <Button
                 asChild
@@ -274,20 +264,31 @@ export function StoryFlipbook({
                   {page.text}
                 </p>
 
+                {/* Última página: CTA wallpaper imediatamente acima de Anterior/Quiz */}
                 {atLastStoryPage && showWallpaper && wallpaperUrl ? (
-                  <div className="mt-6 flex justify-center">
+                  <div className="mt-6 space-y-3">
                     <WallpaperDialog
                       imageUrl={wallpaperUrl}
                       title={title}
-                      triggerLabel="Usar como wallpaper"
-                      variant="outline"
-                      size="sm"
-                      triggerClassName="font-story-body border-0 shadow-sm"
+                      triggerLabel="Baixar wallpaper do celular"
+                      variant="default"
+                      size="default"
+                      triggerClassName="font-story-body h-11 w-full border-0 text-base font-semibold shadow-md"
+                      triggerStyle={{
+                        background: palette.accent,
+                        color: palette.paper,
+                      }}
                     />
+                    <p
+                      className="text-center font-story-body text-xs"
+                      style={{ color: palette.textMuted }}
+                    >
+                      Última página em retrato — ver e salvar no celular
+                    </p>
                   </div>
                 ) : null}
 
-                <div className="mt-8 flex items-center justify-between gap-3">
+                <div className="mt-6 flex items-center justify-between gap-3">
                   <Button
                     type="button"
                     variant="outline"
