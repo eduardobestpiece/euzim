@@ -1,24 +1,23 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { StoryUsageTracker } from "@/components/parent/story-usage-tracker";
-import { CharactersPanel } from "@/components/parent/characters-panel";
+import { CharactersPanel, type CharacterManageRow } from "@/components/parent/characters-panel";
 import { NewStoryForm } from "@/components/parent/new-story-form";
 import {
   SubscriptionPanel,
   type BillingSnapshot,
 } from "@/components/parent/subscription-panel";
+import {
+  StoryJobNotifier,
+  trackStoryJob,
+} from "@/components/parent/story-job-notifier";
 import type { StoryUsage } from "@/lib/stories/usage";
-
-type CharacterRow = {
-  id: string;
-  name: string;
-  isPrimary?: boolean;
-  avatarUrl?: string | null;
-};
+import type { ChildFamilyMeta } from "@/lib/characters/types";
 
 type StoryListItem = {
   id: string;
@@ -33,14 +32,16 @@ export function ParentDashboard({
   childName,
   childAvatarUrl,
   childAgeYears,
+  childMeta,
   stories,
   billing,
 }: {
   usage: StoryUsage;
-  characters: CharacterRow[];
+  characters: CharacterManageRow[];
   childName?: string | null;
   childAvatarUrl?: string | null;
   childAgeYears?: number | null;
+  childMeta?: ChildFamilyMeta | null;
   stories: StoryListItem[];
   billing: BillingSnapshot;
 }) {
@@ -50,10 +51,17 @@ export function ParentDashboard({
   const friend = characters.find((c) => !c.isPrimary) ?? null;
   const heroUrl = childAvatarUrl || primary?.avatarUrl || null;
   const heroName = childName || primary?.name || "sua criança";
+  const isFirstStory = stories.length === 0;
+  const [tab, setTab] = useState("create");
+
+  const onJobQueued = useCallback((jobId: string) => {
+    trackStoryJob(jobId);
+  }, []);
 
   return (
     <div className="space-y-6">
-      {/* Avatar em destaque — feeling pós-onboarding */}
+      <StoryJobNotifier />
+
       <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-[radial-gradient(ellipse_at_top_left,_oklch(0.95_0.04_85),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_oklch(0.94_0.03_210),_transparent_50%)] p-5 sm:p-7">
         <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-end">
           <div className="relative">
@@ -80,12 +88,15 @@ export function ParentDashboard({
               {heroName}
             </h1>
             <p className="max-w-md text-sm text-muted-foreground sm:text-base">
-              O personagem mágico está pronto. Agora você pode criar a primeira
-              aventura com o avatar da sua criança.
+              {isFirstStory
+                ? "O personagem mágico está pronto. Crie a primeira aventura com o avatar da sua criança."
+                : "Escolha um tema e crie mais uma aventura com o elenco da família."}
             </p>
             <div className="flex flex-wrap justify-center gap-2 pt-1 sm:justify-start">
               <Button asChild size="lg">
-                <a href="#criar-historia">Criar primeira história</a>
+                <a href="#criar-historia">
+                  {isFirstStory ? "Criar primeira história" : "Criar história"}
+                </a>
               </Button>
               <Button asChild variant="outline">
                 <Link href="/app/kids">Abrir Kids</Link>
@@ -97,7 +108,7 @@ export function ParentDashboard({
 
       <StoryUsageTracker usage={usage} />
 
-      <Tabs defaultValue="create" className="gap-4">
+      <Tabs value={tab} onValueChange={setTab} className="gap-4">
         <TabsList>
           <TabsTrigger value="create">Nova História</TabsTrigger>
           <TabsTrigger value="library">Biblioteca</TabsTrigger>
@@ -112,6 +123,7 @@ export function ParentDashboard({
             remaining={remaining}
             characters={characters}
             childAgeYears={childAgeYears ?? null}
+            onJobQueued={onJobQueued}
           />
         </TabsContent>
 
@@ -154,7 +166,11 @@ export function ParentDashboard({
         </TabsContent>
 
         <TabsContent value="characters">
-          <CharactersPanel characters={characters} billing={billing} />
+          <CharactersPanel
+            characters={characters}
+            billing={billing}
+            childMeta={childMeta ?? null}
+          />
         </TabsContent>
 
         <TabsContent value="billing">

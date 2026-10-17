@@ -6,12 +6,6 @@ import { signOutAction } from "@/lib/auth/actions";
 import type { AuthUser } from "@/lib/auth/types";
 import { PLATFORM_BUILD } from "@/lib/platform-build";
 
-const links = [
-  { href: "/app/parent", label: "Pais", icon: Users },
-  { href: "/app/kids", label: "Kids", icon: Baby },
-  { href: "/app/admin", label: "Admin", icon: Shield },
-] as const;
-
 export function AppShell({
   user,
   title,
@@ -23,6 +17,14 @@ export function AppShell({
   kidsMode?: boolean;
   children: React.ReactNode;
 }) {
+  const links = [
+    { href: "/app/parent", label: "Pais", icon: Users },
+    { href: "/app/kids", label: "Kids", icon: Baby },
+    ...(user.role === "admin"
+      ? [{ href: "/app/admin", label: "Admin", icon: Shield } as const]
+      : []),
+  ];
+
   return (
     <div className="flex min-h-full flex-1 flex-col">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-4 md:px-8">

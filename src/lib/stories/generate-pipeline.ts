@@ -2,18 +2,26 @@ import type { GeneratedPage, GeneratedStory } from "@/lib/stories/generate-mock"
 import { generateMockStory } from "@/lib/stories/generate-mock";
 import type { StoryCast } from "@/lib/stories/story-cast";
 import {
+  applyBibleToChapters,
+  buildSceneContinuityBible,
+} from "@/lib/stories/scene-continuity-bible";
+import {
   findMatchingTemplate,
   personalizeSkeleton,
   saveStoryTemplate,
 } from "@/lib/stories/story-templates";
 import {
+  LANGUAGE_LEVELS,
   MAX_STORY_PAGES,
   MIN_STORY_PAGES,
+  PREFERRED_STORY_PAGES,
   STORYTELLER_SKILL,
   STORY_AUX_MODEL,
   STORY_TEXT_MODEL,
   TARGET_WORDS_PER_PAGE,
+  languageLevelGuidance,
   storyTypeGuidance,
+  type LanguageLevel,
   type StoryType,
   type WordVolume,
   WORD_VOLUME_TARGETS,
@@ -48,6 +56,7 @@ export type PipelineOptions = {
   storyType?: StoryType;
   wordTarget?: number;
   wordVolume?: WordVolume;
+  languageLevel?: LanguageLevel;
   clarifyAnswers?: Record<string, string>;
   castNames?: string[];
   protagonistName?: string;
@@ -128,6 +137,14 @@ function typeBrief(opts?: PipelineOptions): string {
   return `Tipo de história: ${opts.storyType}. ${storyTypeGuidance(opts.storyType)}`;
 }
 
+function languageBrief(opts?: PipelineOptions): string {
+  const level = opts?.languageLevel;
+  if (!level || !(LANGUAGE_LEVELS as readonly string[]).includes(level)) {
+    return "";
+  }
+  return `languageLevel: ${level}. ${languageLevelGuidance(level)}`;
+}
+
 function clarifyBrief(opts?: PipelineOptions): string {
   if (!opts?.clarifyAnswers || Object.keys(opts.clarifyAnswers).length === 0) {
     return "";
@@ -167,11 +184,12 @@ Responda SOMENTE JSON:
     user: `${castBrief(cast, opts)}
 
 ${typeBrief(opts)}
+${languageBrief(opts)}
 ${clarifyBrief(opts)}
 
 Tema: """${theme}"""
 
-Outline agora.`,
+Outline agora — prefira ~${PREFERRED_STORY_PAGES} batidas (range ${MIN_STORY_PAGES}–${MAX_STORY_PAGES}).`,
     timeoutMs: 90_000,
   });
   if (!parsed) return null;
@@ -209,6 +227,7 @@ Responda SOMENTE JSON:
     user: `${castBrief(cast, opts)}
 
 ${typeBrief(opts)}
+${languageBrief(opts)}
 ${clarifyBrief(opts)}
 
 Tema: """${theme}"""
@@ -217,7 +236,8 @@ Moral: ${outline.moral}
 Batidas:
 ${outline.beats.map((b, i) => `${i + 1}. ${b}`).join("\n")}
 
-Escreva a prosa final completa (~${vol.target} palavras).`,
+Escreva a prosa final completa (~${vol.target} palavras).
+Não invente detalhes visuais que contradigam o avatar da criança.`,
   });
   if (!parsed) return null;
   const title = String(parsed.title ?? outline.title).trim();
@@ -299,7 +319,8 @@ async function splitIntoChapters(
     temperature: 0.4,
     system: `${STORYTELLER_SKILL}
 
-Divida a história FINAL em ${MIN_STORY_PAGES} a ${MAX_STORY_PAGES} ATOS/páginas.
+Divida a história FINAL em ${MIN_STORY_PAGES} a ${MAX_STORY_PAGES} ATOS/páginas
+(alvo preferido: ${PREFERRED_STORY_PAGES} atos — um beat = uma imagem).
 Cada ato: ~${TARGET_WORDS_PER_PAGE} palavras (±40), com começo/meio/fim de cena,
 diálogos quando couber, e um image_prompt em INGLÊS para ilustração Walt Disney/Pixar 3D.
 
@@ -461,11 +482,11 @@ export async function generateStoryPipeline(input: {
   const reviewed = await lightReview(cast, theme, expanded, opts);
 
   const chapters = await splitIntoChapters(cast, reviewed, opts);
-  const finalChapters =
+  let finalChapters =
     chapters ??
     (() => {
       const words = reviewed.fullText.split(/\s+/);
-      const chunks = 6;
+      const chunks = PREFERRED_STORY_PAGES;
       const size = Math.ceil(words.length / chunks);
       return Array.from({ length: chunks }, (_, i) => {
         const text = words.slice(i * size, (i + 1) * size).join(" ");
@@ -477,6 +498,15 @@ export async function generateStoryPipeline(input: {
         } satisfies StoryChapter;
       });
     })();
+
+  // Scene Continuity Bible → injeta props/expressões nos image_prompts
+  const bible = await buildSceneContinuityBible({
+    userId: opts?.userId,
+    cast,
+    title: reviewed.title,
+    chapters: finalChapters,
+  });
+  finalChapters = applyBibleToChapters(finalChapters, bible);
 
   // 3) Salvar template anonimizado (inédito)
   let templateId: string | null = null;

@@ -11,7 +11,7 @@ type ClarifyQuestion = {
 };
 
 /**
- * Se o tema for ambíguo, devolve 1–3 perguntas; senão needsClarify=false.
+ * Clarify barato (low-token) com contexto de elenco/tema.
  */
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -21,13 +21,27 @@ export async function POST(request: Request) {
 
   let theme = "";
   let storyType = "";
+  let languageLevel = "";
+  let castNames: string[] = [];
+  let protagonistName = "";
+  let friendName = "";
   try {
     const body = (await request.json()) as {
       theme?: string;
       storyType?: string;
+      languageLevel?: string;
+      castNames?: string[];
+      protagonistName?: string;
+      friendName?: string;
     };
     theme = String(body.theme ?? "").trim();
     storyType = String(body.storyType ?? "").trim();
+    languageLevel = String(body.languageLevel ?? "").trim();
+    castNames = Array.isArray(body.castNames)
+      ? body.castNames.map(String)
+      : [];
+    protagonistName = String(body.protagonistName ?? "").trim();
+    friendName = String(body.friendName ?? "").trim();
   } catch {
     return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
   }
@@ -43,13 +57,16 @@ export async function POST(request: Request) {
     body: {
       model: STORY_AUX_MODEL,
       temperature: 0.3,
+      max_tokens: 350,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content: `Você ajuda pais a esclarecer temas de histórias infantis (Estúdio Mágico).
-Se o tema já for claro e específico o bastante para gerar uma história boa, responda needsClarify=false e questions=[].
-Se for vago/ambíguo (ex.: "história com morador de rua", "sobre medo"), faça 1 a 3 perguntas curtas em português do Brasil para o pai responder.
+Seja econômico em tokens: no máximo 3 perguntas curtas.
+Se o tema já for claro e específico o bastante, responda needsClarify=false e questions=[].
+Se for vago/ambíguo, faça 1 a 3 perguntas em português do Brasil.
+Use o elenco informado para personalizar as perguntas quando útil.
 Nunca peça temas de identidade de gênero ou ideologia.
 Responda SOMENTE JSON:
 {
@@ -59,7 +76,11 @@ Responda SOMENTE JSON:
         },
         {
           role: "user",
-          content: `Tipo sugerido: ${storyType || "(não informado)"}
+          content: `Tipo: ${storyType || "(não informado)"}
+Linguagem: ${languageLevel || "(não informada)"}
+Protagonista: ${protagonistName || "(não informado)"}
+Amigo: ${friendName || "(não informado)"}
+Elenco: ${castNames.join(", ") || "(não informado)"}
 Tema dos pais: """${theme}"""`,
         },
       ],

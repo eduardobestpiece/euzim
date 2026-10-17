@@ -47,6 +47,14 @@ fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca 
 - Idade típica 4–9 anos: vocabulário acessível, frases claras, ritmo oral.
 - Medos reais (rua, escuro, separação) tratados com empatia e segurança emocional.
 
+## Linguagem (languageLevel)
+Quando o pedido indicar languageLevel, aplique:
+- simples: frases curtas, palavras cotidianas, poucas subordinadas; ótimo para 4–6 anos.
+- moderada: ritmo oral rico, algumas metáforas leves; padrão 6–8 anos.
+- completa: prosa mais densa e poética, ainda compreensível ao ouvir; 8–10 anos.
+Nunca sacrifique clareza oral nem invente detalhes visuais que contradigam o avatar
+(ex.: não diga "olhos de botão" se o turnaround não tem).
+
 ## Qualidade (anti-raso) + batidas visuais únicas
 - Evite "e então eles foram felizes" sem jornada.
 - Cada ato precisa de cena concreta (lugar, ação, fala, escolha) e batida VISUAL ÚNICA.
@@ -74,8 +82,34 @@ export const STORY_AUX_MODEL =
 
 export const MIN_STORY_PAGES = 5;
 export const MAX_STORY_PAGES = 10;
+/** Alvo padrão de atos (ainda no range 5–10): um beat = uma imagem. */
+export const PREFERRED_STORY_PAGES = 6;
 /** Meta: ~150–220 palavras por página → ~8–15 min de leitura total. */
 export const TARGET_WORDS_PER_PAGE = 180;
+
+export const LANGUAGE_LEVELS = ["simples", "moderada", "completa"] as const;
+export type LanguageLevel = (typeof LANGUAGE_LEVELS)[number];
+
+export const LANGUAGE_LEVEL_LABELS: Record<LanguageLevel, string> = {
+  simples: "Simples",
+  moderada: "Moderada",
+  completa: "Completa",
+};
+
+export function languageLevelGuidance(level: LanguageLevel): string {
+  switch (level) {
+    case "simples":
+      return "Vocabulário simples, frases curtas, ritmo fácil de ouvir (4–6 anos).";
+    case "moderada":
+      return "Linguagem oral rica com metáforas leves (6–8 anos).";
+    case "completa":
+      return "Prosa mais densa e poética, ainda clara ao ouvir (8–10 anos).";
+    default: {
+      const _exhaustive: never = level;
+      return _exhaustive;
+    }
+  }
+}
 
 export const STORY_TYPES = [
   "aventura",
@@ -101,9 +135,9 @@ export const WORD_VOLUME_TARGETS: Record<
   WordVolume,
   { words: number; label: string }
 > = {
-  curta: { words: 600, label: "Curta (~600)" },
-  media: { words: 1200, label: "Média (~1200)" },
-  longa: { words: 1800, label: "Longa (~1800)" },
+  curta: { words: 600, label: "Textos curtos (~600)" },
+  media: { words: 1200, label: "Textos médios (~1200)" },
+  longa: { words: 1800, label: "Textos longos (~1800)" },
 };
 
 /** Recomenda volume pela idade da criança. */

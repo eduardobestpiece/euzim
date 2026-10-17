@@ -217,8 +217,14 @@ function scenePrompt(
       ? `REGENERATION ${retryBoost}: previous result looked too similar — change LOCATION details, CAMERA ANGLE, POSE, and FOREGROUND OBJECTS dramatically while keeping the same story beat.`
       : "";
 
+  // Continuity locks já vêm embutidos em page.imagePrompt (Scene Continuity Bible).
+  const continuityHint = page.imagePrompt?.includes("CONTINUITY BEAT")
+    ? "Obey CONTINUITY BEAT / PROP LOCKS / MUST SHOW / MUST NOT SHOW from the prompt above."
+    : "";
+
   return [
     base,
+    continuityHint,
     `Mandatory camera: ${shot}.`,
     `This is beat ${pageIndex + 1} of ${totalPages} — unique composition required.`,
     avoid,
@@ -226,7 +232,11 @@ function scenePrompt(
     `Walt Disney / Pixar quality 3D animated cinematic still.`,
     `Feature THIS exact child character "${cast.childName}" and THIS exact ${cast.friendKind} companion "${cast.friendName}" from the reference images as the clear protagonists.`,
     `Preserve their Pixar look, colors, and identity from the references with high fidelity.`,
+    `Do not invent avatar details that contradict the reference sheets.`,
     familyFaceRule(cast),
+    pageIndex === totalPages - 1
+      ? `Final beat: prefer a rich closing scene when the text allows (park, snack, joy, companions) — avoid only a bed close-up if the story covers more.`
+      : "",
     `Soft cinematic lighting, wholesome family-friendly mood, rich storybook composition.`,
     `No text, no captions, no watermark, no logos, no photorealistic humans.`,
   ]

@@ -91,29 +91,54 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
 
   const { data: chars } = await db
     .from("characters")
-    .select("id, name, avatar_url, is_primary, traits, description")
+    .select(
+      "id, name, avatar_url, is_primary, traits, description, relationship, kind",
+    )
     .eq("parent_id", parentId)
     .order("created_at", { ascending: true });
 
   const primary = chars?.find((c) => c.is_primary) ?? chars?.[0];
-  const friendChar = chars?.find((c) => !c.is_primary);
+  const friendChar =
+    chars?.find(
+      (c) =>
+        !c.is_primary &&
+        (c.kind === "pet" ||
+          c.kind === "toy" ||
+          c.relationship === "pet" ||
+          c.relationship === "toy"),
+    ) ?? chars?.find((c) => !c.is_primary);
 
   const friendName =
     prefs.friend?.displayName || friendChar?.name || "Amigo";
   const friendKind: "pet" | "toy" =
-    prefs.friend?.kind === "toy" ? "toy" : "pet";
+    prefs.friend?.kind === "toy" ||
+    friendChar?.kind === "toy" ||
+    friendChar?.relationship === "toy"
+      ? "toy"
+      : "pet";
 
-  // Avatares de família (pais/irmãos): traits/description com role familiar + Pixar.
+  // Avatares de família (pais/irmãos): relationship/kind + traits + Pixar.
   const familyHints =
     /\b(pai|mãe|mae|parent|father|mother|irmão|irmao|irmã|irma|sibling|brother|sister|cuidador)\b/i;
+  const familyRels = new Set([
+    "father",
+    "mother",
+    "sibling",
+    "grandparent",
+    "uncle_aunt",
+  ]);
   const hasFamilyMemberAvatars = (chars ?? []).some((c) => {
     if (!isPixarGeneratedUrl(c.avatar_url)) return false;
     if (c.is_primary) return false;
     if (c.id === friendChar?.id) return false;
+    if (c.relationship && familyRels.has(String(c.relationship))) return true;
+    if (c.kind === "adult") return true;
     const traits = Array.isArray(c.traits)
       ? c.traits.map(String).join(" ")
       : JSON.stringify(c.traits ?? "");
-    return familyHints.test(`${c.name} ${c.description ?? ""} ${traits}`);
+    return familyHints.test(
+      `${c.name} ${c.description ?? ""} ${c.relationship ?? ""} ${traits}`,
+    );
   });
 
   return {

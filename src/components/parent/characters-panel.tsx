@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Sparkles, Users } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import { Pencil, Plus, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -13,40 +15,164 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   CHARACTER_PACKS,
   formatBrl,
-  type CharacterPack,
+  priceForAvatarCount,
 } from "@/lib/billing/character-packs";
+import {
+  RELATIONSHIP_OPTIONS,
+  type CharacterManageRow,
+  type ChildFamilyMeta,
+} from "@/lib/characters/types";
+import {
+  updateCharacterAction,
+  updateChildFamilyAction,
+} from "@/lib/characters/actions";
 import {
   mockActivatePackAction,
   startCharacterPackCheckoutAction,
+  startCustomAvatarsCheckoutAction,
 } from "@/lib/stripe/checkout-actions";
 import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 
-type CharacterRow = {
-  id: string;
-  name: string;
-  isPrimary?: boolean;
-};
+export type { CharacterManageRow };
 
 export function CharactersPanel({
   characters,
   billing,
+  childMeta,
 }: {
-  characters: CharacterRow[];
+  characters: CharacterManageRow[];
   billing: BillingSnapshot;
+  childMeta?: ChildFamilyMeta | null;
 }) {
   const [pending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editing, setEditing] = useState<CharacterManageRow | null>(null);
+  const [avatarCount, setAvatarCount] = useState(1);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [relFilter, setRelFilter] = useState("");
 
-  function buyPack(pack: CharacterPack) {
-    setSelected(pack.id);
-    setMessage(null);
+  const [form, setForm] = useState({
+    name: "",
+    relationship: "friend",
+    relationshipOther: "",
+    gender: "",
+    birthDate: "",
+    kind: "other",
+  });
+
+  const [familyForm, setFamilyForm] = useState({
+    hasFather: childMeta?.hasFather ?? false,
+    fatherName: childMeta?.fatherName ?? "",
+    fatherBirthDate: childMeta?.fatherBirthDate ?? "",
+    hasMother: childMeta?.hasMother ?? false,
+    motherName: childMeta?.motherName ?? "",
+    motherBirthDate: childMeta?.motherBirthDate ?? "",
+  });
+
+  const price = priceForAvatarCount(avatarCount);
+  const filteredRels = useMemo(() => {
+    const q = relFilter.trim().toLowerCase();
+    if (!q) return RELATIONSHIP_OPTIONS;
+    return RELATIONSHIP_OPTIONS.filter((r) =>
+      r.label.toLowerCase().includes(q),
+    );
+  }, [relFilter]);
+
+  function openEdit(c: CharacterManageRow) {
+    setEditing(c);
+    setForm({
+      name: c.name,
+      relationship: c.relationship || (c.isPrimary ? "child" : "friend"),
+      relationshipOther: c.relationshipOther || "",
+      gender: c.gender || "",
+      birthDate: c.birthDate || "",
+      kind: c.kind || (c.isPrimary ? "child" : "other"),
+    });
+    setEditOpen(true);
     setError(null);
+    setMessage(null);
+  }
+
+  function saveEdit() {
+    if (!editing) return;
     startTransition(async () => {
-      const result = await startCharacterPackCheckoutAction(pack.id);
+      const result = await updateCharacterAction({
+        id: editing.id,
+        name: form.name,
+        relationship: form.relationship,
+        relationshipOther:
+          form.relationship === "other" ? form.relationshipOther : null,
+        gender: form.gender || null,
+        birthDate: form.birthDate || null,
+        kind: form.kind || null,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setEditOpen(false);
+      setMessage("Informações atualizadas.");
+      window.location.reload();
+    });
+  }
+
+  function saveFamily() {
+    if (!childMeta?.id) return;
+    startTransition(async () => {
+      const result = await updateChildFamilyAction({
+        childId: childMeta.id,
+        hasFather: familyForm.hasFather,
+        fatherName: familyForm.fatherName,
+        fatherBirthDate: familyForm.fatherBirthDate,
+        hasMother: familyForm.hasMother,
+        motherName: familyForm.motherName,
+        motherBirthDate: familyForm.motherBirthDate,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage("Dados da família salvos.");
+      window.location.reload();
+    });
+  }
+
+  function buyAvatars() {
+    setError(null);
+    setMessage(null);
+    startTransition(async () => {
+      if (avatarCount <= 5) {
+        const pack = CHARACTER_PACKS.find((p) => p.characters === avatarCount);
+        if (!pack) {
+          setError("Quantidade inválida.");
+          return;
+        }
+        const result = await startCharacterPackCheckoutAction(pack.id);
+        if (result.url) {
+          window.location.href = result.url;
+          return;
+        }
+        if (result.error) setError(result.error);
+        if (!billing.stripeReady) {
+          setMessage(
+            "Checkout real indisponível (falta STRIPE_SECRET_KEY). Use simular.",
+          );
+        }
+        return;
+      }
+      const result = await startCustomAvatarsCheckoutAction(avatarCount);
       if (result.url) {
         window.location.href = result.url;
         return;
@@ -54,133 +180,419 @@ export function CharactersPanel({
       if (result.error) setError(result.error);
       if (!billing.stripeReady) {
         setMessage(
-          `Checkout real indisponível. Use “Simular compra” para creditar ${pack.characters} personagem(ns) localmente.`,
+          "Checkout real indisponível (falta STRIPE_SECRET_KEY). Avatares 6+ = R$ 9,90 cada.",
         );
       }
     });
   }
 
-  function simulatePack(pack: CharacterPack) {
-    setSelected(pack.id);
-    setError(null);
+  function simulate() {
+    const pack =
+      CHARACTER_PACKS.find((p) => p.characters === Math.min(avatarCount, 5)) ??
+      CHARACTER_PACKS[0];
     startTransition(async () => {
       const result = await mockActivatePackAction(pack.id);
       if (result.error) {
         setError(result.error);
         return;
       }
-      setMessage(
-        `Pacote “${pack.name}” creditado (simulado). Extras: +${pack.characters}.`,
-      );
+      setMessage(`Crédito simulado: +${pack.characters} personagem(ns).`);
       window.location.reload();
     });
   }
 
+  const isPetOrToy =
+    form.kind === "pet" ||
+    form.kind === "toy" ||
+    form.relationship === "pet" ||
+    form.relationship === "toy";
+
   return (
     <div className="space-y-8">
       <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Users className="size-4 text-muted-foreground" />
-          <h2 className="font-heading text-xl font-semibold">
-            Seus personagens
-          </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Users className="size-4 text-muted-foreground" />
+            <h2 className="font-heading text-xl font-semibold">
+              Seus personagens
+            </h2>
+          </div>
+          <Button type="button" onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" />
+            Adicionar Personagem
+          </Button>
         </div>
         <p className="text-sm text-muted-foreground">
           Extras disponíveis: {billing.extraCharacters ?? 0}
         </p>
         {characters.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Nenhum personagem ainda. Crie no onboarding ou compre um pacote
-            abaixo.
+            Nenhum personagem ainda. Crie no onboarding ou adicione abaixo.
           </p>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
+          <ul className="space-y-2">
             {characters.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center justify-between rounded-lg border border-border/70 px-4 py-3"
+                className="flex items-center justify-between gap-3 rounded-xl border border-border/70 px-4 py-3"
               >
-                <span className="font-medium">{c.name}</span>
-                {c.isPrimary ? <Badge>principal</Badge> : null}
+                <div className="flex min-w-0 items-center gap-3">
+                  {c.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.avatarUrl}
+                      alt=""
+                      className="size-12 rounded-xl object-cover"
+                    />
+                  ) : (
+                    <div className="flex size-12 items-center justify-center rounded-xl bg-muted">
+                      <Sparkles className="size-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{c.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.relationship || (c.isPrimary ? "filho(a)" : "elenco")}
+                      {c.kind ? ` · ${c.kind}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {c.isPrimary ? <Badge>principal</Badge> : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => openEdit(c)}
+                  >
+                    <Pencil className="size-3.5" />
+                    Editar Informações
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="space-y-4">
-        <div className="space-y-1">
-          <h2 className="flex items-center gap-2 font-heading text-xl font-semibold">
-            <Sparkles className="size-4 text-amber-600" />
-            Pacotes extras
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Upsell via Stripe Checkout (pagamento único). Preços do brief MVP.
-          </p>
-        </div>
+      {childMeta ? (
+        <section className="space-y-3 rounded-xl border border-border/70 p-4">
+          <h3 className="font-heading text-lg font-semibold">
+            Pais de {childMeta.displayName}
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={familyForm.hasFather}
+                  onChange={(e) =>
+                    setFamilyForm((f) => ({
+                      ...f,
+                      hasFather: e.target.checked,
+                    }))
+                  }
+                />
+                Tem pai
+              </label>
+              {familyForm.hasFather ? (
+                <>
+                  <Input
+                    placeholder="Nome do pai"
+                    value={familyForm.fatherName}
+                    onChange={(e) =>
+                      setFamilyForm((f) => ({
+                        ...f,
+                        fatherName: e.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={familyForm.fatherBirthDate || ""}
+                    onChange={(e) =>
+                      setFamilyForm((f) => ({
+                        ...f,
+                        fatherBirthDate: e.target.value,
+                      }))
+                    }
+                  />
+                </>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={familyForm.hasMother}
+                  onChange={(e) =>
+                    setFamilyForm((f) => ({
+                      ...f,
+                      hasMother: e.target.checked,
+                    }))
+                  }
+                />
+                Tem mãe
+              </label>
+              {familyForm.hasMother ? (
+                <>
+                  <Input
+                    placeholder="Nome da mãe"
+                    value={familyForm.motherName}
+                    onChange={(e) =>
+                      setFamilyForm((f) => ({
+                        ...f,
+                        motherName: e.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    type="date"
+                    value={familyForm.motherBirthDate || ""}
+                    onChange={(e) =>
+                      setFamilyForm((f) => ({
+                        ...f,
+                        motherBirthDate: e.target.value,
+                      }))
+                    }
+                  />
+                </>
+              ) : null}
+            </div>
+          </div>
+          <Button type="button" variant="outline" disabled={pending} onClick={saveFamily}>
+            Salvar família
+          </Button>
+        </section>
+      ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {CHARACTER_PACKS.map((pack) => (
-            <Card
-              key={pack.id}
-              className={`shadow-none ${
-                pack.highlight ? "border-amber-600/50" : ""
-              }`}
-            >
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-base">{pack.name}</CardTitle>
-                  {pack.highlight ? (
-                    <Badge variant="secondary">popular</Badge>
-                  ) : null}
-                </div>
-                <CardDescription>{pack.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="font-heading text-2xl font-semibold">
-                  {formatBrl(pack.priceBrl)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {pack.characters} personagem
-                  {pack.characters > 1 ? "s" : ""}
-                </p>
-              </CardContent>
-              <CardFooter className="flex flex-col gap-2">
-                <Button
-                  className="w-full"
-                  variant={selected === pack.id ? "secondary" : "default"}
-                  disabled={pending}
-                  onClick={() => buyPack(pack)}
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adicione novos avatares</DialogTitle>
+            <DialogDescription>
+              Escolha quantos avatares deseja adicionar (1 a 15).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="avatar-count">Quantidade</Label>
+              <Input
+                id="avatar-count"
+                type="number"
+                min={1}
+                max={15}
+                value={avatarCount}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isFinite(n)) {
+                    setAvatarCount(Math.min(15, Math.max(1, n)));
+                  }
+                }}
+              />
+              <input
+                type="range"
+                min={1}
+                max={15}
+                value={avatarCount}
+                onChange={(e) => setAvatarCount(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+            <p className="font-heading text-2xl font-semibold">
+              {price != null ? formatBrl(price) : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {avatarCount <= 5
+                ? "Pacote padrão 1–5."
+                : "6 ou mais: R$ 9,90 por avatar."}
+            </p>
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button disabled={pending} onClick={buyAvatars} className="w-full">
+              {billing.stripeReady ? "Continuar para pagamento" : "Solicitar compra"}
+            </Button>
+            {!billing.stripeReady ? (
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={simulate}
+                className="w-full"
+              >
+                Simular crédito
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Informações</DialogTitle>
+            <DialogDescription>
+              Atualize nome, parentesco e dados do personagem.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="char-name">Nome</Label>
+              <Input
+                id="char-name"
+                value={form.name}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+            </div>
+            {!isPetOrToy ? (
+              <div className="space-y-1.5">
+                <Label>Parentesco</Label>
+                <Input
+                  placeholder="Buscar…"
+                  value={relFilter}
+                  onChange={(e) => setRelFilter(e.target.value)}
+                />
+                <select
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  value={form.relationship}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      relationship: e.target.value,
+                      kind:
+                        e.target.value === "pet"
+                          ? "pet"
+                          : e.target.value === "toy"
+                            ? "toy"
+                            : e.target.value === "child"
+                              ? "child"
+                              : f.kind === "pet" || f.kind === "toy"
+                                ? "adult"
+                                : f.kind,
+                    }))
+                  }
                 >
-                  {pending && selected === pack.id
-                    ? "Abrindo…"
-                    : "Comprar com Stripe"}
-                </Button>
-                {!billing.stripeReady ? (
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() => simulatePack(pack)}
-                  >
-                    Simular compra
-                  </Button>
+                  {filteredRels.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                {form.relationship === "other" ? (
+                  <Input
+                    placeholder="Descreva o parentesco"
+                    value={form.relationshipOther}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        relationshipOther: e.target.value,
+                      }))
+                    }
+                  />
                 ) : null}
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <Label>Gênero</Label>
+              <select
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                value={form.gender}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, gender: e.target.value }))
+                }
+              >
+                <option value="">—</option>
+                <option value="boy">Menino</option>
+                <option value="girl">Menina</option>
+                <option value="male">Masculino</option>
+                <option value="female">Feminino</option>
+                <option value="other">Outro / não informar</option>
+              </select>
+            </div>
+            {!isPetOrToy ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="char-birth">Nascimento</Label>
+                <Input
+                  id="char-birth"
+                  type="date"
+                  value={form.birthDate}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, birthDate: e.target.value }))
+                  }
+                />
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <Label>Tipo</Label>
+              <select
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                value={form.kind}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, kind: e.target.value }))
+                }
+              >
+                <option value="child">Criança</option>
+                <option value="adult">Adulto</option>
+                <option value="pet">Pet</option>
+                <option value="toy">Brinquedo</option>
+                <option value="other">Outro</option>
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={pending} onClick={saveEdit}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      {message ? (
+        <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+          {message}
+        </p>
+      ) : null}
+
+      {/* Mantém packs visíveis só como referência rápida — compra principal no modal */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Referência de preços (1–5)
+        </h3>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {CHARACTER_PACKS.map((pack) => (
+            <Card key={pack.id} className="shadow-none">
+              <CardHeader className="pb-1">
+                <CardTitle className="text-sm">{pack.name}</CardTitle>
+                <CardDescription className="text-xs">
+                  {formatBrl(pack.priceBrl)}
+                </CardDescription>
+              </CardHeader>
+              <CardContent />
+              <CardFooter>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => {
+                    setAvatarCount(pack.characters);
+                    setAddOpen(true);
+                  }}
+                >
+                  Escolher
+                </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
-            {message}
-          </p>
-        ) : null}
       </section>
     </div>
   );

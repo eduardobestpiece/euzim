@@ -5,6 +5,31 @@ export type QuizQuestion = {
   correctIndex: number;
 };
 
+/** Embaralha opções e recalcula correctIndex (Fisher–Yates). */
+export function shuffleQuizOptions(question: QuizQuestion): QuizQuestion {
+  const paired = question.options.map((text, index) => ({
+    text,
+    correct: index === question.correctIndex,
+  }));
+  for (let i = paired.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [paired[i], paired[j]] = [paired[j], paired[i]];
+  }
+  const options = paired.map((p) => p.text);
+  const correctIndex = paired.findIndex((p) => p.correct);
+  return {
+    ...question,
+    options,
+    correctIndex: correctIndex >= 0 ? correctIndex : 0,
+  };
+}
+
+export function shuffleAllQuizQuestions(
+  questions: QuizQuestion[],
+): QuizQuestion[] {
+  return questions.map(shuffleQuizOptions);
+}
+
 /** Normaliza questions_data salvos na história. */
 export function normalizeQuizQuestions(raw: unknown): QuizQuestion[] {
   if (!Array.isArray(raw)) return [];
@@ -28,7 +53,7 @@ export function normalizeQuizQuestions(raw: unknown): QuizQuestion[] {
     out.push({
       id: String(r.id ?? `q${out.length + 1}`),
       prompt,
-      options: options.slice(0, 4),
+      options: options.slice(0, 5),
       correctIndex,
     });
   }
@@ -37,7 +62,7 @@ export function normalizeQuizQuestions(raw: unknown): QuizQuestion[] {
 
 /**
  * Fallback mínimo se a história não tiver quiz IA salvo.
- * Evita o mock antigo genérico ("Era" / dragão).
+ * Opções já saem shuffled.
  */
 export function buildQuizFromPages(
   title: string,
@@ -56,7 +81,7 @@ export function buildQuizFromPages(
   const snippet =
     pages[0]?.text?.replace(/\s+/g, " ").trim().slice(0, 80) || title;
 
-  return [
+  const raw: QuizQuestion[] = [
     {
       id: "fallback-q1",
       prompt: `Quem é a estrela de “${title}”?`,
@@ -81,14 +106,17 @@ export function buildQuizFromPages(
     },
     {
       id: "fallback-q3",
-      prompt: `Como a história termina?`,
+      prompt: `O que a história ensina sobre coragem e cuidado?`,
       options: [
-        "Com coragem e carinho, o desafio foi enfrentado",
-        "Todos desistiram sem tentar",
-        "Ficaram bravos com todo mundo",
-        "Esqueceram o mapa em casa",
+        "Ser corajoso e ainda assim ficar perto de um adulto de confiança",
+        "Ir sozinho sem contar para ninguém",
+        "Desistir quando o medo aparecer",
+        "Rir de quem precisa de ajuda",
+        "Esconder o medo e fingir que nada aconteceu",
       ],
       correctIndex: 0,
     },
   ];
+
+  return shuffleAllQuizQuestions(raw);
 }

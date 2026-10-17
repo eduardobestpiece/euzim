@@ -12,11 +12,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FAMILY_SUBSCRIPTION } from "@/lib/billing/plans";
+import {
+  EXTRA_STORY_PRODUCT,
+  FAMILY_SUBSCRIPTION,
+  STARTER_SUBSCRIPTION,
+} from "@/lib/billing/plans";
 import { formatBrl } from "@/lib/billing/character-packs";
 import {
   mockActivateSubscriptionAction,
-  startSubscriptionCheckoutAction,
+  startExtraStoryCheckoutAction,
+  startPlanCheckoutAction,
 } from "@/lib/stripe/checkout-actions";
 
 export type BillingSnapshot = {
@@ -38,11 +43,11 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     billing.subscriptionStatus === "active" ||
     billing.subscriptionStatus === "trialing";
 
-  function checkout() {
+  function checkout(planId: string) {
     setError(null);
     setInfo(null);
     startTransition(async () => {
-      const result = await startSubscriptionCheckoutAction();
+      const result = await startPlanCheckoutAction(planId);
       if (result.url) {
         window.location.href = result.url;
         return;
@@ -54,19 +59,34 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     });
   }
 
-  function simulate() {
+  function buyExtra() {
     setError(null);
     setInfo(null);
     startTransition(async () => {
-      const result = await mockActivateSubscriptionAction();
+      const result = await startExtraStoryCheckoutAction();
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      if (result.error) setError(result.error);
+    });
+  }
+
+  function simulate(planId: string) {
+    setError(null);
+    setInfo(null);
+    startTransition(async () => {
+      const result = await mockActivateSubscriptionAction(planId);
       if (result.error) {
         setError(result.error);
         return;
       }
-      setInfo("Assinatura ativada em modo simulado (Stripe secret ainda inválida).");
+      setInfo("Assinatura ativada em modo simulado (Stripe secret ainda ausente).");
       window.location.reload();
     });
   }
+
+  const plans = [STARTER_SUBSCRIPTION, FAMILY_SUBSCRIPTION];
 
   return (
     <div className="space-y-6">
@@ -76,61 +96,104 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
           Assinatura
         </h2>
         <p className="text-sm text-muted-foreground">
-          Plano Família do Estúdio Mágico — pagamento via Stripe Checkout.
+          Planos do Estúdio Mágico — Checkout Stripe (requer secret key no servidor).
         </p>
+      </div>
+
+      {!billing.stripeReady ? (
+        <p className="rounded-md border border-amber-600/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-900">
+          {billing.keyIssue ||
+            "Checkout real aguarda STRIPE_SECRET_KEY (sk_/rk_) e preferencialmente STRIPE_WEBHOOK_SECRET. A publishable key já está configurada."}
+        </p>
+      ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {plans.map((plan) => {
+          const current = active && billing.planId === plan.planId;
+          return (
+            <Card key={plan.id} className="shadow-none">
+              <CardHeader>
+                <div className="flex flex-wrap items-center gap-2">
+                  <CardTitle>{plan.name}</CardTitle>
+                  {current ? (
+                    <Badge>ativa</Badge>
+                  ) : (
+                    <Badge variant="secondary">disponível</Badge>
+                  )}
+                </div>
+                <CardDescription>{plan.description}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="font-heading text-3xl font-semibold">
+                  {formatBrl(plan.priceBrl)}
+                  <span className="text-base font-normal text-muted-foreground">
+                    /mês
+                  </span>
+                </p>
+                <ul className="list-inside list-disc text-sm text-muted-foreground">
+                  <li>{plan.storiesPerMonth} histórias por mês</li>
+                  <li>
+                    {plan.includedCharacters} personagem
+                    {plan.includedCharacters > 1 ? "ns" : ""} incluso
+                    {plan.includedCharacters > 1 ? "s" : ""}
+                  </li>
+                </ul>
+              </CardContent>
+              <CardFooter className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => checkout(plan.planId)}
+                  disabled={pending || current}
+                >
+                  {current
+                    ? "Plano atual"
+                    : pending
+                      ? "Abrindo…"
+                      : "Assinar"}
+                </Button>
+                {!billing.stripeReady && !current ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => simulate(plan.planId)}
+                    disabled={pending}
+                  >
+                    <ShieldCheck className="size-3.5" />
+                    Simular
+                  </Button>
+                ) : null}
+              </CardFooter>
+            </Card>
+          );
+        })}
       </div>
 
       <Card className="shadow-none">
         <CardHeader>
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle>{FAMILY_SUBSCRIPTION.name}</CardTitle>
-            {active ? <Badge>ativa</Badge> : <Badge variant="secondary">inativa</Badge>}
-          </div>
-          <CardDescription>{FAMILY_SUBSCRIPTION.description}</CardDescription>
+          <CardTitle>{EXTRA_STORY_PRODUCT.name}</CardTitle>
+          <CardDescription>{EXTRA_STORY_PRODUCT.description}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="font-heading text-3xl font-semibold">
-            {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}
-            <span className="text-base font-normal text-muted-foreground">
-              /mês
+        <CardContent>
+          <p className="font-heading text-2xl font-semibold">
+            {formatBrl(EXTRA_STORY_PRODUCT.priceBrl)}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              · pagamento único
             </span>
           </p>
-          <ul className="list-inside list-disc text-sm text-muted-foreground">
-            <li>{FAMILY_SUBSCRIPTION.storiesPerMonth} histórias por mês</li>
-            <li>Avatar da criança + LoRA (pipeline)</li>
-            <li>
-              {FAMILY_SUBSCRIPTION.includedCharacters} personagem no 1º mês
-              {billing.extraCharacters
-                ? ` · +${billing.extraCharacters} extra(s)`
-                : ""}
-            </li>
-          </ul>
-          <p className="text-xs text-muted-foreground">
-            Status: {billing.subscriptionStatus || "none"}
-            {billing.planId ? ` · plano ${billing.planId}` : ""}
-            {billing.stripeCustomerId
-              ? ` · customer ${billing.stripeCustomerId.slice(0, 14)}…`
-              : ""}
-          </p>
-          {!billing.stripeReady ? (
-            <p className="rounded-md border border-amber-600/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-900">
-              {billing.keyIssue ||
-                "Checkout real aguarda chaves Stripe válidas (sk_/pk_/whsec_)."}
-            </p>
-          ) : null}
         </CardContent>
-        <CardFooter className="flex flex-wrap gap-2">
-          <Button onClick={checkout} disabled={pending || active}>
-            {active ? "Já assinante" : pending ? "Abrindo…" : "Assinar agora"}
+        <CardFooter>
+          <Button variant="secondary" onClick={buyExtra} disabled={pending}>
+            Comprar história extra
           </Button>
-          {!billing.stripeReady && !active ? (
-            <Button variant="outline" onClick={simulate} disabled={pending}>
-              <ShieldCheck className="size-3.5" />
-              Simular ativação
-            </Button>
-          ) : null}
         </CardFooter>
       </Card>
+
+      <p className="text-xs text-muted-foreground">
+        Status: {billing.subscriptionStatus || "none"}
+        {billing.planId ? ` · plano ${billing.planId}` : ""}
+        {billing.extraCharacters
+          ? ` · +${billing.extraCharacters} avatar(es) extra(s)`
+          : ""}
+      </p>
 
       {error ? (
         <p role="alert" className="text-sm text-destructive">

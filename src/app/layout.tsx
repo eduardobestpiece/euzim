@@ -18,7 +18,9 @@ export const metadata: Metadata = {
     "Histórias infantis personalizadas com o avatar da sua criança.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html
       lang="pt-BR"

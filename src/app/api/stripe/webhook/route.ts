@@ -9,6 +9,7 @@ import {
 import { getStripe } from "@/lib/stripe/client";
 import {
   fulfillCharacterPack,
+  fulfillExtraStory,
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
 
@@ -19,7 +20,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const kind = session.metadata?.kind;
   if (kind === "subscription" || session.mode === "subscription") {
-    return fulfillSubscription(userId);
+    const planId = session.metadata?.plan_id || "family";
+    return fulfillSubscription(userId, planId);
+  }
+  if (kind === "extra_story") {
+    return fulfillExtraStory(userId);
+  }
+  if (kind === "custom_avatars") {
+    const count = Number.parseInt(session.metadata?.characters || "0", 10);
+    if (!count) return { ok: false, error: "characters ausente" };
+    return fulfillCharacterPack(userId, "custom", count);
   }
   if (kind === "character_pack") {
     const packId = session.metadata?.pack_id;
