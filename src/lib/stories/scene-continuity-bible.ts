@@ -193,7 +193,7 @@ Responda SOMENTE JSON:
         {
           role: "user",
           content: `Criança: ${input.cast.childName}
-Amigo (${input.cast.friendKind}): ${input.cast.friendName}
+Amigo (${input.cast.friendKind}, gender=${input.cast.friendGender}): ${input.cast.friendName}
 Título: ${input.title}
 
 ATOS:

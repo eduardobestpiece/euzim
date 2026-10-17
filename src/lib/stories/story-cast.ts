@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 
+export type FriendGender = "male" | "female" | "unknown";
+
 export type StoryCast = {
   childId: string;
   childName: string;
@@ -10,6 +12,8 @@ export type StoryCast = {
   childGender: "boy" | "girl" | "other" | null;
   friendName: string;
   friendKind: "pet" | "toy";
+  /** Gênero gramatical do amigo (characters.gender / onboarding). */
+  friendGender: FriendGender;
   childHeroUrl: string | null;
   friendHeroUrl: string | null;
   childFaceSheetUrl: string | null;
@@ -22,6 +26,34 @@ export type StoryCast = {
    */
   hasFamilyMemberAvatars: boolean;
 };
+
+/** Normaliza gender da tabela characters / onboarding para PT. */
+export function normalizeFriendGender(
+  raw: string | null | undefined,
+): FriendGender {
+  const g = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  if (
+    g === "female" ||
+    g === "girl" ||
+    g === "f" ||
+    g === "feminino" ||
+    g === "feminina"
+  ) {
+    return "female";
+  }
+  if (
+    g === "male" ||
+    g === "boy" ||
+    g === "m" ||
+    g === "masculino" ||
+    g === "masculina"
+  ) {
+    return "male";
+  }
+  return "unknown";
+}
 
 function ageFromBirth(birth: string | null | undefined): number | null {
   if (!birth) return null;
@@ -47,6 +79,9 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
       childGender: onboarding.child.gender ?? null,
       friendName: onboarding.friend?.displayName || "Amigo",
       friendKind: onboarding.friend?.kind === "toy" ? "toy" : "pet",
+      friendGender: normalizeFriendGender(
+        (onboarding.friend as { gender?: string } | undefined)?.gender,
+      ),
       childHeroUrl: isPixarGeneratedUrl(onboarding.childAvatarUrl)
         ? onboarding.childAvatarUrl!
         : null,
@@ -92,7 +127,7 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
   const { data: chars } = await db
     .from("characters")
     .select(
-      "id, name, avatar_url, is_primary, traits, description, relationship, kind",
+      "id, name, avatar_url, is_primary, traits, description, relationship, kind, gender",
     )
     .eq("parent_id", parentId)
     .order("created_at", { ascending: true });
@@ -116,6 +151,10 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
     friendChar?.relationship === "toy"
       ? "toy"
       : "pet";
+  const friendGender = normalizeFriendGender(
+    (friendChar as { gender?: string } | undefined)?.gender ??
+      (prefs.friend as { gender?: string } | undefined)?.gender,
+  );
 
   // Avatares de família (pais/irmãos): relationship/kind + traits + Pixar.
   const familyHints =
@@ -151,6 +190,7 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
         : null,
     friendName,
     friendKind,
+    friendGender,
     childHeroUrl: isPixarGeneratedUrl(prefs.pixar?.child_hero)
       ? prefs.pixar!.child_hero!
       : isPixarGeneratedUrl(child.avatar_url)

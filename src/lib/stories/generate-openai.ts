@@ -24,6 +24,7 @@ export async function generateStoryText(input: {
     childGender: null,
     friendName: "Amigo",
     friendKind: "pet",
+    friendGender: "unknown",
     childHeroUrl: null,
     friendHeroUrl: null,
     childFaceSheetUrl: null,

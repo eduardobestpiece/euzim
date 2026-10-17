@@ -46,33 +46,72 @@ export async function listAdminUserStoriesAction(input: {
 
   const { data: usage } = await ctx.admin
     .from("usage_events")
-    .select("estimated_usd, estimated_brl, created_at, meta")
+    .select(
+      "estimated_usd, estimated_brl, created_at, meta, story_id, job_id, category",
+    )
     .eq("user_id", input.userId)
     .order("created_at", { ascending: false })
-    .limit(2000);
+    .limit(5000);
 
   const events = usage ?? [];
 
+  // job_id → story_id via story_jobs (fallback para eventos só com job)
+  const { data: jobs } = await ctx.admin
+    .from("story_jobs")
+    .select("id, story_id")
+    .eq("parent_id", input.userId)
+    .not("story_id", "is", null)
+    .limit(200);
+  const jobToStory = new Map<string, string>();
+  for (const j of jobs ?? []) {
+    if (j.story_id) jobToStory.set(j.id, j.story_id);
+  }
+
+  const byStory = new Map<string, { usd: number; brl: number }>();
+  for (const ev of events) {
+    const storyId =
+      (ev.story_id as string | null) ||
+      (ev.job_id ? jobToStory.get(String(ev.job_id)) : null) ||
+      null;
+    if (!storyId) continue;
+    const prev = byStory.get(storyId) ?? { usd: 0, brl: 0 };
+    prev.usd += Number(ev.estimated_usd) || 0;
+    prev.brl += Number(ev.estimated_brl) || 0;
+    byStory.set(storyId, prev);
+  }
+
   const rows: AdminStoryCostRow[] = (stories ?? []).map((s) => {
-    const created = new Date(s.created_at).getTime();
-    const windowStart = created - 2 * 60_000;
-    const windowEnd = created + 45 * 60_000;
-    let usd = 0;
-    let brl = 0;
-    for (const ev of events) {
-      const t = new Date(ev.created_at).getTime();
-      if (t >= windowStart && t <= windowEnd) {
-        usd += Number(ev.estimated_usd) || 0;
-        brl += Number(ev.estimated_brl) || 0;
+    const linked = byStory.get(s.id);
+    let usd = linked?.usd ?? 0;
+    let brl = linked?.brl ?? 0;
+
+    // Fallback legado: janela ampla (clarify → imagens longas) se ainda sem link.
+    if (!linked) {
+      const created = new Date(s.created_at).getTime();
+      const windowStart = created - 15 * 60_000;
+      const windowEnd = created + 60 * 60_000;
+      for (const ev of events) {
+        if (ev.story_id || ev.job_id) continue; // já contados noutro sítio
+        const t = new Date(ev.created_at).getTime();
+        if (t >= windowStart && t <= windowEnd) {
+          usd += Number(ev.estimated_usd) || 0;
+          brl += Number(ev.estimated_brl) || 0;
+        }
       }
     }
+
     const meta = (s.generation_meta ?? {}) as {
       estimatedUsd?: number;
       estimatedBrl?: number;
       pages?: number;
     };
-    if (meta.estimatedUsd != null) usd = Number(meta.estimatedUsd) || usd;
-    if (meta.estimatedBrl != null) brl = Number(meta.estimatedBrl) || brl;
+    // meta gravado na geração tem prioridade se maior/igual (fonte canônica pós-v30)
+    if (meta.estimatedUsd != null && Number(meta.estimatedUsd) >= usd) {
+      usd = Number(meta.estimatedUsd) || usd;
+    }
+    if (meta.estimatedBrl != null && Number(meta.estimatedBrl) >= brl) {
+      brl = Number(meta.estimatedBrl) || brl;
+    }
     const textPages =
       (
         s.text_content as { pages?: unknown[] } | null
@@ -83,8 +122,8 @@ export async function listAdminUserStoriesAction(input: {
       title: s.title,
       createdAt: s.created_at,
       coverImageUrl: s.cover_image_url,
-      estimatedUsd: usd,
-      estimatedBrl: brl,
+      estimatedUsd: Number(usd.toFixed(6)),
+      estimatedBrl: Number(brl.toFixed(6)),
       pages: textPages,
     };
   });

@@ -37,13 +37,20 @@ fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca 
 
 ## Princípios cristãos tradicionais (quando solicitado)
 Se christianValues=true no pedido:
-- Incorpore valores cristãos tradicionais no ENREDO (amor ao próximo, perdão, honestidade,
-  gratidão, cuidado com a família, coragem humilde, esperança).
-- A moral emerge da cena — NÃO cite versículos, NÃO mencione livros da Bíblia,
-  NÃO faça sermão nem linguagem de culto.
+- OBRIGATÓRIO: incorpore valores cristãos tradicionais no ENREDO em ≥2 cenas concretas
+  (não basta uma frase na moral). Exemplos vivos: amor ao próximo, perdão, honestidade,
+  gratidão, cuidado com a família, coragem humilde, esperança.
+- Pode haver gratidão infantil simples ("obrigada, Deus") — SEM versículo, SEM sermão,
+  SEM nomear livros da Bíblia, SEM linguagem de culto.
+- A moral emerge da cena — nunca escreva "a lição cristã é…".
 - PROIBIDO: teologia da prosperidade, escatologia (fim dos tempos), predestinação,
   julgamento apocalíptico, milagres sensacionalistas como solução fácil.
 - Tom acolhedor e infantil; fé como bondade vivida, não doutrina.
+
+## Concordância de gênero do amigo (pet/brinquedo)
+- Se o pedido indicar amigo FEMININO: use "a [Nome]", "ela", "sua pelúcia/amiguinha";
+  NUNCA "o bixinho"/"ele"/"o ursinho" para personagem feminina.
+- Se MASCULINO: "o [Nome]", "ele", "seu brinquedo/amigo".
 
 ## Craft narrativo
 1. Gancho emocional claro nas primeiras linhas (emoção do INÍCIO, não o clímax).

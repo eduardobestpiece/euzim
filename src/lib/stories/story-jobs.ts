@@ -5,6 +5,8 @@ import {
   runStoryGeneration,
   type GeneratePayload,
 } from "@/lib/stories/run-story-generation";
+import { attachRecentClarifyToJob } from "@/lib/usage/openai-meter";
+import { runWithUsageContext } from "@/lib/usage/usage-context";
 
 export type StoryJobRow = {
   id: string;
@@ -51,6 +53,11 @@ export async function enqueueStoryJob(input: {
   if (error || !data?.id) {
     return { error: error?.message || "Falha ao enfileirar job." };
   }
+  // Clarify acontece antes do job — amarra eventos recentes a este jobId.
+  await attachRecentClarifyToJob({
+    userId: input.userId,
+    jobId: data.id,
+  });
   return { jobId: data.id };
 }
 
@@ -125,16 +132,19 @@ export async function processStoryJob(jobId: string): Promise<{
   if (!payload.theme) payload.theme = job.theme;
 
   try {
-    const result = await runStoryGeneration({
-      userId: job.parent_id,
-      payload,
-      onProgress: async (msg) => {
-        await client
-          .from("story_jobs")
-          .update({ progress: msg })
-          .eq("id", jobId);
-      },
-    });
+    const result = await runWithUsageContext({ jobId }, () =>
+      runStoryGeneration({
+        userId: job.parent_id,
+        payload,
+        jobId,
+        onProgress: async (msg) => {
+          await client
+            .from("story_jobs")
+            .update({ progress: msg })
+            .eq("id", jobId);
+        },
+      }),
+    );
 
     if (!result.ok) {
       await client

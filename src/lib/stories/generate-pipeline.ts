@@ -146,11 +146,31 @@ function mockFallbackMessage(reason: string): string {
   return `A IA não concluiu a narrativa (${reason}). Tente de novo em instantes.`;
 }
 
+function friendGenderBrief(cast: StoryCast): string {
+  const name = cast.friendName;
+  const kind =
+    cast.friendKind === "toy"
+      ? "brinquedo/pelúcia"
+      : "pet companheiro";
+  if (cast.friendGender === "female") {
+    return [
+      `Co-protagonista: ${name} (${kind}, GÊNERO FEMININO).`,
+      `Concordância OBRIGATÓRIA em português: "a ${name}", "ela", "sua ${cast.friendKind === "toy" ? "pelúcia" : "amiguinha"}", "a bixinha" — NUNCA "o ${name}", "ele", "seu bixinho", "o ursinho" se o gênero for feminino.`,
+      `Se for pelúcia ursa/coelha/etc., use forma feminina ("ursinha", "coelhinha").`,
+    ].join(" ");
+  }
+  if (cast.friendGender === "male") {
+    return [
+      `Co-protagonista: ${name} (${kind}, GÊNERO MASCULINO).`,
+      `Concordância OBRIGATÓRIA: "o ${name}", "ele", "seu ${cast.friendKind === "toy" ? "brinquedo" : "amigo"}".`,
+    ].join(" ");
+  }
+  return `Co-protagonista: ${name} (${kind}). Prefira o nome próprio; evite assumir gênero sem pista.`;
+}
+
 function castBrief(cast: StoryCast, opts?: PipelineOptions): string {
   const age =
     cast.childAgeYears != null ? `${cast.childAgeYears} anos` : "idade infantil";
-  const friendLabel =
-    cast.friendKind === "pet" ? "pet companheiro" : "brinquedo favorito";
   const protagonist =
     opts?.protagonistName?.trim() || cast.childName;
   const castLine =
@@ -159,7 +179,7 @@ function castBrief(cast: StoryCast, opts?: PipelineOptions): string {
       : "";
   return [
     `Criança protagonista: ${protagonist} (${age}${cast.childGender ? `, ${cast.childGender}` : ""}).`,
-    `Co-protagonista: ${cast.friendName} (${friendLabel}).`,
+    friendGenderBrief(cast),
     castLine,
     `Os dois precisam estar juntos na essência de quase todas as cenas.`,
   ]
@@ -198,9 +218,11 @@ function languageBrief(opts?: PipelineOptions): string {
 function christianBrief(opts?: PipelineOptions): string {
   if (!opts?.christianValues) return "christianValues: false";
   return [
-    "christianValues: true",
-    "Incorpore valores cristãos tradicionais no enredo (amor ao próximo, perdão, honestidade, gratidão, família, esperança).",
-    "Sem citação bíblica, sem sermão, sem prosperidade/escatologia/predestinação.",
+    "christianValues: true — OBRIGATÓRIO no enredo (não só na moral).",
+    "Em pelo menos 2–3 momentos concretos, mostre valores cristãos tradicionais VIVIDOS:",
+    "amor ao próximo / cuidado; perdão ou paciência; gratidão (pode haver um 'obrigada, Deus' infantil da criança); honestidade; esperança; cuidado com a família.",
+    "A moral emerge da cena. PROIBIDO: citação de versículos, livros da Bíblia, sermão, linguagem de culto,",
+    "teologia da prosperidade, escatologia, predestinação, milagre sensacionalista como solução fácil.",
   ].join(" ");
 }
 

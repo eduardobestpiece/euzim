@@ -19,6 +19,8 @@ import {
   writeMockStories,
   type MockStoryRecord,
 } from "@/lib/stories/mock-store";
+import { attachUsageToStory } from "@/lib/usage/openai-meter";
+import { mergeUsageContext } from "@/lib/usage/usage-context";
 
 export type GeneratePayload = {
   theme: string;
@@ -103,10 +105,16 @@ export function parseGeneratePayload(body: Record<string, unknown>): {
 export async function runStoryGeneration(input: {
   userId: string;
   payload: GeneratePayload;
+  jobId?: string | null;
   onProgress?: (msg: string) => Promise<void> | void;
 }): Promise<GenerateResult> {
   const { userId, payload } = input;
   const theme = payload.theme;
+  const storyKey = crypto.randomUUID();
+  mergeUsageContext({
+    jobId: input.jobId ?? null,
+    generationKey: storyKey,
+  });
   const notify = async (msg: string) => {
     try {
       await input.onProgress?.(msg);
@@ -169,7 +177,6 @@ export async function runStoryGeneration(input: {
     };
   }
 
-  const storyKey = crypto.randomUUID();
   let pages = drafted.pages;
   await notify("Pintando cenas Pixar…");
   try {
@@ -253,11 +260,17 @@ export async function runStoryGeneration(input: {
             pipeline: "outline-expand-split-bible-pixar-quiz",
             fromTemplate: Boolean(pipeline.fromTemplate),
             templateId: pipeline.templateId ?? null,
-            friend: { name: cast.friendName, kind: cast.friendKind },
+            friend: {
+              name: cast.friendName,
+              kind: cast.friendKind,
+              gender: cast.friendGender,
+            },
             moral: pipeline.moral,
             stamp: PLATFORM_BUILD,
             auxModel: "gpt-4o-mini",
             textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
+            jobId: input.jobId ?? null,
+            generationKey: storyKey,
           },
           published_at: new Date().toISOString(),
         })
@@ -265,6 +278,46 @@ export async function runStoryGeneration(input: {
         .single();
 
       if (!storyError && story?.id) {
+        mergeUsageContext({ storyId: story.id });
+        const costs = await attachUsageToStory({
+          userId,
+          storyId: story.id,
+          jobId: input.jobId ?? null,
+          generationKey: storyKey,
+        });
+        await db
+          .from("stories")
+          .update({
+            generation_meta: {
+              engine,
+              theme,
+              storyType: payload.storyType ?? null,
+              wordTarget: payload.wordTarget ?? null,
+              wordVolume: payload.wordVolume ?? null,
+              languageLevel: payload.languageLevel ?? null,
+              christianValues: Boolean(payload.christianValues),
+              pages: pages.length,
+              quizCount: questionsData.length,
+              pipeline: "outline-expand-split-bible-pixar-quiz",
+              fromTemplate: Boolean(pipeline.fromTemplate),
+              templateId: pipeline.templateId ?? null,
+              friend: {
+                name: cast.friendName,
+                kind: cast.friendKind,
+                gender: cast.friendGender,
+              },
+              moral: pipeline.moral,
+              stamp: PLATFORM_BUILD,
+              auxModel: "gpt-4o-mini",
+              textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
+              jobId: input.jobId ?? null,
+              generationKey: storyKey,
+              estimatedUsd: costs.usd,
+              estimatedBrl: costs.brl,
+            },
+          })
+          .eq("id", story.id);
+
         const imageRows = pages.map((p) => ({
           story_id: story.id,
           parent_id: userId,

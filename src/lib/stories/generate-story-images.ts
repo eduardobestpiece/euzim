@@ -144,8 +144,9 @@ async function callImageEdit(
   if (!res.ok) {
     throw new Error(json.error?.message || `OpenAI images/edits ${res.status}`);
   }
+  // low ≈ custo OpenAI de edits 1536×1024 (antes 0.5 subestimava vs fatura real)
   const qualityMul =
-    IMAGE_QUALITY === "low" ? 0.5 : IMAGE_QUALITY === "high" ? 1.5 : 1;
+    IMAGE_QUALITY === "low" ? 0.65 : IMAGE_QUALITY === "high" ? 1.5 : 1;
   await recordUsageEvent({
     userId,
     category: "story_image",
