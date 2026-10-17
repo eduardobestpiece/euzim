@@ -26,7 +26,7 @@ export default async function KidsReadPage({
 
   return (
     <AppShell user={user} title="Ler história" kidsMode>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm">
           <Link href="/app/kids" className="gap-1.5">
             <ArrowLeft className="size-3.5" />
@@ -42,6 +42,8 @@ export default async function KidsReadPage({
         pages={story.pages}
         questions={questions}
         initialQuizScore={progress?.score ?? null}
+        shareToken={story.shareToken ?? story.id}
+        readingMode
       />
     </AppShell>
   );

@@ -38,7 +38,7 @@ export async function changePasswordAction(
   if (!isSupabaseConfigured() || user.isMock) {
     return {
       error:
-        "Alteração de senha disponível apenas com conta Supabase real (não mock).",
+        "Alteração de senha disponível apenas com conta real (não demo).",
     };
   }
 

@@ -26,6 +26,7 @@ export type GeneratePayload = {
   wordVolume?: WordVolume;
   wordTarget?: number;
   languageLevel?: LanguageLevel;
+  christianValues?: boolean;
   answers?: Record<string, string>;
   characterIds?: string[];
   protagonistId?: string;
@@ -79,6 +80,9 @@ export function parseGeneratePayload(body: Record<string, unknown>): {
     isLanguageLevel(body.languageLevel)
   ) {
     payload.languageLevel = body.languageLevel;
+  }
+  if (typeof body.christianValues === "boolean") {
+    payload.christianValues = body.christianValues;
   }
   if (body.answers && typeof body.answers === "object") {
     payload.answers = Object.fromEntries(
@@ -148,6 +152,7 @@ export async function runStoryGeneration(input: {
       wordTarget: payload.wordTarget,
       wordVolume: payload.wordVolume,
       languageLevel: payload.languageLevel,
+      christianValues: payload.christianValues,
       clarifyAnswers: payload.answers,
       castNames,
       protagonistName,
@@ -240,6 +245,7 @@ export async function runStoryGeneration(input: {
             wordTarget: payload.wordTarget ?? null,
             wordVolume: payload.wordVolume ?? null,
             languageLevel: payload.languageLevel ?? null,
+            christianValues: Boolean(payload.christianValues),
             pages: pages.length,
             quizCount: questionsData.length,
             pipeline: "outline-expand-split-bible-pixar-quiz",

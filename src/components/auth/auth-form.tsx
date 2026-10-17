@@ -49,7 +49,7 @@ export function AuthForm({
         <CardContent className="space-y-4">
           {mockMode ? (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Modo mock ativo — variáveis Supabase não configuradas. Sessão
+              Modo demo ativo — conta em nuvem não configurada. Sessão
               fica em cookies locais.
             </p>
           ) : null}

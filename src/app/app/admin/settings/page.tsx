@@ -12,7 +12,7 @@ export default async function AdminSettingsPage() {
   if (user.role !== "admin") redirect("/app/parent/settings");
 
   return (
-    <AppShell user={user} title="Conta admin">
+    <AppShell user={user} title="Perfil">
       <div className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
           <Button asChild variant="ghost" size="sm">
@@ -25,7 +25,7 @@ export default async function AdminSettingsPage() {
 
         <div className="space-y-2">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            Alterar senha
+            Perfil
           </h1>
           <p className="max-w-xl text-muted-foreground">
             Conta admin{" "}

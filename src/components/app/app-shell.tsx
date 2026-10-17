@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Baby, KeyRound, Shield, Sparkles, Users } from "lucide-react";
+import { Baby, Shield, Sparkles, UserRound, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PinGuardButton } from "@/components/kids/pin-guard";
 import { signOutAction } from "@/lib/auth/actions";
@@ -69,8 +69,8 @@ export function AppShell({
                   }
                   className="gap-1.5"
                 >
-                  <KeyRound className="size-3.5" />
-                  Alterar senha
+                  <UserRound className="size-3.5" />
+                  Perfil
                 </Link>
               </Button>
               <span

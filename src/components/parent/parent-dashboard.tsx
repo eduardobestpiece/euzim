@@ -8,10 +8,7 @@ import { Button } from "@/components/ui/button";
 import { StoryUsageTracker } from "@/components/parent/story-usage-tracker";
 import { CharactersPanel, type CharacterManageRow } from "@/components/parent/characters-panel";
 import { NewStoryForm } from "@/components/parent/new-story-form";
-import {
-  SubscriptionPanel,
-  type BillingSnapshot,
-} from "@/components/parent/subscription-panel";
+import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 import {
   StoryJobNotifier,
   trackStoryJob,
@@ -112,8 +109,7 @@ export function ParentDashboard({
         <TabsList>
           <TabsTrigger value="create">Nova História</TabsTrigger>
           <TabsTrigger value="library">Biblioteca</TabsTrigger>
-          <TabsTrigger value="characters">Gerenciar Personagens</TabsTrigger>
-          <TabsTrigger value="billing">Assinatura</TabsTrigger>
+          <TabsTrigger value="characters">Personagens</TabsTrigger>
         </TabsList>
 
         <TabsContent value="create" className="space-y-4" id="criar-historia">
@@ -171,10 +167,6 @@ export function ParentDashboard({
             billing={billing}
             childMeta={childMeta ?? null}
           />
-        </TabsContent>
-
-        <TabsContent value="billing">
-          <SubscriptionPanel billing={billing} />
         </TabsContent>
       </Tabs>
     </div>

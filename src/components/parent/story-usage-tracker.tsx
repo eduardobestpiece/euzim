@@ -25,7 +25,7 @@ export function StoryUsageTracker({ usage }: { usage: StoryUsage }) {
           </p>
         </div>
         <Badge variant="secondary">
-          {usage.source === "supabase" ? "ao vivo" : "demo"}
+          {usage.source === "supabase" ? "ao vivo" : "local"}
         </Badge>
       </div>
       <Progress value={pct} className="h-2" />

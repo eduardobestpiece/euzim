@@ -15,8 +15,135 @@ async function dbOrError() {
   const gate = await requireAdmin();
   if ("error" in gate) return { error: gate.error } as const;
   const admin = createAdminClient();
-  if (!admin) return { error: "Admin Supabase indisponível." } as const;
+  if (!admin) return { error: "Admin indisponível." } as const;
   return { admin, user: gate.user } as const;
+}
+
+export type AdminStoryCostRow = {
+  id: string;
+  title: string;
+  createdAt: string;
+  coverImageUrl: string | null;
+  estimatedUsd: number;
+  estimatedBrl: number;
+  pages: number;
+};
+
+export async function listAdminUserStoriesAction(input: {
+  userId: string;
+}): Promise<{ error?: string; stories?: AdminStoryCostRow[] }> {
+  const ctx = await dbOrError();
+  if ("error" in ctx) return { error: ctx.error };
+
+  const { data: stories, error } = await ctx.admin
+    .from("stories")
+    .select("id, title, created_at, cover_image_url, generation_meta, text_content")
+    .eq("parent_id", input.userId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) return { error: error.message };
+
+  const { data: usage } = await ctx.admin
+    .from("usage_events")
+    .select("estimated_usd, estimated_brl, created_at, meta")
+    .eq("user_id", input.userId)
+    .order("created_at", { ascending: false })
+    .limit(2000);
+
+  const events = usage ?? [];
+
+  const rows: AdminStoryCostRow[] = (stories ?? []).map((s) => {
+    const created = new Date(s.created_at).getTime();
+    const windowStart = created - 2 * 60_000;
+    const windowEnd = created + 45 * 60_000;
+    let usd = 0;
+    let brl = 0;
+    for (const ev of events) {
+      const t = new Date(ev.created_at).getTime();
+      if (t >= windowStart && t <= windowEnd) {
+        usd += Number(ev.estimated_usd) || 0;
+        brl += Number(ev.estimated_brl) || 0;
+      }
+    }
+    const meta = (s.generation_meta ?? {}) as {
+      estimatedUsd?: number;
+      estimatedBrl?: number;
+      pages?: number;
+    };
+    if (meta.estimatedUsd != null) usd = Number(meta.estimatedUsd) || usd;
+    if (meta.estimatedBrl != null) brl = Number(meta.estimatedBrl) || brl;
+    const textPages =
+      (
+        s.text_content as { pages?: unknown[] } | null
+      )?.pages?.length ?? meta.pages ?? 0;
+
+    return {
+      id: s.id,
+      title: s.title,
+      createdAt: s.created_at,
+      coverImageUrl: s.cover_image_url,
+      estimatedUsd: usd,
+      estimatedBrl: brl,
+      pages: textPages,
+    };
+  });
+
+  return { stories: rows };
+}
+
+export async function deleteAdminStoryAction(input: {
+  userId: string;
+  storyId: string;
+}): Promise<AdminActionResult> {
+  const ctx = await dbOrError();
+  if ("error" in ctx) return { error: ctx.error };
+
+  const { data: story } = await ctx.admin
+    .from("stories")
+    .select("id, parent_id")
+    .eq("id", input.storyId)
+    .maybeSingle();
+
+  if (!story || story.parent_id !== input.userId) {
+    return { error: "História não encontrada." };
+  }
+
+  const { data: images } = await ctx.admin
+    .from("story_images")
+    .select("image_url")
+    .eq("story_id", input.storyId);
+
+  // Best-effort storage cleanup for avatars/stories paths
+  const paths: string[] = [];
+  for (const img of images ?? []) {
+    const url = img.image_url || "";
+    const marker = "/avatars/";
+    const idx = url.indexOf(marker);
+    if (idx >= 0) {
+      const path = decodeURIComponent(url.slice(idx + marker.length).split("?")[0]);
+      if (path) paths.push(path);
+    }
+  }
+  if (paths.length) {
+    try {
+      await ctx.admin.storage.from("avatars").remove(paths);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  await ctx.admin.from("story_images").delete().eq("story_id", input.storyId);
+  await ctx.admin.from("games").delete().eq("story_id", input.storyId);
+  const { error } = await ctx.admin
+    .from("stories")
+    .delete()
+    .eq("id", input.storyId)
+    .eq("parent_id", input.userId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/app/admin");
+  return { success: true, message: "História apagada." };
 }
 
 export async function updateSubscriptionAction(input: {

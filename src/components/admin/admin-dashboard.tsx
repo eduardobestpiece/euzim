@@ -8,6 +8,7 @@ import {
   RotateCcw,
   Search,
   StickyNote,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,10 +24,13 @@ import {
 import type { AdminAccountRow, AdminKpis } from "@/lib/admin/load-dashboard";
 import {
   addComplimentaryDaysAction,
+  deleteAdminStoryAction,
   generateRecoveryLinkAction,
+  listAdminUserStoriesAction,
   resetOnboardingAction,
   saveAdminNotesAction,
   updateSubscriptionAction,
+  type AdminStoryCostRow,
 } from "@/lib/admin/actions";
 
 function fmtDate(iso: string | null): string {
@@ -82,6 +86,8 @@ export function AdminDashboard({
   const [planId, setPlanId] = useState("family");
   const [subStatus, setSubStatus] = useState("active");
   const [days, setDays] = useState(7);
+  const [userStories, setUserStories] = useState<AdminStoryCostRow[]>([]);
+  const [storiesLoading, setStoriesLoading] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -117,6 +123,13 @@ export function AdminDashboard({
     setMessage(null);
     setError(null);
     setRecoveryLink(null);
+    setUserStories([]);
+    setStoriesLoading(true);
+    void listAdminUserStoriesAction({ userId: row.id }).then((res) => {
+      setStoriesLoading(false);
+      if (res.stories) setUserStories(res.stories);
+      if (res.error) setError(res.error);
+    });
   }
 
   function run(action: () => Promise<{ error?: string; success?: boolean; message?: string; recoveryLink?: string }>) {
@@ -174,7 +187,7 @@ export function AdminDashboard({
         <Button asChild variant="outline" size="sm">
           <Link href="/app/admin/settings" className="gap-1.5">
             <KeyRound className="size-3.5" />
-            Alterar senha
+            Perfil
           </Link>
         </Button>
       </div>
@@ -515,6 +528,61 @@ export function AdminDashboard({
                     Reutilizar materiais
                   </Button>
                 </div>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">
+                  Histórias ({userStories.length})
+                </h3>
+                {storiesLoading ? (
+                  <p className="text-xs text-muted-foreground">Carregando…</p>
+                ) : userStories.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Nenhuma história nesta conta.
+                  </p>
+                ) : (
+                  <ul className="max-h-56 space-y-2 overflow-y-auto">
+                    {userStories.map((st) => (
+                      <li
+                        key={st.id}
+                        className="flex items-start justify-between gap-2 rounded-lg border border-border/60 px-2 py-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{st.title}</p>
+                          <p className="text-muted-foreground">
+                            {fmtDate(st.createdAt)} · {st.pages || "?"} atos
+                          </p>
+                          <p className="text-muted-foreground">
+                            Custo ≈ {fmtMoney(st.estimatedUsd, "USD")} /{" "}
+                            {fmtMoney(st.estimatedBrl, "BRL")}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={pending}
+                          onClick={() =>
+                            run(async () => {
+                              const res = await deleteAdminStoryAction({
+                                userId: selected.id,
+                                storyId: st.id,
+                              });
+                              if (!res.error) {
+                                setUserStories((prev) =>
+                                  prev.filter((x) => x.id !== st.id),
+                                );
+                              }
+                              return res;
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                          Apagar
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </section>
 
               <section className="space-y-2">

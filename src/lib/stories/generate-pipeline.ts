@@ -57,6 +57,7 @@ export type PipelineOptions = {
   wordTarget?: number;
   wordVolume?: WordVolume;
   languageLevel?: LanguageLevel;
+  christianValues?: boolean;
   clarifyAnswers?: Record<string, string>;
   castNames?: string[];
   protagonistName?: string;
@@ -145,6 +146,15 @@ function languageBrief(opts?: PipelineOptions): string {
   return `languageLevel: ${level}. ${languageLevelGuidance(level)}`;
 }
 
+function christianBrief(opts?: PipelineOptions): string {
+  if (!opts?.christianValues) return "christianValues: false";
+  return [
+    "christianValues: true",
+    "Incorpore valores cristãos tradicionais no enredo (amor ao próximo, perdão, honestidade, gratidão, família, esperança).",
+    "Sem citação bíblica, sem sermão, sem prosperidade/escatologia/predestinação.",
+  ].join(" ");
+}
+
 function clarifyBrief(opts?: PipelineOptions): string {
   if (!opts?.clarifyAnswers || Object.keys(opts.clarifyAnswers).length === 0) {
     return "";
@@ -185,6 +195,7 @@ Responda SOMENTE JSON:
 
 ${typeBrief(opts)}
 ${languageBrief(opts)}
+${christianBrief(opts)}
 ${clarifyBrief(opts)}
 
 Tema: """${theme}"""
@@ -228,6 +239,7 @@ Responda SOMENTE JSON:
 
 ${typeBrief(opts)}
 ${languageBrief(opts)}
+${christianBrief(opts)}
 ${clarifyBrief(opts)}
 
 Tema: """${theme}"""

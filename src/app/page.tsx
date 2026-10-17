@@ -36,13 +36,13 @@ export default function Home() {
             Histórias infantis personalizadas com o avatar da sua criança.
           </h1>
           <p className="max-w-lg text-base leading-relaxed text-muted-foreground">
-            Fase 2: Auth, onboarding (PIN, perfil e fotos LoRA simuladas) e
-            rotas protegidas em /app/parent, /app/kids e /app/admin.
+            Crie aventuras mágicas, leia no modo Kids e compartilhe com a
+            família.
           </p>
           {mockMode ? (
             <p className="text-sm text-amber-800">
-              Supabase em modo mock — preencha `.env.local` com o projeto
-              zlzgkivktvnyvehjwcjw quando for usar Auth real.
+              Modo demo — configure `.env.local` com o projeto da conta quando
+              for usar login real.
             </p>
           ) : null}
         </div>
@@ -54,12 +54,6 @@ export default function Home() {
               Começar
             </Link>
           </Button>
-          <p className="text-sm text-muted-foreground">
-            Schema em{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-              supabase/schema.sql
-            </code>
-          </p>
         </div>
       </main>
     </div>

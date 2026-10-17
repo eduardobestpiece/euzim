@@ -66,6 +66,7 @@ export function NewStoryForm({
   const recommended = recommendWordVolume(childAgeYears);
   const [wordVolume, setWordVolume] = useState<WordVolume>(recommended);
   const [languageLevel, setLanguageLevel] = useState<LanguageLevel>("moderada");
+  const [christianValues, setChristianValues] = useState<boolean | null>(null);
 
   const defaultSelected = useMemo(
     () => new Set(characters.map((c) => c.id)),
@@ -195,6 +196,7 @@ export function NewStoryForm({
             wordVolume,
             wordTarget: WORD_VOLUME_TARGETS[wordVolume].words,
             languageLevel,
+            christianValues: Boolean(christianValues),
             answers: answersPayload,
             characterIds: Array.from(selectedIds),
             protagonistId,
@@ -400,6 +402,38 @@ export function NewStoryForm({
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label>Incluir princípios cristãos tradicionais?</Label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setChristianValues(true)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                    christianValues === true
+                      ? "border-amber-600 bg-amber-50 text-amber-950"
+                      : "border-border text-muted-foreground hover:border-foreground"
+                  }`}
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChristianValues(false)}
+                  className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                    christianValues === false
+                      ? "border-amber-600 bg-amber-50 text-amber-950"
+                      : "border-border text-muted-foreground hover:border-foreground"
+                  }`}
+                >
+                  Não
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Se sim, valores como amor ao próximo e perdão entram no enredo —
+                sem citação bíblica.
+              </p>
+            </div>
+
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -414,7 +448,7 @@ export function NewStoryForm({
                 type="button"
                 size="lg"
                 className="flex-1 gap-2"
-                disabled={disabled || pending}
+                disabled={disabled || pending || christianValues === null}
                 onClick={() => void runClarify()}
               >
                 Continuar
