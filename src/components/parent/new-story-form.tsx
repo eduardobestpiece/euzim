@@ -71,8 +71,10 @@ export function NewStoryForm({
         setStatus(
           `Pronta: “${body.title ?? "História"}” · ${body.pages ?? "?"} atos Pixar`,
         );
-        router.push(body.redirectTo || `/app/parent/stories/${body.storyId}`);
-        router.refresh();
+        // hard nav — evita abrir história antiga em cache
+        window.location.assign(
+          body.redirectTo || `/app/parent/stories/${body.storyId}`,
+        );
       } catch (err) {
         setError(
           err instanceof Error

@@ -97,20 +97,22 @@ Responda SOMENTE JSON:
 {
   "title": string,
   "moral": string (1 frase suave, sem "a lição é"),
-  "full_text": string (história completa contínua, 900–1600 palavras, com diálogos e cenas)
-}`,
+  "full_text": string (história completa contínua, OBRIGATÓRIO 1100–1800 palavras, com diálogos e cenas)
+}
+Se o texto tiver menos de 1100 palavras, continue expandindo cenas antes de responder.`,
     user: `${castBrief(cast)}
 
 Pedido / tema dos pais:
 """${theme}"""
 
-Escreva a história completa (ainda sem dividir em páginas). Profunda, oral, cinematográfica.`,
+Escreva a história completa (ainda sem dividir em páginas). Profunda, oral, cinematográfica.
+Mínimo 1100 palavras. Inclua pelo menos 6 cenas distintas e vários diálogos entre a criança e o amigo.`,
   });
   if (!parsed) return null;
   const title = String(parsed.title ?? "").trim();
   const moral = String(parsed.moral ?? "").trim();
   const fullText = String(parsed.full_text ?? "").trim();
-  if (!title || fullText.split(/\s+/).length < 400) return null;
+  if (!title || fullText.split(/\s+/).length < 700) return null;
   return { title, moral, fullText };
 }
 

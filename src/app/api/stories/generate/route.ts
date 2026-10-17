@@ -66,6 +66,16 @@ export async function POST(request: Request) {
     theme,
   });
 
+  if (engine === "mock-v1") {
+    return NextResponse.json(
+      {
+        error:
+          "Não consegui gerar com a IA agora. Confira OPENAI_API_KEY e tente de novo.",
+      },
+      { status: 502 },
+    );
+  }
+
   const storyKey = crypto.randomUUID();
   let pages = drafted.pages;
   try {
@@ -78,6 +88,17 @@ export async function POST(request: Request) {
     });
   } catch {
     /* texto permanece mesmo se imagens falharem */
+  }
+
+  const withImages = pages.filter((p) => p.imageUrl).length;
+  if (withImages === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "A história foi escrita, mas as imagens Pixar falharam. Tente novamente.",
+      },
+      { status: 502 },
+    );
   }
 
   const coverImageUrl =
@@ -121,6 +142,7 @@ export async function POST(request: Request) {
             pipeline: "draft-review-split-pixar",
             friend: { name: cast.friendName, kind: cast.friendKind },
             moral: pipeline.moral,
+            stamp: "v17-storyteller-live",
           },
           published_at: new Date().toISOString(),
         })
