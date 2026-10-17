@@ -1,9 +1,9 @@
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 /**
- * Logo preta inline no fluxo de texto (branding no lugar da palavra "euzim").
- * Asset preto sólido (sem padding extra); altura em `em` acompanha a fonte.
+ * Logo preta inline (substitui a palavra "euzim").
+ * `<img>` replaced inline — baseline natural; sem margem extra
+ * (o espaço vem dos espaços do parágrafo).
  */
 export function InlineBrand({
   className,
@@ -13,22 +13,15 @@ export function InlineBrand({
   title?: string;
 }) {
   return (
-    <span
-      className={cn(
-        "inline-brand relative mx-[0.14em] inline-flex h-[1.5em] w-[4em] shrink-0 translate-y-[-0.1em] items-center align-baseline",
-        className,
-      )}
-      role="img"
-      aria-label={title}
-    >
-      <Image
-        src="/brand/euzim-logo-black.png"
-        alt=""
-        width={480}
-        height={236}
-        unoptimized
-        className="h-full w-full object-contain object-left"
-      />
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/euzim-logo-black.png"
+      alt={title}
+      width={520}
+      height={257}
+      decoding="async"
+      draggable={false}
+      className={cn("inline-brand", className)}
+    />
   );
 }

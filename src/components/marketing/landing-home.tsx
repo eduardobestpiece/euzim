@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { InlineBrand } from "@/components/brand/inline-brand";
+import { LandingStoryBook } from "@/components/marketing/landing-story-book";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -139,25 +140,11 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
 
       <section
         id="proposito"
-        aria-labelledby="proposito-heading"
-        className="landing-purpose relative z-10 px-5 py-16 sm:px-8 sm:py-20 md:px-12 md:py-24"
+        aria-label="Benefícios do Euzim"
+        className="landing-purpose relative z-10 px-5 py-14 sm:px-8 sm:py-16 md:px-12 md:py-20"
       >
         <div className="mx-auto max-w-5xl">
-          <div className="mx-auto max-w-2xl text-center">
-            <h2
-              id="proposito-heading"
-              className="landing-purpose-heading font-story-display inline-flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-2xl text-[var(--euzim-ink)] uppercase sm:text-3xl md:text-[2.1rem]"
-            >
-              <span>Para que serve o</span>
-              <InlineBrand className="h-[1.4em] w-[3.7em] translate-y-[-0.05em]" />
-            </h2>
-            <p className="font-story-body mt-3 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
-              Três caminhos simples: menos medo, melhores hábitos, valores que
-              ficam.
-            </p>
-          </div>
-
-          <ul className="mt-12 grid list-none gap-10 p-0 sm:mt-14 md:grid-cols-3 md:gap-8 lg:gap-12">
+          <ul className="mt-0 grid list-none gap-10 p-0 md:grid-cols-3 md:gap-8 lg:gap-12">
             {PURPOSES.map(({ title, body, Icon }) => (
               <li key={title} className="landing-purpose-item flex flex-col gap-3">
                 <Icon />
@@ -172,6 +159,8 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
           </ul>
         </div>
       </section>
+
+      <LandingStoryBook />
     </div>
   );
 }

@@ -179,8 +179,8 @@
 
 /* Landing headlines: caixa alta divertida */
 .landing-hero-title,
-.landing-purpose-heading,
-.landing-purpose-item h3 {
+.landing-purpose-item h3,
+#historia-demo-heading {
   text-transform: uppercase;
   letter-spacing: 0.045em;
 }
@@ -342,6 +342,179 @@
   animation-delay: 160ms;
 }
 
+/* Inline brand — como uma palavra no texto */
+.inline-brand {
+  display: inline;
+  height: 0.95em;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  vertical-align: -0.12em;
+  object-fit: contain;
+  object-position: left bottom;
+}
+
+/* ─── Landing story book (painel tipo livro) ─── */
+.landing-story {
+  background:
+    radial-gradient(90% 60% at 50% 0%, color-mix(in oklab, var(--euzim-star) 10%, white) 0%, transparent 55%),
+    linear-gradient(180deg, #f7f4fb 0%, #ffffff 48%, #f3faf8 100%);
+}
+
+.landing-book {
+  position: relative;
+  margin-inline: auto;
+  max-width: 56rem;
+  user-select: none;
+}
+
+.landing-book-spine {
+  pointer-events: none;
+  position: absolute;
+  inset-block: 8%;
+  left: 50%;
+  z-index: 2;
+  width: 14px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(40, 24, 60, 0.08),
+    rgba(40, 24, 60, 0.22),
+    rgba(40, 24, 60, 0.08)
+  );
+  opacity: 0;
+}
+
+@media (min-width: 768px) {
+  .landing-book-spine {
+    opacity: 1;
+  }
+}
+
+.landing-book-spread {
+  display: grid;
+  grid-template-columns: 1fr;
+  overflow: hidden;
+  border-radius: 1.35rem;
+  background: #fffdf8;
+  box-shadow:
+    0 24px 48px rgba(48, 28, 80, 0.14),
+    0 2px 0 rgba(255, 255, 255, 0.7) inset;
+}
+
+@media (min-width: 768px) {
+  .landing-book-spread {
+    grid-template-columns: 1fr 1fr;
+    min-height: 28rem;
+  }
+}
+
+.landing-book-image {
+  position: relative;
+  margin: 0;
+  min-height: 14rem;
+  background: #efe8f7;
+}
+
+@media (min-width: 768px) {
+  .landing-book-image {
+    min-height: 100%;
+  }
+}
+
+.landing-book-title-overlay {
+  pointer-events: none;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  padding: 3.5rem 1.25rem 1.25rem;
+  text-align: center;
+  color: #fffdf8;
+  background: linear-gradient(
+    to top,
+    rgba(31, 26, 46, 0.88) 0%,
+    rgba(31, 26, 46, 0.4) 55%,
+    transparent 100%
+  );
+}
+
+.landing-book-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 1.35rem 1.5rem;
+  background:
+    linear-gradient(90deg, rgba(80, 50, 120, 0.04), transparent 18%),
+    #fffdf8;
+}
+
+@media (min-width: 768px) {
+  .landing-book-text {
+    padding: 1.75rem 1.9rem 1.9rem;
+  }
+}
+
+.landing-book-page-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--euzim-ink-soft);
+}
+
+.landing-book-scroll {
+  max-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+}
+
+@media (min-width: 768px) {
+  .landing-book-scroll {
+    max-height: 22rem;
+  }
+}
+
+.landing-book-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.landing-book-turn-next {
+  animation: landing-book-flip-next 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-book-turn-prev {
+  animation: landing-book-flip-prev 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes landing-book-flip-next {
+  from {
+    opacity: 0.55;
+    transform: perspective(900px) rotateY(-8deg) translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(900px) rotateY(0) translateX(0);
+  }
+}
+
+@keyframes landing-book-flip-prev {
+  from {
+    opacity: 0.55;
+    transform: perspective(900px) rotateY(8deg) translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(900px) rotateY(0) translateX(0);
+  }
+}
+
 @keyframes landing-fade-up {
   from {
     opacity: 0;
@@ -393,7 +566,9 @@
   .landing-hero-copy > div.font-story-body,
   .landing-hero-cta,
   .landing-trust,
-  .landing-purpose-item {
+  .landing-purpose-item,
+  .landing-book-turn-next,
+  .landing-book-turn-prev {
     animation: none !important;
   }
 }
