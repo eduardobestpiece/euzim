@@ -156,6 +156,27 @@ export function OnboardingWizard({
   const [friendKind, setFriendKind] = useState<"pet" | "toy">(
     initialState?.friend?.kind ?? "pet",
   );
+  const [friendGender, setFriendGender] = useState(
+    initialState?.friend?.gender ?? "",
+  );
+  const [hasFather, setHasFather] = useState(
+    Boolean(initialState?.child?.hasFather),
+  );
+  const [fatherName, setFatherName] = useState(
+    initialState?.child?.fatherName ?? "",
+  );
+  const [fatherBirthDate, setFatherBirthDate] = useState(
+    initialState?.child?.fatherBirthDate ?? "",
+  );
+  const [hasMother, setHasMother] = useState(
+    Boolean(initialState?.child?.hasMother),
+  );
+  const [motherName, setMotherName] = useState(
+    initialState?.child?.motherName ?? "",
+  );
+  const [motherBirthDate, setMotherBirthDate] = useState(
+    initialState?.child?.motherBirthDate ?? "",
+  );
   const [childAvatarUrl, setChildAvatarUrl] = useState<string | null>(
     initialState?.childAvatarUrl ?? null,
   );
@@ -341,6 +362,12 @@ export function OnboardingWizard({
       setBirthDate(String(formData.get("birthDate") ?? ""));
       const g = String(formData.get("gender") ?? "");
       if (g === "boy" || g === "girl" || g === "other") setGender(g);
+      setHasFather(String(formData.get("hasFather") ?? "") === "on");
+      setFatherName(String(formData.get("fatherName") ?? ""));
+      setFatherBirthDate(String(formData.get("fatherBirthDate") ?? ""));
+      setHasMother(String(formData.get("hasMother") ?? "") === "on");
+      setMotherName(String(formData.get("motherName") ?? ""));
+      setMotherBirthDate(String(formData.get("motherBirthDate") ?? ""));
       go("child-photos");
     });
   }
@@ -381,6 +408,7 @@ export function OnboardingWizard({
       setFriendKind(
         String(formData.get("kind") ?? "pet") === "toy" ? "toy" : "pet",
       );
+      setFriendGender(String(formData.get("gender") ?? ""));
       go("friend-photos");
     });
   }
@@ -565,6 +593,65 @@ export function OnboardingWizard({
                   ))}
                 </div>
               </fieldset>
+              <div className="space-y-3 rounded-xl border border-border/70 p-3">
+                <p className="text-sm font-medium">Família</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="hasFather"
+                        checked={hasFather}
+                        onChange={(e) => setHasFather(e.target.checked)}
+                      />
+                      Tem pai?
+                    </label>
+                    {hasFather ? (
+                      <>
+                        <Input
+                          name="fatherName"
+                          placeholder="Nome do pai"
+                          value={fatherName}
+                          onChange={(e) => setFatherName(e.target.value)}
+                        />
+                        <Input
+                          name="fatherBirthDate"
+                          type="date"
+                          value={fatherBirthDate}
+                          onChange={(e) => setFatherBirthDate(e.target.value)}
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="hasMother"
+                        checked={hasMother}
+                        onChange={(e) => setHasMother(e.target.checked)}
+                      />
+                      Tem mãe?
+                    </label>
+                    {hasMother ? (
+                      <>
+                        <Input
+                          name="motherName"
+                          placeholder="Nome da mãe"
+                          value={motherName}
+                          onChange={(e) => setMotherName(e.target.value)}
+                        />
+                        <Input
+                          name="motherBirthDate"
+                          type="date"
+                          value={motherBirthDate}
+                          onChange={(e) => setMotherBirthDate(e.target.value)}
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : null}
@@ -696,6 +783,24 @@ export function OnboardingWizard({
                   defaultValue={friendName}
                   placeholder={friendKind === "pet" ? "Thor" : "Ursinho"}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="friendGender">Gênero</Label>
+                <select
+                  id="friendGender"
+                  name="gender"
+                  required
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  value={friendGender}
+                  onChange={(e) => setFriendGender(e.target.value)}
+                >
+                  <option value="" disabled>
+                    Selecione…
+                  </option>
+                  <option value="male">Macho / masculino</option>
+                  <option value="female">Fêmea / feminino</option>
+                  <option value="other">Outro / não informar</option>
+                </select>
               </div>
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>

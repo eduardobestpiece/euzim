@@ -162,12 +162,20 @@ async function loadChildPreferences(userId: string): Promise<{
   birthDate?: string | null;
   gender?: string | null;
   avatarUrl?: string | null;
+  hasFather?: boolean;
+  fatherName?: string | null;
+  fatherBirthDate?: string | null;
+  hasMother?: boolean;
+  motherName?: string | null;
+  motherBirthDate?: string | null;
 } | null> {
   const db = createAdminClient() ?? (await createClient());
   if (!db) return null;
   const { data: children } = await db
     .from("children")
-    .select("id, display_name, birth_date, gender, avatar_url, preferences")
+    .select(
+      "id, display_name, birth_date, gender, avatar_url, preferences, has_father, father_name, father_birth_date, has_mother, mother_name, mother_birth_date",
+    )
     .eq("parent_id", userId)
     .order("created_at", { ascending: true })
     .limit(1);
@@ -184,6 +192,12 @@ async function loadChildPreferences(userId: string): Promise<{
     birthDate: child.birth_date,
     gender: child.gender,
     avatarUrl: child.avatar_url,
+    hasFather: Boolean(child.has_father),
+    fatherName: child.father_name,
+    fatherBirthDate: child.father_birth_date,
+    hasMother: Boolean(child.has_mother),
+    motherName: child.mother_name,
+    motherBirthDate: child.mother_birth_date,
   };
 }
 
@@ -213,7 +227,26 @@ async function loadState(): Promise<OnboardingState> {
       birthDate: row.birthDate || "",
       gender,
       ageYears: ageYearsFromBirthDate(row.birthDate || "") ?? undefined,
+      hasFather: row.hasFather,
+      fatherName: row.fatherName ?? undefined,
+      fatherBirthDate: row.fatherBirthDate ?? undefined,
+      hasMother: row.hasMother,
+      motherName: row.motherName ?? undefined,
+      motherBirthDate: row.motherBirthDate ?? undefined,
     };
+  } else if (state.child) {
+    // Completa família a partir do banco se o cookie ainda não tiver
+    if (state.child.hasFather == null && row.hasFather != null) {
+      state.child = {
+        ...state.child,
+        hasFather: row.hasFather,
+        fatherName: row.fatherName ?? undefined,
+        fatherBirthDate: row.fatherBirthDate ?? undefined,
+        hasMother: row.hasMother,
+        motherName: row.motherName ?? undefined,
+        motherBirthDate: row.motherBirthDate ?? undefined,
+      };
+    }
   }
 
   const childPaths = row.preferences.photo_paths as StoredPhotoPath[] | undefined;
@@ -256,12 +289,13 @@ async function loadState(): Promise<OnboardingState> {
   }
 
   const friendMeta = row.preferences.friend as
-    | { kind?: string; displayName?: string }
+    | { kind?: string; displayName?: string; gender?: string | null }
     | undefined;
   if (!state.friend?.displayName && friendMeta?.displayName) {
     state.friend = {
       kind: friendMeta.kind === "toy" ? "toy" : "pet",
       displayName: friendMeta.displayName,
+      gender: friendMeta.gender ?? null,
     };
   }
 
@@ -329,6 +363,13 @@ export async function saveChildAvatarProfileAction(
       ? genderRaw
       : null;
 
+  const hasFather = String(formData.get("hasFather") ?? "") === "on";
+  const hasMother = String(formData.get("hasMother") ?? "") === "on";
+  const fatherName = String(formData.get("fatherName") ?? "").trim();
+  const fatherBirthDate = String(formData.get("fatherBirthDate") ?? "").trim();
+  const motherName = String(formData.get("motherName") ?? "").trim();
+  const motherBirthDate = String(formData.get("motherBirthDate") ?? "").trim();
+
   if (!displayName || displayName.length > 80) {
     return { error: "Informe o nome da criança (até 80 caracteres)." };
   }
@@ -344,7 +385,18 @@ export async function saveChildAvatarProfileAction(
   if (!user) return { error: "Faça login." };
 
   const state = await loadState();
-  state.child = { displayName, birthDate, gender, ageYears };
+  state.child = {
+    displayName,
+    birthDate,
+    gender,
+    ageYears,
+    hasFather,
+    fatherName: hasFather ? fatherName : undefined,
+    fatherBirthDate: hasFather ? fatherBirthDate || undefined : undefined,
+    hasMother,
+    motherName: hasMother ? motherName : undefined,
+    motherBirthDate: hasMother ? motherBirthDate || undefined : undefined,
+  };
   await writeMockOnboarding(state);
 
   if (isSupabaseConfigured() && !user.isMock) {
@@ -359,16 +411,28 @@ export async function saveChildAvatarProfileAction(
 
       const { data: existing } = await db
         .from("children")
-        .select("id")
+        .select("id, preferences")
         .eq("parent_id", user.id)
         .order("created_at", { ascending: true })
         .limit(1);
+
+      const prevPrefs =
+        existing?.[0]?.preferences &&
+        typeof existing[0].preferences === "object"
+          ? (existing[0].preferences as Record<string, unknown>)
+          : {};
 
       const payload = {
         display_name: displayName,
         birth_date: birthDate,
         gender,
-        preferences: { age_years: ageYears ?? null },
+        has_father: hasFather,
+        father_name: hasFather ? fatherName || null : null,
+        father_birth_date: hasFather ? fatherBirthDate || null : null,
+        has_mother: hasMother,
+        mother_name: hasMother ? motherName || null : null,
+        mother_birth_date: hasMother ? motherBirthDate || null : null,
+        preferences: { ...prevPrefs, age_years: ageYears ?? null },
       };
 
       if (existing?.[0]?.id) {
@@ -391,17 +455,30 @@ export async function saveFriendProfileAction(
 ): Promise<OnboardingActionResult> {
   const kind = String(formData.get("kind") ?? "") as FriendKind;
   const displayName = String(formData.get("displayName") ?? "").trim();
+  const genderRaw = String(formData.get("gender") ?? "").trim();
+  const gender =
+    genderRaw === "male" ||
+    genderRaw === "female" ||
+    genderRaw === "other" ||
+    genderRaw === "boy" ||
+    genderRaw === "girl"
+      ? genderRaw
+      : null;
+
   if (kind !== "pet" && kind !== "toy") {
     return { error: "Escolha pet ou brinquedo favorito." };
   }
   if (!displayName || displayName.length > 80) {
     return { error: "Informe o nome do melhor amigo." };
   }
+  if (!gender) {
+    return { error: "Selecione o gênero do pet ou brinquedo." };
+  }
 
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
 
-  const friend: OnboardingFriendDraft = { kind, displayName };
+  const friend: OnboardingFriendDraft = { kind, displayName, gender };
   const state = await loadState();
   state.friend = friend;
   await writeMockOnboarding(state);
@@ -411,11 +488,41 @@ export async function saveFriendProfileAction(
     if (db) {
       const row = await loadChildPreferences(user.id);
       if (row?.childId) {
-        const prefs = { ...row.preferences, friend: { kind, displayName } };
+        const prefs = {
+          ...row.preferences,
+          friend: { kind, displayName, gender },
+        };
         await db
           .from("children")
           .update({ preferences: prefs })
           .eq("id", row.childId);
+
+        // Upsert leve do personagem amigo (nome/gênero/kind) antes da geração Pixar
+        const { data: existingChars } = await db
+          .from("characters")
+          .select("id, is_primary")
+          .eq("parent_id", user.id);
+        const friendExisting = existingChars?.find((c) => !c.is_primary);
+        const friendPayload = {
+          name: displayName,
+          kind,
+          gender,
+          relationship: kind,
+          description: `Melhor amigo (${kind})`,
+        };
+        if (friendExisting) {
+          await db
+            .from("characters")
+            .update(friendPayload)
+            .eq("id", friendExisting.id);
+        } else {
+          await db.from("characters").insert({
+            parent_id: user.id,
+            child_id: row.childId,
+            is_primary: false,
+            ...friendPayload,
+          });
+        }
       }
     }
   }
@@ -471,6 +578,7 @@ export async function saveSubjectPhotosAction(input: {
           prefs.friend = {
             kind: state.friend.kind,
             displayName: state.friend.displayName,
+            gender: state.friend.gender ?? null,
           };
         }
 
@@ -692,49 +800,49 @@ export async function generateAvatarsAction(input?: {
           .eq("parent_id", user.id);
 
         const primary = existingChars?.find((c) => c.is_primary);
+        const childChar = {
+          name: state.child.displayName,
+          kind: "child" as const,
+          gender: state.child.gender,
+          birth_date: state.child.birthDate || null,
+          relationship: "child",
+          description: "Avatar Pixar da criança",
+          avatar_url: childPixar.url,
+          lora_model_id: `pixar:${user.id}:child`,
+        };
         if (primary) {
-          await db
-            .from("characters")
-            .update({
-              name: state.child.displayName,
-              description: "Avatar Pixar da criança",
-              avatar_url: childPixar.url,
-              lora_model_id: `pixar:${user.id}:child`,
-            })
-            .eq("id", primary.id);
+          await db.from("characters").update(childChar).eq("id", primary.id);
         } else {
           await db.from("characters").insert({
             parent_id: user.id,
             child_id: childId,
-            name: state.child.displayName,
             is_primary: true,
-            description: "Avatar Pixar da criança",
-            avatar_url: childPixar.url,
-            lora_model_id: `pixar:${user.id}:child`,
+            ...childChar,
           });
         }
 
         const friendName = state.friend.displayName;
         const friendExisting = existingChars?.find((c) => !c.is_primary);
+        const friendChar = {
+          name: friendName,
+          kind: state.friend.kind,
+          gender: state.friend.gender ?? null,
+          relationship: state.friend.kind,
+          description: `Melhor amigo Pixar (${state.friend.kind})`,
+          avatar_url: friendPixar.url,
+          lora_model_id: `pixar:${user.id}:friend`,
+        };
         if (friendExisting) {
           await db
             .from("characters")
-            .update({
-              name: friendName,
-              description: `Melhor amigo Pixar (${state.friend.kind})`,
-              avatar_url: friendPixar.url,
-              lora_model_id: `pixar:${user.id}:friend`,
-            })
+            .update(friendChar)
             .eq("id", friendExisting.id);
         } else {
           await db.from("characters").insert({
             parent_id: user.id,
             child_id: childId,
-            name: friendName,
             is_primary: false,
-            description: `Melhor amigo Pixar (${state.friend.kind})`,
-            avatar_url: friendPixar.url,
-            lora_model_id: `pixar:${user.id}:friend`,
+            ...friendChar,
           });
         }
       }

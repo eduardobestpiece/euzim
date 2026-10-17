@@ -150,7 +150,7 @@ export function ParentDashboard({
                       <p className="truncate font-medium">{story.title}</p>
                       {story.createdAt ? (
                         <p className="text-xs text-muted-foreground">
-                          {new Date(story.createdAt).toLocaleDateString("pt-BR")}
+                          {story.createdAt.slice(0, 10).split("-").reverse().join("/")}
                         </p>
                       ) : null}
                     </div>

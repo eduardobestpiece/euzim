@@ -7,14 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -45,6 +37,16 @@ import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 
 export type { CharacterManageRow };
 
+function isPetOrToyRow(c: CharacterManageRow | null): boolean {
+  if (!c) return false;
+  return (
+    c.kind === "pet" ||
+    c.kind === "toy" ||
+    c.relationship === "pet" ||
+    c.relationship === "toy"
+  );
+}
+
 export function CharactersPanel({
   characters,
   billing,
@@ -73,12 +75,12 @@ export function CharactersPanel({
   });
 
   const [familyForm, setFamilyForm] = useState({
-    hasFather: childMeta?.hasFather ?? false,
-    fatherName: childMeta?.fatherName ?? "",
-    fatherBirthDate: childMeta?.fatherBirthDate ?? "",
-    hasMother: childMeta?.hasMother ?? false,
-    motherName: childMeta?.motherName ?? "",
-    motherBirthDate: childMeta?.motherBirthDate ?? "",
+    hasFather: false,
+    fatherName: "",
+    fatherBirthDate: "",
+    hasMother: false,
+    motherName: "",
+    motherBirthDate: "",
   });
 
   const price = priceForAvatarCount(avatarCount);
@@ -90,16 +92,30 @@ export function CharactersPanel({
     );
   }, [relFilter]);
 
+  const editingIsPrimary = Boolean(editing?.isPrimary);
+  const editingIsPetOrToy = isPetOrToyRow(editing);
+
   function openEdit(c: CharacterManageRow) {
     setEditing(c);
     setForm({
       name: c.name,
       relationship: c.relationship || (c.isPrimary ? "child" : "friend"),
       relationshipOther: c.relationshipOther || "",
-      gender: c.gender || "",
-      birthDate: c.birthDate || "",
+      gender: c.gender || (c.isPrimary ? childMeta?.gender || "" : ""),
+      birthDate:
+        c.birthDate || (c.isPrimary ? childMeta?.birthDate || "" : ""),
       kind: c.kind || (c.isPrimary ? "child" : "other"),
     });
+    if (c.isPrimary && childMeta) {
+      setFamilyForm({
+        hasFather: childMeta.hasFather,
+        fatherName: childMeta.fatherName ?? "",
+        fatherBirthDate: childMeta.fatherBirthDate ?? "",
+        hasMother: childMeta.hasMother,
+        motherName: childMeta.motherName ?? "",
+        motherBirthDate: childMeta.motherBirthDate ?? "",
+      });
+    }
     setEditOpen(true);
     setError(null);
     setMessage(null);
@@ -111,40 +127,52 @@ export function CharactersPanel({
       const result = await updateCharacterAction({
         id: editing.id,
         name: form.name,
-        relationship: form.relationship,
+        relationship: editingIsPrimary
+          ? "child"
+          : editingIsPetOrToy
+            ? form.kind === "toy" || form.relationship === "toy"
+              ? "toy"
+              : "pet"
+            : form.relationship,
         relationshipOther:
-          form.relationship === "other" ? form.relationshipOther : null,
+          !editingIsPrimary &&
+          !editingIsPetOrToy &&
+          form.relationship === "other"
+            ? form.relationshipOther
+            : null,
         gender: form.gender || null,
-        birthDate: form.birthDate || null,
-        kind: form.kind || null,
+        birthDate: editingIsPetOrToy ? null : form.birthDate || null,
+        kind: editingIsPrimary
+          ? "child"
+          : editingIsPetOrToy
+            ? form.kind === "toy" || form.relationship === "toy"
+              ? "toy"
+              : "pet"
+            : form.kind || null,
       });
       if (result.error) {
         setError(result.error);
         return;
       }
+
+      if (editingIsPrimary && childMeta?.id) {
+        const family = await updateChildFamilyAction({
+          childId: childMeta.id,
+          hasFather: familyForm.hasFather,
+          fatherName: familyForm.fatherName,
+          fatherBirthDate: familyForm.fatherBirthDate,
+          hasMother: familyForm.hasMother,
+          motherName: familyForm.motherName,
+          motherBirthDate: familyForm.motherBirthDate,
+        });
+        if (family.error) {
+          setError(family.error);
+          return;
+        }
+      }
+
       setEditOpen(false);
       setMessage("Informações atualizadas.");
-      window.location.reload();
-    });
-  }
-
-  function saveFamily() {
-    if (!childMeta?.id) return;
-    startTransition(async () => {
-      const result = await updateChildFamilyAction({
-        childId: childMeta.id,
-        hasFather: familyForm.hasFather,
-        fatherName: familyForm.fatherName,
-        fatherBirthDate: familyForm.fatherBirthDate,
-        hasMother: familyForm.hasMother,
-        motherName: familyForm.motherName,
-        motherBirthDate: familyForm.motherBirthDate,
-      });
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      setMessage("Dados da família salvos.");
       window.location.reload();
     });
   }
@@ -201,14 +229,8 @@ export function CharactersPanel({
     });
   }
 
-  const isPetOrToy =
-    form.kind === "pet" ||
-    form.kind === "toy" ||
-    form.relationship === "pet" ||
-    form.relationship === "toy";
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -275,97 +297,6 @@ export function CharactersPanel({
         )}
       </section>
 
-      {childMeta ? (
-        <section className="space-y-3 rounded-xl border border-border/70 p-4">
-          <h3 className="font-heading text-lg font-semibold">
-            Pais de {childMeta.displayName}
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={familyForm.hasFather}
-                  onChange={(e) =>
-                    setFamilyForm((f) => ({
-                      ...f,
-                      hasFather: e.target.checked,
-                    }))
-                  }
-                />
-                Tem pai
-              </label>
-              {familyForm.hasFather ? (
-                <>
-                  <Input
-                    placeholder="Nome do pai"
-                    value={familyForm.fatherName}
-                    onChange={(e) =>
-                      setFamilyForm((f) => ({
-                        ...f,
-                        fatherName: e.target.value,
-                      }))
-                    }
-                  />
-                  <Input
-                    type="date"
-                    value={familyForm.fatherBirthDate || ""}
-                    onChange={(e) =>
-                      setFamilyForm((f) => ({
-                        ...f,
-                        fatherBirthDate: e.target.value,
-                      }))
-                    }
-                  />
-                </>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={familyForm.hasMother}
-                  onChange={(e) =>
-                    setFamilyForm((f) => ({
-                      ...f,
-                      hasMother: e.target.checked,
-                    }))
-                  }
-                />
-                Tem mãe
-              </label>
-              {familyForm.hasMother ? (
-                <>
-                  <Input
-                    placeholder="Nome da mãe"
-                    value={familyForm.motherName}
-                    onChange={(e) =>
-                      setFamilyForm((f) => ({
-                        ...f,
-                        motherName: e.target.value,
-                      }))
-                    }
-                  />
-                  <Input
-                    type="date"
-                    value={familyForm.motherBirthDate || ""}
-                    onChange={(e) =>
-                      setFamilyForm((f) => ({
-                        ...f,
-                        motherBirthDate: e.target.value,
-                      }))
-                    }
-                  />
-                </>
-              ) : null}
-            </div>
-          </div>
-          <Button type="button" variant="outline" disabled={pending} onClick={saveFamily}>
-            Salvar família
-          </Button>
-        </section>
-      ) : null}
-
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
@@ -410,7 +341,9 @@ export function CharactersPanel({
           </div>
           <DialogFooter className="flex-col gap-2 sm:flex-col">
             <Button disabled={pending} onClick={buyAvatars} className="w-full">
-              {billing.stripeReady ? "Continuar para pagamento" : "Solicitar compra"}
+              {billing.stripeReady
+                ? "Continuar para pagamento"
+                : "Solicitar compra"}
             </Button>
             {!billing.stripeReady ? (
               <Button
@@ -431,7 +364,11 @@ export function CharactersPanel({
           <DialogHeader>
             <DialogTitle>Editar Informações</DialogTitle>
             <DialogDescription>
-              Atualize nome, parentesco e dados do personagem.
+              {editingIsPrimary
+                ? "Dados da criança e da família."
+                : editingIsPetOrToy
+                  ? "Nome e gênero do pet ou brinquedo."
+                  : "Atualize nome, parentesco e dados do personagem."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -445,7 +382,8 @@ export function CharactersPanel({
                 }
               />
             </div>
-            {!isPetOrToy ? (
+
+            {!editingIsPrimary && !editingIsPetOrToy ? (
               <div className="space-y-1.5">
                 <Label>Parentesco</Label>
                 <Input
@@ -493,6 +431,7 @@ export function CharactersPanel({
                 ) : null}
               </div>
             ) : null}
+
             <div className="space-y-1.5">
               <Label>Gênero</Label>
               <select
@@ -503,14 +442,25 @@ export function CharactersPanel({
                 }
               >
                 <option value="">—</option>
-                <option value="boy">Menino</option>
-                <option value="girl">Menina</option>
-                <option value="male">Masculino</option>
-                <option value="female">Feminino</option>
-                <option value="other">Outro / não informar</option>
+                {editingIsPetOrToy ? (
+                  <>
+                    <option value="male">Macho / masculino</option>
+                    <option value="female">Fêmea / feminino</option>
+                    <option value="other">Outro / não informar</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="boy">Menino</option>
+                    <option value="girl">Menina</option>
+                    <option value="male">Masculino</option>
+                    <option value="female">Feminino</option>
+                    <option value="other">Outro / não informar</option>
+                  </>
+                )}
               </select>
             </div>
-            {!isPetOrToy ? (
+
+            {!editingIsPetOrToy ? (
               <div className="space-y-1.5">
                 <Label htmlFor="char-birth">Nascimento</Label>
                 <Input
@@ -523,22 +473,111 @@ export function CharactersPanel({
                 />
               </div>
             ) : null}
-            <div className="space-y-1.5">
-              <Label>Tipo</Label>
-              <select
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                value={form.kind}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, kind: e.target.value }))
-                }
-              >
-                <option value="child">Criança</option>
-                <option value="adult">Adulto</option>
-                <option value="pet">Pet</option>
-                <option value="toy">Brinquedo</option>
-                <option value="other">Outro</option>
-              </select>
-            </div>
+
+            {editingIsPrimary ? (
+              <div className="space-y-3 rounded-lg border border-border/60 p-3">
+                <p className="text-sm font-medium">Família</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={familyForm.hasFather}
+                        onChange={(e) =>
+                          setFamilyForm((f) => ({
+                            ...f,
+                            hasFather: e.target.checked,
+                          }))
+                        }
+                      />
+                      Tem pai?
+                    </label>
+                    {familyForm.hasFather ? (
+                      <>
+                        <Input
+                          placeholder="Nome do pai"
+                          value={familyForm.fatherName}
+                          onChange={(e) =>
+                            setFamilyForm((f) => ({
+                              ...f,
+                              fatherName: e.target.value,
+                            }))
+                          }
+                        />
+                        <Input
+                          type="date"
+                          value={familyForm.fatherBirthDate || ""}
+                          onChange={(e) =>
+                            setFamilyForm((f) => ({
+                              ...f,
+                              fatherBirthDate: e.target.value,
+                            }))
+                          }
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={familyForm.hasMother}
+                        onChange={(e) =>
+                          setFamilyForm((f) => ({
+                            ...f,
+                            hasMother: e.target.checked,
+                          }))
+                        }
+                      />
+                      Tem mãe?
+                    </label>
+                    {familyForm.hasMother ? (
+                      <>
+                        <Input
+                          placeholder="Nome da mãe"
+                          value={familyForm.motherName}
+                          onChange={(e) =>
+                            setFamilyForm((f) => ({
+                              ...f,
+                              motherName: e.target.value,
+                            }))
+                          }
+                        />
+                        <Input
+                          type="date"
+                          value={familyForm.motherBirthDate || ""}
+                          onChange={(e) =>
+                            setFamilyForm((f) => ({
+                              ...f,
+                              motherBirthDate: e.target.value,
+                            }))
+                          }
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {!editingIsPrimary && !editingIsPetOrToy ? (
+              <div className="space-y-1.5">
+                <Label>Tipo</Label>
+                <select
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  value={form.kind}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, kind: e.target.value }))
+                  }
+                >
+                  <option value="child">Criança</option>
+                  <option value="adult">Adulto</option>
+                  <option value="pet">Pet</option>
+                  <option value="toy">Brinquedo</option>
+                  <option value="other">Outro</option>
+                </select>
+              </div>
+            ) : null}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)}>
@@ -561,39 +600,6 @@ export function CharactersPanel({
           {message}
         </p>
       ) : null}
-
-      {/* Mantém packs visíveis só como referência rápida — compra principal no modal */}
-      <section className="space-y-2">
-        <h3 className="text-sm font-medium text-muted-foreground">
-          Referência de preços (1–5)
-        </h3>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {CHARACTER_PACKS.map((pack) => (
-            <Card key={pack.id} className="shadow-none">
-              <CardHeader className="pb-1">
-                <CardTitle className="text-sm">{pack.name}</CardTitle>
-                <CardDescription className="text-xs">
-                  {formatBrl(pack.priceBrl)}
-                </CardDescription>
-              </CardHeader>
-              <CardContent />
-              <CardFooter>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => {
-                    setAvatarCount(pack.characters);
-                    setAddOpen(true);
-                  }}
-                >
-                  Escolher
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

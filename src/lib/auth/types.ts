@@ -17,6 +17,12 @@ export type OnboardingChildDraft = {
   gender: ChildGender;
   /** Derivado na UI — não é fonte de verdade */
   ageYears?: number;
+  hasFather?: boolean;
+  fatherName?: string;
+  fatherBirthDate?: string;
+  hasMother?: boolean;
+  motherName?: string;
+  motherBirthDate?: string;
 };
 
 export type FriendKind = "pet" | "toy";
@@ -24,6 +30,7 @@ export type FriendKind = "pet" | "toy";
 export type OnboardingFriendDraft = {
   kind: FriendKind;
   displayName: string;
+  gender?: string | null;
 };
 
 export type OnboardingPhotoDraft = {

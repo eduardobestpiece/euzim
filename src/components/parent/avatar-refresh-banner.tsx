@@ -10,17 +10,15 @@ function subscribe() {
   return () => {};
 }
 
-function getDue(dueAt: string | null | undefined): boolean {
-  if (!dueAt) return false;
-  const t = Date.parse(dueAt);
-  return Number.isFinite(t) && t <= Date.now();
-}
-
 export function AvatarRefreshBanner({ status }: { status: AvatarRefreshStatus }) {
-  // Relógio só no cliente — evita Date.now no RSC / hydration mismatch
+  // Relógio só no getSnapshot do cliente — nunca no prerender RSC
   const due = useSyncExternalStore(
     subscribe,
-    () => getDue(status.dueAt),
+    () => {
+      if (!status.dueAt) return false;
+      const t = Date.parse(status.dueAt);
+      return Number.isFinite(t) && t <= Date.now();
+    },
     () => false,
   );
 

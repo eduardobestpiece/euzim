@@ -123,12 +123,16 @@ export default async function ParentPage() {
       if (typeof prefs.age_years === "number") {
         childAgeYears = prefs.age_years;
       } else if (child?.birth_date) {
-        const d = new Date(child.birth_date);
-        if (!Number.isNaN(d.getTime())) {
+        // Após await connection() — seguro com cacheComponents
+        const parts = child.birth_date.split("-").map(Number);
+        const y = parts[0];
+        const mo = parts[1];
+        const day = parts[2];
+        if (y && mo && day) {
           const now = new Date();
-          let age = now.getFullYear() - d.getFullYear();
-          const m = now.getMonth() - d.getMonth();
-          if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
+          let age = now.getFullYear() - y;
+          const m = now.getMonth() + 1 - mo;
+          if (m < 0 || (m === 0 && now.getDate() < day)) age -= 1;
           if (age >= 0 && age < 18) childAgeYears = age;
         }
       }

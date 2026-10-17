@@ -41,6 +41,16 @@ export async function updateCharacterAction(
   const client = await db();
   if (!client) return { error: "Banco indisponível." };
 
+  const { data: existing, error: loadError } = await client
+    .from("characters")
+    .select("id, is_primary, child_id")
+    .eq("id", input.id)
+    .eq("parent_id", user.id)
+    .maybeSingle();
+
+  if (loadError) return { error: loadError.message };
+  if (!existing) return { error: "Personagem não encontrado." };
+
   const { error } = await client
     .from("characters")
     .update({
@@ -56,6 +66,21 @@ export async function updateCharacterAction(
     .eq("parent_id", user.id);
 
   if (error) return { error: error.message };
+
+  // Criança principal: espelha nome/gênero/nascimento em `children`
+  if (existing.is_primary && existing.child_id) {
+    const { error: childError } = await client
+      .from("children")
+      .update({
+        display_name: name,
+        gender: input.gender || null,
+        birth_date: input.birthDate || null,
+      })
+      .eq("id", existing.child_id)
+      .eq("parent_id", user.id);
+    if (childError) return { error: childError.message };
+  }
+
   revalidatePath("/app/parent");
   return {};
 }
@@ -72,12 +97,12 @@ export async function updateChildFamilyAction(
     .from("children")
     .update({
       has_father: input.hasFather,
-      father_name: input.hasFather ? input.fatherName || null : null,
+      father_name: input.hasFather ? input.fatherName?.trim() || null : null,
       father_birth_date: input.hasFather
         ? input.fatherBirthDate || null
         : null,
       has_mother: input.hasMother,
-      mother_name: input.hasMother ? input.motherName || null : null,
+      mother_name: input.hasMother ? input.motherName?.trim() || null : null,
       mother_birth_date: input.hasMother
         ? input.motherBirthDate || null
         : null,
