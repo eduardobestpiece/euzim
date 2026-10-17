@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
@@ -10,13 +11,22 @@ import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
+import { normalizeSecurityPin } from "@/lib/onboarding/pin-format";
 import type { OnboardingState } from "@/lib/auth/types";
 
 /** Geração Pixar no fluxo pode passar de 60s. */
 export const maxDuration = 300;
 
-export default async function OnboardingPage() {
-  // cacheComponents: connection() opts into request time — sem Date.now() aqui
+function OnboardingFallback() {
+  return (
+    <main className="flex min-h-full flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+      Carregando onboarding…
+    </main>
+  );
+}
+
+async function OnboardingPageInner() {
+  // cacheComponents: connection() opts into request time — dentro de Suspense
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -30,17 +40,17 @@ export default async function OnboardingPage() {
     if (bootstrap.resetMode) resetMode = bootstrap.resetMode;
 
     if (user.onboardingCompleted && resetMode !== "reuse") {
-      // Completo e sem refresh forçado → painel (sem relógio JS)
       redirect("/app/parent");
     }
 
     if (bootstrap.initialState) {
-      // DB é a fonte das fotos/avatares — cookie slim só complementa PIN/passo
       const fromDb = bootstrap.initialState;
       const fromCookie = cookieState;
       initialState = {
         securityPin:
-          fromCookie?.securityPin || fromDb.securityPin || "",
+          normalizeSecurityPin(fromCookie?.securityPin) ||
+          normalizeSecurityPin(fromDb.securityPin) ||
+          "",
         child: fromCookie?.child ?? fromDb.child,
         childPhotos:
           fromDb.childPhotos.length > 0
@@ -51,11 +61,11 @@ export default async function OnboardingPage() {
           fromDb.friendPhotos.length > 0
             ? fromDb.friendPhotos
             : (fromCookie?.friendPhotos ?? []),
-        childAvatarUrl: fromDb.childAvatarUrl ?? fromCookie?.childAvatarUrl ?? null,
+        childAvatarUrl:
+          fromDb.childAvatarUrl ?? fromCookie?.childAvatarUrl ?? null,
         friendAvatarUrl:
           fromDb.friendAvatarUrl ?? fromCookie?.friendAvatarUrl ?? null,
-        wizardStep:
-          fromCookie?.wizardStep || fromDb.wizardStep || null,
+        wizardStep: fromCookie?.wizardStep || fromDb.wizardStep || null,
         completed: false,
       };
     } else if (user.onboardingCompleted) {
@@ -92,5 +102,13 @@ export default async function OnboardingPage() {
         />
       </div>
     </main>
+  );
+}
+
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<OnboardingFallback />}>
+      <OnboardingPageInner />
+    </Suspense>
   );
 }

@@ -26,12 +26,11 @@ import {
   type SlotPhotos,
 } from "@/components/onboarding/photo-slot-grid";
 import {
-  finishAvatarOnboardingAction,
   saveChildAvatarProfileAction,
   saveFriendProfileAction,
-  saveOnboardingPinAction,
   saveSubjectPhotosAction,
 } from "@/lib/onboarding/actions";
+import { useRouter } from "next/navigation";
 import {
   REQUIRED_CHILD_PHOTO_COUNT,
   REQUIRED_FRIEND_PHOTO_COUNT,
@@ -119,6 +118,7 @@ export function OnboardingWizard({
   resetMode?: "full" | "reuse" | null;
 }) {
   const isReuse = resetMode === "reuse";
+  const router = useRouter();
   const [step, setStep] = useState<Step>(() =>
     resolveInitialStep(initialState, isReuse),
   );
@@ -252,15 +252,31 @@ export function OnboardingWizard({
 
   function submitPin(formData: FormData) {
     setError(null);
+    const pin = String(formData.get("pin") ?? "").trim();
+    const confirmPin = String(formData.get("confirmPin") ?? "").trim();
     startTransition(async () => {
-      const result = await saveOnboardingPinAction({}, formData);
-      if (result.error) {
-        setError(result.error);
-        return;
+      try {
+        // API leve — evita Server Action / Set-Cookie que falhava no console
+        const res = await fetch("/api/onboarding/complete-pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin, confirmPin }),
+        });
+        const body = (await res.json()) as {
+          error?: string;
+          redirectTo?: string;
+        };
+        if (!res.ok || body.error) {
+          setError(body.error || `Falha ao salvar PIN (${res.status}).`);
+          return;
+        }
+        router.push(body.redirectTo || "/app/parent");
+        router.refresh();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Falha de rede ao salvar PIN.",
+        );
       }
-      // Último passo: PIN salvo → completa onboarding e abre o painel
-      const done = await finishAvatarOnboardingAction();
-      if (done?.error) setError(done.error);
     });
   }
 

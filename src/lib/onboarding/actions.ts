@@ -41,6 +41,10 @@ import {
   validateBirthDate,
   type ChildGender,
 } from "@/lib/onboarding/child-profile";
+import {
+  isValidSecurityPin,
+  normalizeSecurityPin,
+} from "@/lib/onboarding/pin-format";
 
 export type OnboardingActionResult = {
   error?: string;
@@ -186,6 +190,9 @@ async function loadChildPreferences(userId: string): Promise<{
 /** Cookie + hidratação das fotos salvas no banco (fonte da verdade). */
 async function loadState(): Promise<OnboardingState> {
   const cookie = (await readMockOnboarding()) ?? emptyState();
+  // Descarta PIN corrompido do cookie (ex.: legado "set")
+  cookie.securityPin = normalizeSecurityPin(cookie.securityPin) ?? "";
+
   const user = await getCurrentUser();
   if (!user || !isSupabaseConfigured() || user.isMock) {
     return cookie;
@@ -272,7 +279,7 @@ export async function saveOnboardingPinAction(
 ): Promise<OnboardingActionResult> {
   const pin = String(formData.get("pin") ?? "").trim();
   const confirm = String(formData.get("confirmPin") ?? "").trim();
-  if (!/^\d{4,6}$/.test(pin)) {
+  if (!isValidSecurityPin(pin)) {
     return { error: "O PIN deve ter 4 a 6 dígitos." };
   }
   if (pin !== confirm) return { error: "Os PINs não coincidem." };
@@ -282,19 +289,28 @@ export async function saveOnboardingPinAction(
 
   const state = await loadState();
   state.securityPin = pin;
-  await writeMockOnboarding(state);
+  // Cookie mínimo — sem listas de fotos (evita Set-Cookie >4KB)
+  await writeMockOnboarding({
+    ...state,
+    childPhotos: [],
+    friendPhotos: [],
+  });
 
   if (isSupabaseConfigured() && !user.isMock) {
     const db = createAdminClient() ?? (await createClient());
     if (db) {
-      await db.from("users").upsert({
-        id: user.id,
-        email: user.email,
-        full_name: user.fullName,
-        role: user.role,
-        security_pin: pin,
-        onboarding_completed: false,
-      });
+      // UPDATE — upsert com security_pin="" violava users_security_pin_format
+      const { error } = await db
+        .from("users")
+        .update({ security_pin: pin })
+        .eq("id", user.id);
+      if (error) {
+        return {
+          error: error.message.includes("users_security_pin_format")
+            ? "PIN inválido. Use só 4 a 6 dígitos numéricos."
+            : error.message,
+        };
+      }
     }
   }
 
@@ -741,19 +757,29 @@ export async function finishAvatarOnboardingAction(): Promise<OnboardingActionRe
   if (!user) return { error: "Faça login." };
 
   const state = await loadState();
-  if (!state.securityPin) return { error: "Defina o PIN de segurança." };
-  if (!state.child?.displayName) return { error: "Complete o avatar da criança." };
-  if (!state.friend?.displayName && !state.friendAvatarUrl) {
-    return { error: "Complete o melhor amigo." };
-  }
-  if (!state.childAvatarUrl || !state.friendAvatarUrl) {
-    return { error: "Gere os personagens antes de continuar." };
-  }
-
-  state.completed = true;
-  await writeMockOnboarding(state);
+  let pin = normalizeSecurityPin(state.securityPin);
 
   if (!isSupabaseConfigured() || user.isMock) {
+    if (!pin) return { error: "Defina o PIN de segurança." };
+    if (!state.child?.displayName) {
+      return { error: "Complete o avatar da criança." };
+    }
+    if (!state.friend?.displayName && !state.friendAvatarUrl) {
+      return { error: "Complete o melhor amigo." };
+    }
+    if (
+      !isPixarGeneratedUrl(state.childAvatarUrl) ||
+      !isPixarGeneratedUrl(state.friendAvatarUrl)
+    ) {
+      return { error: "Gere os personagens antes de continuar." };
+    }
+    state.completed = true;
+    state.securityPin = pin;
+    await writeMockOnboarding({
+      ...state,
+      childPhotos: [],
+      friendPhotos: [],
+    });
     const session = await readMockSession();
     if (session) {
       await writeMockSession({ ...session, onboardingCompleted: true });
@@ -765,16 +791,54 @@ export async function finishAvatarOnboardingAction(): Promise<OnboardingActionRe
   const db = createAdminClient() ?? (await createClient());
   if (!db) return { error: "Supabase indisponível." };
 
+  // PIN inválido no cookie (ex.: legado "set") → usa o do DB
+  if (!pin) {
+    const { data: row } = await db
+      .from("users")
+      .select("security_pin")
+      .eq("id", user.id)
+      .maybeSingle();
+    pin = normalizeSecurityPin(row?.security_pin);
+  }
+  if (!pin) return { error: "Defina o PIN de segurança." };
+
+  if (!state.child?.displayName) {
+    return { error: "Complete o avatar da criança." };
+  }
+  if (!state.friend?.displayName && !state.friendAvatarUrl) {
+    return { error: "Complete o melhor amigo." };
+  }
+  if (
+    !isPixarGeneratedUrl(state.childAvatarUrl) ||
+    !isPixarGeneratedUrl(state.friendAvatarUrl)
+  ) {
+    return { error: "Gere os personagens antes de continuar." };
+  }
+
+  state.completed = true;
+  state.securityPin = pin;
+  await writeMockOnboarding({
+    ...state,
+    childPhotos: [],
+    friendPhotos: [],
+  });
+
   const { error } = await db
     .from("users")
     .update({
       onboarding_completed: true,
-      security_pin: state.securityPin,
+      security_pin: pin,
       onboarding_reset_mode: null,
     })
     .eq("id", user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    return {
+      error: error.message.includes("users_security_pin_format")
+        ? "PIN inválido. Use só 4 a 6 dígitos numéricos."
+        : error.message,
+    };
+  }
 
   revalidatePath("/app/parent");
   redirect("/app/parent");

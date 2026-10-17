@@ -4,6 +4,7 @@ import {
   MOCK_SESSION_COOKIE,
 } from "@/lib/auth/constants";
 import type { AuthUser, OnboardingState } from "@/lib/auth/types";
+import { normalizeSecurityPin } from "@/lib/onboarding/pin-format";
 
 export type MockSessionPayload = {
   id: string;
@@ -52,7 +53,8 @@ export function slimOnboardingForCookie(
   state: OnboardingState,
 ): OnboardingState {
   return {
-    securityPin: state.securityPin || "",
+    // Nunca gravar placeholder ("set") — o check do Postgres exige 4–6 dígitos
+    securityPin: normalizeSecurityPin(state.securityPin) ?? "",
     child: state.child,
     friend: state.friend,
     childPhotos: lightPhotos(state.childPhotos),
@@ -106,9 +108,9 @@ export async function writeMockOnboarding(state: OnboardingState) {
   }
 
   if (encoded.length > COOKIE_BUDGET) {
-    // Último recurso: só passo + flags
+    // Último recurso: só passo + PIN real (4–6 chars) + flags — sem fotos/URLs
     encoded = encode({
-      securityPin: slim.securityPin ? "set" : "",
+      securityPin: normalizeSecurityPin(slim.securityPin) ?? "",
       child: slim.child
         ? {
             displayName: slim.child.displayName.slice(0, 40),
@@ -116,9 +118,16 @@ export async function writeMockOnboarding(state: OnboardingState) {
             gender: slim.child.gender,
           }
         : null,
-      friend: slim.friend,
+      friend: slim.friend
+        ? {
+            kind: slim.friend.kind,
+            displayName: slim.friend.displayName.slice(0, 40),
+          }
+        : null,
       childPhotos: [],
       friendPhotos: [],
+      childAvatarUrl: null,
+      friendAvatarUrl: null,
       wizardStep: slim.wizardStep,
       completed: slim.completed,
     });
