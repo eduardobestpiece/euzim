@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type TouchEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type TouchEvent } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +8,8 @@ import {
   type DemoStoryPage,
 } from "@/lib/marketing/serena-agulha-demo";
 import { InlineBrand } from "@/components/brand/inline-brand";
+import { PageTurnStage } from "@/components/stories/page-turn-stage";
+import { usePageTurn } from "@/hooks/use-page-turn";
 
 export function LandingStoryBook({
   pages = SERENA_AGULHA_DEMO.pages as DemoStoryPage[],
@@ -23,33 +19,15 @@ export function LandingStoryBook({
   title?: string;
 }) {
   const [index, setIndex] = useState(0);
-  const [turn, setTurn] = useState<"idle" | "next" | "prev">("idle");
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
-  const page = pages[index];
   const total = pages.length;
-
-  const goPrev = useCallback(() => {
-    setIndex((i) => {
-      if (i <= 0) return i;
-      setTurn("prev");
-      return i - 1;
-    });
-  }, []);
-
-  const goNext = useCallback(() => {
-    setIndex((i) => {
-      if (i >= total - 1) return i;
-      setTurn("next");
-      return i + 1;
-    });
-  }, [total]);
-
-  useEffect(() => {
-    if (turn === "idle") return;
-    const t = window.setTimeout(() => setTurn("idle"), 420);
-    return () => window.clearTimeout(t);
-  }, [turn, index]);
+  const { turn, goNext, goPrev } = usePageTurn({
+    index,
+    setIndex,
+    max: Math.max(0, total - 1),
+  });
+  const page = pages[index];
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -60,23 +38,26 @@ export function LandingStoryBook({
     return () => window.removeEventListener("keydown", onKey);
   }, [goPrev, goNext]);
 
-  function onTouchStart(e: TouchEvent) {
+  const onTouchStart = useCallback((e: TouchEvent) => {
     const t = e.changedTouches[0];
     touchStartX.current = t.clientX;
     touchStartY.current = t.clientY;
-  }
+  }, []);
 
-  function onTouchEnd(e: TouchEvent) {
-    if (touchStartX.current == null || touchStartY.current == null) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - touchStartX.current;
-    const dy = t.clientY - touchStartY.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
-    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0) goNext();
-    else goPrev();
-  }
+  const onTouchEnd = useCallback(
+    (e: TouchEvent) => {
+      if (touchStartX.current == null || touchStartY.current == null) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX.current;
+      const dy = t.clientY - touchStartY.current;
+      touchStartX.current = null;
+      touchStartY.current = null;
+      if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
+      if (dx < 0) goNext();
+      else goPrev();
+    },
+    [goNext, goPrev],
+  );
 
   if (!page) return null;
 
@@ -104,45 +85,39 @@ export function LandingStoryBook({
           onTouchStart={onTouchStart}
           onTouchEnd={onTouchEnd}
         >
-          <div className="landing-book-spine" aria-hidden />
+          <div className="landing-book-stage">
+            <div className="landing-book-spine" aria-hidden />
+            <PageTurnStage turn={turn}>
+              <div className="landing-book-spread">
+                <figure className="landing-book-image">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={page.imageUrl}
+                    alt={page.altText}
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                  {index === 0 ? (
+                    <figcaption className="landing-book-title-overlay">
+                      <span className="font-story-display text-lg uppercase leading-tight sm:text-xl md:text-2xl">
+                        {title}
+                      </span>
+                    </figcaption>
+                  ) : null}
+                </figure>
 
-          <div
-            key={index}
-            className={`landing-book-spread ${
-              turn === "next"
-                ? "landing-book-turn-next"
-                : turn === "prev"
-                  ? "landing-book-turn-prev"
-                  : ""
-            }`}
-          >
-            <figure className="landing-book-image">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={page.imageUrl}
-                alt={page.altText}
-                className="h-full w-full object-cover"
-                draggable={false}
-              />
-              {index === 0 ? (
-                <figcaption className="landing-book-title-overlay">
-                  <span className="font-story-display text-lg uppercase leading-tight sm:text-xl md:text-2xl">
-                    {title}
-                  </span>
-                </figcaption>
-              ) : null}
-            </figure>
-
-            <div className="landing-book-text">
-              <p className="landing-book-page-label font-story-body">
-                {page.title || `Página ${index + 1}`}
-              </p>
-              <div className="landing-book-scroll">
-                <p className="font-story-body whitespace-pre-wrap text-[1.02rem] font-semibold leading-[1.75] text-[var(--euzim-ink)] sm:text-[1.1rem] sm:leading-[1.8]">
-                  {page.text}
-                </p>
+                <div className="landing-book-text">
+                  <p className="landing-book-page-label font-story-body">
+                    {page.title || `Página ${index + 1}`}
+                  </p>
+                  <div className="landing-book-scroll">
+                    <p className="font-story-body whitespace-pre-wrap text-[1.02rem] font-semibold leading-[1.75] text-[var(--euzim-ink)] sm:text-[1.1rem] sm:leading-[1.8]">
+                      {page.text}
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            </PageTurnStage>
           </div>
 
           <div className="landing-book-controls">
@@ -150,7 +125,7 @@ export function LandingStoryBook({
               type="button"
               variant="outline"
               className="font-story-body gap-1 rounded-xl border-[var(--euzim-violet)]/20 bg-white/90 shadow-sm"
-              disabled={index === 0}
+              disabled={index === 0 || turn !== "idle"}
               onClick={goPrev}
               aria-label="Página anterior"
             >
@@ -166,7 +141,7 @@ export function LandingStoryBook({
             <Button
               type="button"
               className="landing-cta-btn font-story-body gap-1 rounded-xl border-0 shadow-md"
-              disabled={index >= total - 1}
+              disabled={index >= total - 1 || turn !== "idle"}
               onClick={goNext}
               aria-label="Próxima página"
             >

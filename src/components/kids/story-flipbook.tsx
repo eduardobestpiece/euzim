@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -21,6 +20,8 @@ import {
 import type { QuizQuestion } from "@/lib/stories/quiz";
 import { shareStoryLink } from "@/lib/stories/share";
 import { getMyReferralShareUrlAction } from "@/lib/referral/actions";
+import { PageTurnStage } from "@/components/stories/page-turn-stage";
+import { usePageTurn } from "@/hooks/use-page-turn";
 
 type Page = {
   pageIndex: number;
@@ -68,18 +69,17 @@ export function StoryFlipbook({
 
   const quizIndex = pages.length;
   const hasQuiz = questions.length > 0;
+  const maxIndex = hasQuiz ? quizIndex : Math.max(0, pages.length - 1);
   const isQuiz = hasQuiz && index >= quizIndex;
   const page = !isQuiz ? pages[index] : null;
   const palette = useImagePalette(page?.imageUrl || pages[0]?.imageUrl);
   const showStoryTitle = showTitle && !isQuiz && index === 0;
 
-  const goPrev = useCallback(() => {
-    setIndex((i) => Math.max(0, i - 1));
-  }, []);
-
-  const goNext = useCallback(() => {
-    setIndex((i) => Math.min(hasQuiz ? quizIndex : pages.length - 1, i + 1));
-  }, [hasQuiz, quizIndex, pages.length]);
+  const { turn, goNext, goPrev } = usePageTurn({
+    index,
+    setIndex,
+    max: maxIndex,
+  });
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -128,8 +128,10 @@ export function StoryFlipbook({
     }
   }
 
-  const atLastStoryPage = index >= pages.length - 1;
-  const nextDisabled = isQuiz || (!hasQuiz && atLastStoryPage);
+  const atLastStoryPage = !isQuiz && index >= pages.length - 1;
+  const nextDisabled =
+    turn !== "idle" || isQuiz || (!hasQuiz && atLastStoryPage);
+  const prevDisabled = turn !== "idle" || index === 0;
   const wallpaperUrl =
     [...pages].reverse().find((p) => p.imageUrl)?.imageUrl || "";
 
@@ -179,9 +181,12 @@ export function StoryFlipbook({
         </div>
 
         {!isQuiz && page ? (
-          <>
+          <PageTurnStage
+            turn={turn}
+            className="relative z-10 mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col"
+          >
             {/* Imagem fixa — título só na 1ª página, como extensão da arte */}
-            <figure className="mx-auto w-full max-w-3xl shrink-0 px-3 md:px-5">
+            <figure className="w-full shrink-0 px-3 md:px-5">
               <div
                 className="relative overflow-hidden rounded-t-[1.35rem] shadow-lg md:rounded-t-[1.6rem]"
                 style={{
@@ -234,11 +239,11 @@ export function StoryFlipbook({
 
             <div
               ref={textScrollRef}
-              className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-3 pb-4 md:px-5"
+              className="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain px-3 pb-4 md:px-5"
             >
               <div
                 key={`text-${index}`}
-                className="storybook-text-enter rounded-b-[1.35rem] px-5 pb-6 pt-5 md:rounded-b-[1.6rem] md:px-8 md:pb-8"
+                className="rounded-b-[1.35rem] px-5 pb-6 pt-5 md:rounded-b-[1.6rem] md:px-8 md:pb-8"
                 style={{
                   backgroundColor: palette.paper,
                   color: palette.text,
@@ -303,7 +308,7 @@ export function StoryFlipbook({
                       background: palette.soft,
                       color: palette.text,
                     }}
-                    disabled={index === 0}
+                    disabled={prevDisabled}
                     onClick={goPrev}
                   >
                     <ChevronLeft className="size-4" />
@@ -328,7 +333,7 @@ export function StoryFlipbook({
                 </div>
               </div>
             </div>
-          </>
+          </PageTurnStage>
         ) : (
           <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-3 pb-6 md:px-5">
             <div
