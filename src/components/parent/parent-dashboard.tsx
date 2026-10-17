@@ -13,6 +13,7 @@ import {
   StoryJobNotifier,
   trackStoryJob,
 } from "@/components/parent/story-job-notifier";
+import { WallpaperDialog } from "@/components/parent/wallpaper-dialog";
 import type { StoryUsage } from "@/lib/stories/usage";
 import type { ChildFamilyMeta } from "@/lib/characters/types";
 
@@ -20,6 +21,7 @@ type StoryListItem = {
   id: string;
   title: string;
   coverImageUrl?: string | null;
+  wallpaperImageUrl?: string | null;
   createdAt?: string;
 };
 
@@ -130,33 +132,62 @@ export function ParentDashboard({
             </p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
-              {stories.map((story) => (
-                <li key={story.id}>
-                  <Link
-                    href={`/app/parent/stories/${story.id}`}
-                    className="flex gap-3 rounded-xl border border-border/70 p-3 transition hover:border-foreground/40"
+              {stories.map((story) => {
+                const wallpaperUrl =
+                  story.wallpaperImageUrl || story.coverImageUrl || "";
+                return (
+                  <li
+                    key={story.id}
+                    className="rounded-xl border border-border/70 p-3 transition hover:border-foreground/40"
                   >
-                    {story.coverImageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={story.coverImageUrl}
-                        alt=""
-                        className="size-16 rounded-md object-cover"
-                      />
-                    ) : (
-                      <div className="size-16 rounded-md bg-muted" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{story.title}</p>
-                      {story.createdAt ? (
-                        <p className="text-xs text-muted-foreground">
-                          {story.createdAt.slice(0, 10).split("-").reverse().join("/")}
-                        </p>
+                    <div className="flex gap-3">
+                      <Link
+                        href={`/app/parent/stories/${story.id}`}
+                        className="flex min-w-0 flex-1 gap-3"
+                      >
+                        {story.coverImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={story.coverImageUrl}
+                            alt=""
+                            className="size-16 shrink-0 rounded-md object-cover"
+                          />
+                        ) : (
+                          <div className="size-16 shrink-0 rounded-md bg-muted" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{story.title}</p>
+                          {story.createdAt ? (
+                            <p className="text-xs text-muted-foreground">
+                              {story.createdAt
+                                .slice(0, 10)
+                                .split("-")
+                                .reverse()
+                                .join("/")}
+                            </p>
+                          ) : null}
+                        </div>
+                      </Link>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/app/parent/stories/${story.id}`}>
+                          Ler
+                        </Link>
+                      </Button>
+                      {wallpaperUrl ? (
+                        <WallpaperDialog
+                          imageUrl={wallpaperUrl}
+                          title={story.title}
+                          triggerLabel="Wallpaper"
+                          size="sm"
+                          variant="secondary"
+                        />
                       ) : null}
                     </div>
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </TabsContent>

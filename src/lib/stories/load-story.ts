@@ -116,6 +116,8 @@ export async function listStoriesForParent(parentId: string): Promise<
     id: string;
     title: string;
     coverImageUrl?: string | null;
+    /** Última página (retrato wallpaper 1024×1536), se existir. */
+    wallpaperImageUrl?: string | null;
     createdAt?: string;
   }[]
 > {
@@ -133,10 +135,25 @@ export async function listStoriesForParent(parentId: string): Promise<
         .limit(20);
 
       if (!error && data) {
+        const ids = data.map((s) => s.id);
+        const wallpaperByStory = new Map<string, string>();
+        if (ids.length > 0) {
+          const { data: images } = await db
+            .from("story_images")
+            .select("story_id, page_index, image_url")
+            .in("story_id", ids)
+            .order("page_index", { ascending: false });
+          for (const row of images ?? []) {
+            if (!row.image_url || wallpaperByStory.has(row.story_id)) continue;
+            // primeira ocorrência = maior page_index (ordenado desc)
+            wallpaperByStory.set(row.story_id, row.image_url);
+          }
+        }
         return data.map((s) => ({
           id: s.id,
           title: s.title,
           coverImageUrl: s.cover_image_url,
+          wallpaperImageUrl: wallpaperByStory.get(s.id) ?? s.cover_image_url,
           createdAt: s.created_at,
         }));
       }
@@ -148,10 +165,14 @@ export async function listStoriesForParent(parentId: string): Promise<
   const mocks = await readMockStories();
   return mocks
     .filter((s) => s.parentId === parentId)
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      coverImageUrl: s.coverImageUrl,
-      createdAt: s.createdAt,
-    }));
+    .map((s) => {
+      const last = [...s.pages].sort((a, b) => b.pageIndex - a.pageIndex)[0];
+      return {
+        id: s.id,
+        title: s.title,
+        coverImageUrl: s.coverImageUrl,
+        wallpaperImageUrl: last?.imageUrl || s.coverImageUrl,
+        createdAt: s.createdAt,
+      };
+    });
 }

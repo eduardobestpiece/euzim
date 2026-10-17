@@ -11,6 +11,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuizTherapy } from "@/components/kids/quiz-therapy";
+import { WallpaperDialog } from "@/components/parent/wallpaper-dialog";
 import { useImagePalette } from "@/hooks/use-image-palette";
 import {
   paletteBackgroundStyle,
@@ -38,6 +39,7 @@ export function StoryFlipbook({
   backHref,
   backLabel = "Voltar para a biblioteca",
   showShare = false,
+  showWallpaper = true,
 }: {
   storyId: string;
   title: string;
@@ -51,6 +53,8 @@ export function StoryFlipbook({
   backHref?: string | null;
   backLabel?: string;
   showShare?: boolean;
+  /** Mostra botão Wallpaper (última página portrait). */
+  showWallpaper?: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const [shareState, setShareState] = useState<"idle" | "copied" | "shared">(
@@ -117,6 +121,8 @@ export function StoryFlipbook({
 
   const atLastStoryPage = index >= pages.length - 1;
   const nextDisabled = isQuiz || (!hasQuiz && atLastStoryPage);
+  const wallpaperUrl =
+    [...pages].reverse().find((p) => p.imageUrl)?.imageUrl || "";
 
   return (
     <div
@@ -148,22 +154,32 @@ export function StoryFlipbook({
           >
             Euzim
           </span>
-          {backHref ? (
-            <Button
-              asChild
-              variant="secondary"
-              size="sm"
-              className="font-story-body gap-1.5 border-0 shadow-sm"
-              style={{ background: palette.paper, color: palette.text }}
-            >
-              <Link href={backHref}>
-                <ArrowLeft className="size-3.5" />
-                {backLabel}
-              </Link>
-            </Button>
-          ) : (
-            <span className="size-8" aria-hidden />
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {showWallpaper && wallpaperUrl ? (
+              <WallpaperDialog
+                imageUrl={wallpaperUrl}
+                title={title}
+                triggerLabel="Wallpaper"
+                variant="secondary"
+                size="sm"
+                triggerClassName="font-story-body border-0 shadow-sm"
+              />
+            ) : null}
+            {backHref ? (
+              <Button
+                asChild
+                variant="secondary"
+                size="sm"
+                className="font-story-body gap-1.5 border-0 shadow-sm"
+                style={{ background: palette.paper, color: palette.text }}
+              >
+                <Link href={backHref}>
+                  <ArrowLeft className="size-3.5" />
+                  {backLabel}
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {!isQuiz && page ? (
@@ -257,6 +273,19 @@ export function StoryFlipbook({
                 <p className="font-story-body whitespace-pre-wrap text-[1.125rem] font-semibold leading-[1.75] md:text-[1.28rem] md:leading-[1.8]">
                   {page.text}
                 </p>
+
+                {atLastStoryPage && showWallpaper && wallpaperUrl ? (
+                  <div className="mt-6 flex justify-center">
+                    <WallpaperDialog
+                      imageUrl={wallpaperUrl}
+                      title={title}
+                      triggerLabel="Usar como wallpaper"
+                      variant="outline"
+                      size="sm"
+                      triggerClassName="font-story-body border-0 shadow-sm"
+                    />
+                  </div>
+                ) : null}
 
                 <div className="mt-8 flex items-center justify-between gap-3">
                   <Button
