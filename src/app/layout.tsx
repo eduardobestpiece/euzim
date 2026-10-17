@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fredoka, Geist, Geist_Mono, Nunito } from "next/font/google";
+import { Baloo_2, Geist, Geist_Mono, Lilita_One, Nunito } from "next/font/google";
 import "./globals.css";
 
 const fontSans = Geist({
@@ -12,11 +12,20 @@ const fontMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-/** Display lúdico e legível (títulos marketing + livro). */
-const fontStoryDisplay = Fredoka({
-  variable: "--font-fredoka",
+/**
+ * Display caixa-alta / divertida para headlines de marketing.
+ * Lilita One = personalidade forte; Baloo 2 = fallback arredondado no app shell.
+ */
+const fontStoryDisplay = Lilita_One({
+  variable: "--font-lilita",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "400",
+});
+
+const fontHeading = Baloo_2({
+  variable: "--font-baloo",
+  subsets: ["latin"],
+  weight: ["500", "600", "700", "800"],
 });
 
 /** Corpo arredondado, altamente legível para texto infantil. */
@@ -57,7 +66,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${fontSans.variable} ${fontMono.variable} ${fontStoryDisplay.variable} ${fontStoryBody.variable} h-full antialiased`}
+      className={`${fontSans.variable} ${fontMono.variable} ${fontStoryDisplay.variable} ${fontHeading.variable} ${fontStoryBody.variable} h-full antialiased`}
     >
       {/* suppressHydrationWarning: extensões (ex. ColorZilla cz-shortcut-listen) alteram o <body> */}
       <body

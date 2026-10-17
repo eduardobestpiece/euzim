@@ -9,8 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-fredoka), "Fredoka", ui-rounded, system-ui, sans-serif;
-  --font-story-display: var(--font-fredoka), "Fredoka", ui-rounded, system-ui, sans-serif;
+  --font-heading: var(--font-baloo), "Baloo 2", ui-rounded, system-ui, sans-serif;
+  --font-story-display: var(--font-lilita), "Lilita One", ui-rounded, system-ui, sans-serif;
   --font-story-body: var(--font-nunito), "Nunito", ui-rounded, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -163,11 +163,26 @@
 }
 
 .font-story-display {
-  font-family: var(--font-fredoka), "Fredoka", ui-rounded, system-ui, sans-serif;
+  font-family: var(--font-lilita), "Lilita One", ui-rounded, system-ui, sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  font-synthesis: none;
+}
+
+.font-heading {
+  font-family: var(--font-baloo), "Baloo 2", ui-rounded, system-ui, sans-serif;
 }
 
 .font-story-body {
   font-family: var(--font-nunito), "Nunito", ui-rounded, system-ui, sans-serif;
+}
+
+/* Landing headlines: caixa alta divertida */
+.landing-hero-title,
+.landing-purpose-heading,
+.landing-purpose-item h3 {
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
 }
 
 /* ─── Landing Home (marketing) ─── */

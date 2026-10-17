@@ -68,7 +68,7 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
 
         <div className="relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 items-center gap-6 px-5 pb-10 pt-2 sm:px-8 md:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] md:gap-4 md:px-12 md:pb-16 lg:gap-8">
           <div className="landing-hero-copy flex flex-col items-start gap-5 md:gap-6">
-            <h1 className="landing-hero-title font-story-display max-w-[18ch] text-[1.85rem] leading-[1.12] tracking-tight text-[var(--euzim-ink)] sm:text-4xl md:text-[2.75rem] lg:text-[3.15rem]">
+            <h1 className="landing-hero-title font-story-display max-w-[24ch] text-[1.85rem] leading-[1.05] text-[var(--euzim-ink)] uppercase sm:text-4xl md:text-[2.7rem] lg:text-[3.05rem]">
               Crie histórias onde a sua criança é a protagonista
             </h1>
 
@@ -146,10 +146,10 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
           <div className="mx-auto max-w-2xl text-center">
             <h2
               id="proposito-heading"
-              className="font-story-display inline-flex flex-wrap items-center justify-center gap-x-2 text-2xl tracking-tight text-[var(--euzim-ink)] sm:text-3xl md:text-[2.1rem]"
+              className="landing-purpose-heading font-story-display inline-flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1 text-2xl text-[var(--euzim-ink)] uppercase sm:text-3xl md:text-[2.1rem]"
             >
               <span>Para que serve o</span>
-              <InlineBrand className="h-[1.15em] translate-y-[-0.04em]" />
+              <InlineBrand className="h-[1.4em] w-[3.7em] translate-y-[-0.05em]" />
             </h2>
             <p className="font-story-body mt-3 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
               Três caminhos simples: menos medo, melhores hábitos, valores que
@@ -161,7 +161,7 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
             {PURPOSES.map(({ title, body, Icon }) => (
               <li key={title} className="landing-purpose-item flex flex-col gap-3">
                 <Icon />
-                <h3 className="font-story-display text-xl text-[var(--euzim-ink)]">
+                <h3 className="font-story-display text-xl uppercase text-[var(--euzim-ink)]">
                   {title}
                 </h3>
                 <p className="font-story-body text-[0.98rem] leading-relaxed text-[var(--euzim-ink-soft)]">

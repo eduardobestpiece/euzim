@@ -5,9 +5,9 @@ import { cn } from "@/lib/utils";
 const VARIANTS = {
   /** Purple + star - default on light UI */
   color: "/brand/euzim-logo-color.png",
-  /** Black strokes - light backgrounds when color is too busy */
+  /** Dark strokes - light backgrounds when color is too busy */
   mono: "/brand/euzim-logo-mono.png",
-  /** Logo preta sólida - branding em textos / fundos claros */
+  /** Logo preta sólida (RGB ~18) - branding inline / fundos claros */
   black: "/brand/euzim-logo-black.png",
   /** White wordmark - dark / immersive backgrounds */
   onDark: "/brand/euzim-logo-on-dark.png",
