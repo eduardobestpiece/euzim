@@ -14,6 +14,7 @@ import {
   trackStoryJob,
 } from "@/components/parent/story-job-notifier";
 import { WallpaperDialog } from "@/components/parent/wallpaper-dialog";
+import { ShareAppButton } from "@/components/referral/share-app-button";
 import { ShareProfileButton } from "@/components/social/share-profile-button";
 import { VisibilityToggle } from "@/components/social/visibility-toggle";
 import type { StoryUsage } from "@/lib/stories/usage";
@@ -108,8 +109,9 @@ export function ParentDashboard({
                 <Link href="/app/social">Social</Link>
               </Button>
             </div>
-            <div className="flex justify-center pt-2 sm:justify-start">
+            <div className="flex flex-wrap justify-center gap-2 pt-2 sm:justify-start">
               <ShareProfileButton />
+              <ShareAppButton />
             </div>
           </div>
         </div>

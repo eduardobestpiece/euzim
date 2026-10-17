@@ -13,6 +13,8 @@ import {
 } from "@/lib/auth/mock-session";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
+import { applyReferralAttribution } from "@/lib/referral/attribution";
+import { ensureReferralCode } from "@/lib/referral/codes";
 
 export type AuthActionResult = {
   error?: string;
@@ -57,7 +59,7 @@ export async function signUpAction(
   const supabase = await createClient();
   if (!supabase) return { error: "Supabase indisponível." };
 
-  const { error } = await supabase.auth.signUp({
+  const { data: signUpData, error } = await supabase.auth.signUp({
     email,
     password,
     options: { data: { full_name: fullName || undefined } },
@@ -65,7 +67,14 @@ export async function signUpAction(
 
   if (error) return { error: error.message };
 
-  redirect("/onboarding");
+  const newUserId = signUpData.user?.id;
+  if (newUserId) {
+    await ensureReferralCode(newUserId);
+    await applyReferralAttribution(newUserId);
+  }
+
+  const next = String(formData.get("next") ?? "").trim();
+  redirect(next.startsWith("/") ? next : "/onboarding");
 }
 
 export async function signInAction(
@@ -107,12 +116,19 @@ export async function signInAction(
   } = await supabase.auth.getUser();
 
   if (user) {
+    await ensureReferralCode(user.id);
+    await applyReferralAttribution(user.id);
+
     const { data: profile } = await supabase
       .from("users")
       .select("onboarding_completed, role")
       .eq("id", user.id)
       .maybeSingle();
 
+    const next = String(formData.get("next") ?? "").trim();
+    if (next.startsWith("/")) {
+      redirect(next);
+    }
     if (!profile?.onboarding_completed) {
       redirect("/onboarding");
     }

@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { loadPrimaryAuthors } from "@/lib/social/primary-author";
+import { ensureReferralCode } from "@/lib/referral/codes";
 import type {
   FriendProfile,
   FriendshipStatus,
@@ -211,9 +212,13 @@ export async function createFriendInviteAction(): Promise<{
     return { error: error?.message ?? "Falha ao criar convite." };
   }
 
+  // Anexa ref do convidante (último clique no destino)
+  const code = await ensureReferralCode(user.id);
+  const qs = code ? `?ref=${encodeURIComponent(code)}` : "";
+
   return {
     token: data.token,
-    url: `/invite/${data.token}`,
+    url: `/invite/${data.token}${qs}`,
   };
 }
 

@@ -62,8 +62,14 @@ function planPriceId(plan: StoryPlan): string | null {
   return null;
 }
 
+export type SubscriptionCheckoutOptions = {
+  /** Retoma onboarding após Stripe (fotos já salvas). */
+  resumeOnboarding?: boolean;
+};
+
 async function createSubscriptionCheckout(
   plan: StoryPlan,
+  options: SubscriptionCheckoutOptions = {},
 ): Promise<CheckoutActionResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login para assinar." };
@@ -85,6 +91,7 @@ async function createSubscriptionCheckout(
 
   const origin = await appOrigin();
   const priceId = planPriceId(plan);
+  const resume = Boolean(options.resumeOnboarding);
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -95,6 +102,9 @@ async function createSubscriptionCheckout(
         supabase_user_id: user.id,
         kind: "subscription",
         plan_id: plan.planId,
+        ...(resume
+          ? { resume_onboarding: "1", wizard_step: "generating" }
+          : {}),
       },
       subscription_data: {
         metadata: {
@@ -118,8 +128,11 @@ async function createSubscriptionCheckout(
               },
             },
       ],
-      success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=subscription&plan_id=${plan.planId}`,
-      cancel_url: `${origin}/app/parent/billing/cancel`,
+      // Stripe substitui {CHECKOUT_SESSION_ID} literal — não encode o placeholder
+      success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=subscription&plan_id=${plan.planId}${resume ? "&resume_onboarding=1&wizard_step=generating" : ""}`,
+      cancel_url: resume
+        ? `${origin}/app/parent/billing/cancel?resume_onboarding=1`
+        : `${origin}/app/parent/billing/cancel`,
       locale: "pt-BR",
     });
 
@@ -138,13 +151,14 @@ export async function startSubscriptionCheckoutAction(): Promise<CheckoutActionR
 
 export async function startPlanCheckoutAction(
   planId: string,
+  options: SubscriptionCheckoutOptions = {},
 ): Promise<CheckoutActionResult> {
   const plan = resolveStoryPlan(planId);
   if (!plan) return { error: "Plano inválido." };
   if (plan.kind === "extra_story") {
     return startExtraStoryCheckoutAction();
   }
-  return createSubscriptionCheckout(plan);
+  return createSubscriptionCheckout(plan, options);
 }
 
 export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionResult> {

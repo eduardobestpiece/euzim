@@ -54,6 +54,12 @@ import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { MagicalLoading } from "@/components/ui/magical-loading";
 import type { OnboardingState } from "@/lib/auth/types";
+import {
+  FAMILY_SUBSCRIPTION,
+  STARTER_SUBSCRIPTION,
+} from "@/lib/billing/plans";
+import { formatBrl } from "@/lib/billing/character-packs";
+import { startPlanCheckoutAction } from "@/lib/stripe/checkout-actions";
 
 type Step =
   | "welcome"
@@ -61,6 +67,7 @@ type Step =
   | "child-photos"
   | "friend"
   | "friend-photos"
+  | "choose-plan"
   | "generating"
   | "preview"
   | "pin";
@@ -72,6 +79,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "child-photos", label: "Fotos" },
   { id: "friend", label: "Amigo" },
   { id: "friend-photos", label: "Fotos" },
+  { id: "choose-plan", label: "Plano" },
   { id: "generating", label: "Magia" },
   { id: "preview", label: "Pronto" },
   { id: "pin", label: "PIN★" },
@@ -92,7 +100,10 @@ function photosToMap(
 function resolveInitialStep(
   initialState: OnboardingState | null,
   isReuse: boolean,
+  resumeAfterPay = false,
 ): Step {
+  // Stripe success: fotos intactas → gera avatar
+  if (resumeAfterPay) return "generating";
   const saved = initialState?.wizardStep;
   if (saved && STEP_IDS.has(saved as Step) && saved !== "generating") {
     return saved as Step;
@@ -123,14 +134,17 @@ export function OnboardingWizard({
   initialState,
   mockMode,
   resetMode = null,
+  resumeAfterPay = false,
 }: {
   initialState: OnboardingState | null;
   mockMode: boolean;
   resetMode?: "full" | "reuse" | null;
+  /** Após Stripe: retoma em generating com fotos salvas. */
+  resumeAfterPay?: boolean;
 }) {
   const isReuse = resetMode === "reuse";
   const [step, setStep] = useState<Step>(() =>
-    resolveInitialStep(initialState, isReuse),
+    resolveInitialStep(initialState, isReuse, resumeAfterPay),
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -413,6 +427,46 @@ export function OnboardingWizard({
     });
   }
 
+  function beginPixarAfterPlan() {
+    setError(null);
+    startTransition(async () => {
+      go("generating");
+      try {
+        const ok = await runPixarGeneration();
+        if (!ok) {
+          setStep("choose-plan");
+          return;
+        }
+        go("preview");
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Falha de rede ao gerar avatares.",
+        );
+        setStep("choose-plan");
+      }
+    });
+  }
+
+  function choosePlan(planId: "starter" | "family") {
+    setError(null);
+    startTransition(async () => {
+      const result = await startPlanCheckoutAction(planId, {
+        resumeOnboarding: true,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      setError("Checkout sem URL.");
+    });
+  }
+
   function persistFriendPhotos() {
     setError(null);
     if (!isReuse && friendFilled < REQUIRED_FRIEND_PHOTO_COUNT) {
@@ -433,24 +487,27 @@ export function OnboardingWizard({
           return;
         }
       }
-      go("generating");
-      try {
-        const ok = await runPixarGeneration();
-        if (!ok) {
-          setStep("friend-photos");
-          return;
-        }
-        go("preview");
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Falha de rede ao gerar avatares.",
-        );
-        setStep("friend-photos");
-      }
+      // Paywall antes do avatar IA — fotos já persistidas
+      go("choose-plan");
     });
   }
+
+  // Resume Stripe: gera Pixar automaticamente no step generating
+  const resumeGenRef = useRef(false);
+  useEffect(() => {
+    if (!resumeAfterPay) return;
+    if (step !== "generating") return;
+    if (resumeGenRef.current) return;
+    resumeGenRef.current = true;
+    startTransition(async () => {
+      const ok = await runPixarGeneration();
+      if (!ok) {
+        setStep("choose-plan");
+        return;
+      }
+      go("preview");
+    });
+  }, [resumeAfterPay, step]);
 
   return (
     <div className="mx-auto w-full max-w-lg space-y-6 pb-10">
@@ -862,15 +919,77 @@ export function OnboardingWizard({
                 onClick={persistFriendPhotos}
               >
                 {pending
-                  ? "Gerando avatares…"
+                  ? "Salvando…"
                   : !isReuse && friendFilled < REQUIRED_FRIEND_PHOTO_COUNT
                     ? `Faltam ${REQUIRED_FRIEND_PHOTO_COUNT - friendFilled}`
-                    : isReuse &&
-                        isPixarGeneratedUrl(childAvatarUrl) &&
-                        isPixarGeneratedUrl(friendAvatarUrl)
-                      ? "Continuar com avatares Pixar"
-                      : "Gerar personagens Pixar"}
+                    : "Continuar"}
               </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {step === "choose-plan" ? (
+        <Card className="shadow-none">
+          <CardHeader>
+            <CardTitle>Escolha seu plano</CardTitle>
+            <CardDescription>
+              Suas fotos já estão salvas. Assine para liberar a geração dos
+              avatares Pixar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => choosePlan("starter")}
+                className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+              >
+                <p className="font-heading text-lg font-semibold">
+                  {STARTER_SUBSCRIPTION.name}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {formatBrl(STARTER_SUBSCRIPTION.priceBrl)}/mês ·{" "}
+                  {STARTER_SUBSCRIPTION.description}
+                </p>
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => choosePlan("family")}
+                className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+              >
+                <p className="font-heading text-lg font-semibold">
+                  {FAMILY_SUBSCRIPTION.name}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}/mês ·{" "}
+                  {FAMILY_SUBSCRIPTION.description}
+                </p>
+              </button>
+            </div>
+            {error ? (
+              <p className="text-sm text-destructive">{error}</p>
+            ) : null}
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => go("friend-photos")}
+              >
+                Voltar
+              </Button>
+              {mockMode ? (
+                <Button
+                  type="button"
+                  className="flex-1"
+                  disabled={pending}
+                  onClick={beginPixarAfterPlan}
+                >
+                  Continuar (demo)
+                </Button>
+              ) : null}
             </div>
           </CardContent>
         </Card>

@@ -4,6 +4,7 @@ import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { ParentDashboard } from "@/components/parent/parent-dashboard";
 import { AvatarRefreshBanner } from "@/components/parent/avatar-refresh-banner";
+import { PendingGiftsBanner } from "@/components/referral/pending-gifts-banner";
 import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 import type { CharacterManageRow, ChildFamilyMeta } from "@/lib/characters/types";
 import { getCurrentUser } from "@/lib/auth/get-user";
@@ -223,6 +224,7 @@ async function ParentPageInner() {
     <AppShell user={user} title="Área dos pais">
       <div className="space-y-4">
         <AvatarRefreshBanner status={refreshStatus} />
+        <PendingGiftsBanner compact />
         <ParentDashboard
           usage={usage}
           characters={characters}

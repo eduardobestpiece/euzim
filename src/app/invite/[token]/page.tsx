@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
 import { AppPageFallback } from "@/components/app/app-page-fallback";
+import { HasAccountGate } from "@/components/referral/has-account-gate";
 import { InviteAcceptClient } from "@/components/social/invite-accept-client";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { loadFriendInvite } from "@/lib/social/friend-actions";
@@ -10,6 +11,7 @@ async function InviteInner({ token }: { token: string }) {
   await connection();
   const user = await getCurrentUser();
   const loaded = await loadFriendInvite(token);
+  const resumePath = `/invite/${token}`;
 
   if (loaded.error || !loaded.invite) {
     return (
@@ -49,20 +51,11 @@ async function InviteInner({ token }: { token: string }) {
       </div>
 
       {!user ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Entre na sua conta Euzim para aceitar o convite.
-          </p>
-          <Link
-            href="/login"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
-          >
-            Entrar para continuar
-          </Link>
-          <p className="text-xs text-muted-foreground">
-            Depois de entrar, abra novamente o link do convite.
-          </p>
-        </div>
+        <HasAccountGate
+          nextPath={resumePath}
+          title="Já possui cadastro?"
+          subtitle="Para aceitar o convite de amizade, entre ou crie sua conta."
+        />
       ) : invite.expired ? (
         <p className="text-sm text-muted-foreground">
           Este convite expirou ou já foi respondido.

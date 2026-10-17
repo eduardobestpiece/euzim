@@ -20,6 +20,7 @@ import {
 } from "@/lib/stories/palette";
 import type { QuizQuestion } from "@/lib/stories/quiz";
 import { shareStoryLink } from "@/lib/stories/share";
+import { getMyReferralShareUrlAction } from "@/lib/referral/actions";
 
 type Page = {
   pageIndex: number;
@@ -113,7 +114,14 @@ export function StoryFlipbook({
 
   async function onShare() {
     if (!shareToken) return;
-    const result = await shareStoryLink({ title, shareToken });
+    let referralCode: string | null = null;
+    try {
+      const ref = await getMyReferralShareUrlAction();
+      referralCode = ref.code ?? null;
+    } catch {
+      // share sem ref se falhar
+    }
+    const result = await shareStoryLink({ title, shareToken, referralCode });
     if (result === "copied" || result === "shared") {
       setShareState(result === "copied" ? "copied" : "shared");
       window.setTimeout(() => setShareState("idle"), 2200);

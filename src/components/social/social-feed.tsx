@@ -1,6 +1,7 @@
 import { FeedCard } from "@/components/social/feed-card";
 import { EmailFriendSearch } from "@/components/social/email-friend-search";
 import { PendingRequestsBanner } from "@/components/social/pending-requests-banner";
+import { ShareAppButton } from "@/components/referral/share-app-button";
 import { ShareProfileButton } from "@/components/social/share-profile-button";
 import type { FeedPost, PendingFriendship } from "@/lib/social/types";
 
@@ -27,7 +28,12 @@ export function SocialFeed({
           Histórias dos amigos e descobertas públicas. Sem comentários — só
           curtidas e amizades.
         </p>
-        {!kidsMode ? <ShareProfileButton /> : null}
+        {!kidsMode ? (
+          <div className="flex flex-wrap gap-2">
+            <ShareProfileButton />
+            <ShareAppButton />
+          </div>
+        ) : null}
       </div>
 
       <PendingRequestsBanner requests={pendingRequests} kidsMode={kidsMode} />

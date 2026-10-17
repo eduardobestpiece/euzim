@@ -282,12 +282,14 @@ export function NewStoryForm({
           setStatus(null);
           return;
         }
-        const list = body.friends ?? [];
+        const list = (body.friends ?? []).filter(
+          (f) => (f.characters?.length ?? 0) > 0,
+        );
         setFriends(list);
         setStatus(null);
         if (list.length === 0) {
           setError(
-            "Você ainda não tem amigos aceitos. Peça amizade no Social.",
+            "Nenhum amigo com personagens disponíveis. Peça amizade no Social ou peça ao amigo para criar avatares.",
           );
           return;
         }

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,9 @@ import {
   fulfillExtraStory,
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
+import { grantReferralRewardOnFirstSubscription } from "@/lib/referral/rewards";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 type SuccessParams = {
   session_id?: string;
@@ -18,6 +22,8 @@ type SuccessParams = {
   pack_id?: string;
   plan_id?: string;
   count?: string;
+  resume_onboarding?: string;
+  wizard_step?: string;
 };
 
 async function BillingSuccessPageInner({
@@ -32,6 +38,7 @@ async function BillingSuccessPageInner({
   const params = await searchParams;
   let note =
     "Pagamento recebido. Se o webhook estiver configurado, o plano já foi atualizado.";
+  let activatedPlanId: string | null = null;
 
   const stripe = getStripe();
   if (stripe && params.session_id) {
@@ -72,6 +79,13 @@ async function BillingSuccessPageInner({
           const planId =
             params.plan_id || session.metadata?.plan_id || "family";
           const result = await fulfillSubscription(userId, planId);
+          activatedPlanId = planId;
+          if (result.ok) {
+            await grantReferralRewardOnFirstSubscription({
+              refereeId: userId,
+              planId,
+            });
+          }
           note = result.ok
             ? `Assinatura (${planId}) ativada.`
             : `Pagamento ok, mas ativação falhou: ${result.error}`;
@@ -83,6 +97,36 @@ async function BillingSuccessPageInner({
     }
   }
 
+  const resume =
+    params.resume_onboarding === "1" ||
+    params.wizard_step === "generating";
+
+  if (resume && !user.onboardingCompleted) {
+    // Persiste passo generating para o wizard retomar com fotos
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const { data: children } = await db
+        .from("children")
+        .select("id, preferences")
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const child = children?.[0];
+      if (child?.id) {
+        const prefs =
+          child.preferences && typeof child.preferences === "object"
+            ? { ...(child.preferences as Record<string, unknown>) }
+            : {};
+        prefs.onboarding_wizard_step = "generating";
+        await db
+          .from("children")
+          .update({ preferences: prefs })
+          .eq("id", child.id);
+      }
+    }
+    redirect("/onboarding?resume=1&paid=1");
+  }
+
   return (
     <AppShell user={user} title="Pagamento">
       <div className="space-y-4">
@@ -90,6 +134,11 @@ async function BillingSuccessPageInner({
           Obrigado!
         </h1>
         <p className="max-w-xl text-muted-foreground">{note}</p>
+        {activatedPlanId ? (
+          <p className="text-sm text-muted-foreground">
+            Plano ativo: {activatedPlanId}.
+          </p>
+        ) : null}
         <Button asChild>
           <Link href="/app/parent/settings">Ir ao perfil / assinatura</Link>
         </Button>

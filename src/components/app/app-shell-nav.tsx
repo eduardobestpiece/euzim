@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   Baby,
+  Gift,
   Heart,
   Menu,
   Shield,
@@ -39,6 +40,7 @@ export function AppShellNav({
     { href: "/app/social", label: "Social", icon: Heart },
     { href: "/app/parent", label: "Pais", icon: Users },
     { href: "/app/kids", label: "Kids", icon: Baby },
+    { href: "/app/parent/gifts", label: "Presentes", icon: Gift },
     ...(user.role === "admin"
       ? [{ href: "/app/admin", label: "Administrador", icon: Shield }]
       : []),

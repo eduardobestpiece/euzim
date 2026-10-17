@@ -25,11 +25,20 @@ function OnboardingFallback() {
   );
 }
 
-async function OnboardingPageInner() {
+async function OnboardingPageInner({
+  searchParams,
+}: {
+  searchParams: Promise<{ resume?: string; paid?: string }>;
+}) {
   // cacheComponents: connection() opts into request time — dentro de Suspense
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  const params = await searchParams;
+  const resumeAfterPay =
+    params.resume === "1" ||
+    params.resume === "generating" ||
+    params.paid === "1";
 
   const cookieState = await readMockOnboarding();
   let initialState: OnboardingState | null = cookieState;
@@ -103,16 +112,21 @@ async function OnboardingPageInner() {
           initialState={initialState}
           mockMode={!isSupabaseConfigured() || user.isMock}
           resetMode={resetMode}
+          resumeAfterPay={resumeAfterPay}
         />
       </div>
     </main>
   );
 }
 
-export default function OnboardingPage() {
+export default function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ resume?: string; paid?: string }>;
+}) {
   return (
     <Suspense fallback={<OnboardingFallback />}>
-      <OnboardingPageInner />
+      <OnboardingPageInner searchParams={searchParams} />
     </Suspense>
   );
 }

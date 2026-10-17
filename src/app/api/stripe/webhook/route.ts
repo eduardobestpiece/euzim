@@ -12,6 +12,7 @@ import {
   fulfillExtraStory,
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
+import { grantReferralRewardOnFirstSubscription } from "@/lib/referral/rewards";
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId =
@@ -21,7 +22,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const kind = session.metadata?.kind;
   if (kind === "subscription" || session.mode === "subscription") {
     const planId = session.metadata?.plan_id || "family";
-    return fulfillSubscription(userId, planId);
+    const result = await fulfillSubscription(userId, planId);
+    // Só 1ª assinatura (idempotente via referral_rewarded_at / unique referee)
+    const referral = result.ok
+      ? await grantReferralRewardOnFirstSubscription({
+          refereeId: userId,
+          planId,
+        })
+      : { ok: false, skipped: true };
+    return { ...result, referral };
   }
   if (kind === "extra_story") {
     return fulfillExtraStory(userId);

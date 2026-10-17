@@ -27,12 +27,21 @@ const initial: AuthActionResult = {};
 export function AuthForm({
   mode,
   mockMode,
+  nextPath,
 }: {
   mode: Mode;
   mockMode: boolean;
+  /** Após auth, redireciona para este path (ex. convite / onboarding). */
+  nextPath?: string | null;
 }) {
   const action = mode === "login" ? signInAction : signUpAction;
   const [state, formAction, pending] = useActionState(action, initial);
+  const safeNext =
+    nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")
+      ? nextPath
+      : null;
+  const altHref = (base: string) =>
+    safeNext ? `${base}?next=${encodeURIComponent(safeNext)}` : base;
 
   return (
     <Card className="w-full max-w-md border-border/60 shadow-none">
@@ -50,6 +59,7 @@ export function AuthForm({
         </div>
       </CardHeader>
       <form action={formAction}>
+        {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
         <CardContent className="space-y-4">
           {mockMode ? (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -110,14 +120,20 @@ export function AuthForm({
             {mode === "login" ? (
               <>
                 Não tem conta?{" "}
-                <Link href="/signup" className="text-foreground underline">
+                <Link
+                  href={altHref("/signup")}
+                  className="text-foreground underline"
+                >
                   Cadastre-se
                 </Link>
               </>
             ) : (
               <>
                 Já tem conta?{" "}
-                <Link href="/login" className="text-foreground underline">
+                <Link
+                  href={altHref("/login")}
+                  className="text-foreground underline"
+                >
                   Entrar
                 </Link>
               </>

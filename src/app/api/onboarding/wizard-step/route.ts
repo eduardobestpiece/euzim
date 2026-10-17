@@ -14,6 +14,7 @@ const STEPS = new Set([
   "child-photos",
   "friend",
   "friend-photos",
+  "choose-plan",
   "generating",
   "preview",
   "pin",
