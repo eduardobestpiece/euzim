@@ -6,7 +6,7 @@ Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supaba
 
 **Porta do app: `5050`.** A porta `8080` é reservada para BP Sales — não use neste Project.
 
-Stamp da plataforma: `v21` (`src/lib/platform-build.ts`).
+Stamp da plataforma: `v22` (`src/lib/platform-build.ts`).
 
 ## Pré-requisitos
 
@@ -19,9 +19,12 @@ Stamp da plataforma: `v21` (`src/lib/platform-build.ts`).
 npm install
 cp .env.local.example .env.local
 # Preencha Supabase + OPENAI_API_KEY
-# Stripe: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY (pk_live_) já basta para UI;
-# Checkout real exige STRIPE_SECRET_KEY (sk_/rk_) + STRIPE_WEBHOOK_SECRET (whsec_).
+# Stripe LIVE: STRIPE_SECRET_KEY + NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY em .env.local
+# Price IDs: src/lib/billing/stripe-price-ids.ts
+# Webhook (opcional p/ sync assíncrono): STRIPE_WEBHOOK_SECRET (whsec_) no Dashboard
+#   endpoint → {APP_URL}/api/stripe/webhook (eventos checkout.session.completed)
 ```
+
 
 ## Desenvolvimento (porta 5050)
 

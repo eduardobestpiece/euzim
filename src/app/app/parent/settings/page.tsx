@@ -12,7 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   describeStripeKeyIssue,
-  isStripeSecretValid,
+  isStripeCheckoutReady,
   stripeMissingKeys,
 } from "@/lib/stripe/config";
 
@@ -34,7 +34,7 @@ export default async function ParentSettingsPage() {
     planId: null,
     stripeCustomerId: null,
     extraCharacters: 0,
-    stripeReady: isStripeSecretValid(),
+    stripeReady: isStripeCheckoutReady(),
     missingKeys: stripeMissingKeys(),
     keyIssue: describeStripeKeyIssue(),
   };

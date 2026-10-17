@@ -16,7 +16,7 @@ export function getStripeWebhookSecret(): string {
 export function isStripeSecretValid(): boolean {
   const key = getStripeSecretKey();
   if (!key) return false;
-  if (key.startsWith("mk_")) return false; // ID de chave, não o secret
+  if (key.startsWith("mk_")) return false;
   return (
     key.startsWith("sk_test_") ||
     key.startsWith("sk_live_") ||
@@ -35,6 +35,12 @@ export function isStripeWebhookConfigured(): boolean {
   return Boolean(secret && secret.startsWith("whsec_"));
 }
 
+/** Checkout real: basta sk_ + pk_. Webhook é opcional (success page também fulfills). */
+export function isStripeCheckoutReady(): boolean {
+  return isStripeSecretValid() && isStripePublishableConfigured();
+}
+
+/** Keys faltando para abrir Checkout (não inclui whsec_). */
 export function stripeMissingKeys(): string[] {
   const missing: string[] = [];
   if (!isStripeSecretValid()) {
@@ -42,9 +48,6 @@ export function stripeMissingKeys(): string[] {
   }
   if (!isStripePublishableConfigured()) {
     missing.push("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY (pk_test_… ou pk_live_…)");
-  }
-  if (!isStripeWebhookConfigured()) {
-    missing.push("STRIPE_WEBHOOK_SECRET (whsec_…)");
   }
   return missing;
 }
@@ -57,6 +60,12 @@ export function describeStripeKeyIssue(): string | null {
   }
   if (!isStripeSecretValid()) {
     return "STRIPE_SECRET_KEY em formato não reconhecido pela API Stripe.";
+  }
+  if (!isStripePublishableConfigured()) {
+    return "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ausente.";
+  }
+  if (!isStripeWebhookConfigured()) {
+    return "Checkout liberado. Webhook ainda sem STRIPE_WEBHOOK_SECRET (whsec_) — fulfillment também roda na página de sucesso.";
   }
   return null;
 }

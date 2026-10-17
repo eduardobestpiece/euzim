@@ -12,9 +12,11 @@ import {
   resolveStoryPlan,
   type StoryPlan,
 } from "@/lib/billing/plans";
+import { STRIPE_PRICE_IDS } from "@/lib/billing/stripe-price-ids";
 import { formatBrl, priceForAvatarCount } from "@/lib/billing/character-packs";
 import {
   describeStripeKeyIssue,
+  isStripeCheckoutReady,
   isStripeSecretValid,
   stripeMissingKeys,
 } from "@/lib/stripe/config";
@@ -40,17 +42,24 @@ async function appOrigin(): Promise<string> {
 }
 
 function gateSecret(): CheckoutActionResult | null {
-  if (isStripeSecretValid()) return null;
+  if (isStripeCheckoutReady()) return null;
   const missing = stripeMissingKeys();
   const keyIssue = describeStripeKeyIssue();
   return {
     error:
       keyIssue ||
-      "Checkout bloqueado: configure STRIPE_SECRET_KEY (sk_live_/rk_live_) para criar sessão. A publishable key já está no app.",
+      "Checkout bloqueado: configure STRIPE_SECRET_KEY e NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.",
     missingKeys: missing,
     keyIssue,
     gated: true,
   };
+}
+
+function planPriceId(plan: StoryPlan): string | null {
+  if (plan.planId === "starter") return STRIPE_PRICE_IDS.starter;
+  if (plan.planId === "family") return STRIPE_PRICE_IDS.family;
+  if (plan.planId === "extra_story") return STRIPE_PRICE_IDS.extra_story;
+  return null;
 }
 
 async function createSubscriptionCheckout(
@@ -75,6 +84,7 @@ async function createSubscriptionCheckout(
   }
 
   const origin = await appOrigin();
+  const priceId = planPriceId(plan);
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -93,18 +103,20 @@ async function createSubscriptionCheckout(
         },
       },
       line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "brl",
-            unit_amount: plan.priceCents,
-            recurring: { interval: "month" },
-            product_data: {
-              name: plan.name,
-              description: plan.description,
+        priceId
+          ? { quantity: 1, price: priceId }
+          : {
+              quantity: 1,
+              price_data: {
+                currency: "brl",
+                unit_amount: plan.priceCents,
+                recurring: { interval: "month" },
+                product_data: {
+                  name: plan.name,
+                  description: plan.description,
+                },
+              },
             },
-          },
-        },
       ],
       success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=subscription&plan_id=${plan.planId}`,
       cancel_url: `${origin}/app/parent/billing/cancel`,
@@ -161,6 +173,7 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
 
   const origin = await appOrigin();
   const plan = EXTRA_STORY_PRODUCT;
+  const priceId = STRIPE_PRICE_IDS.extra_story;
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -173,19 +186,7 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
         plan_id: plan.planId,
         stories: "1",
       },
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "brl",
-            unit_amount: plan.priceCents,
-            product_data: {
-              name: `Estúdio Mágico — ${plan.name}`,
-              description: plan.description,
-            },
-          },
-        },
-      ],
+      line_items: [{ quantity: 1, price: priceId }],
       success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=extra_story`,
       cancel_url: `${origin}/app/parent/billing/cancel`,
       locale: "pt-BR",
@@ -230,6 +231,8 @@ export async function startCharacterPackCheckoutAction(
   }
 
   const origin = await appOrigin();
+  const priceKey = pack.id as keyof typeof STRIPE_PRICE_IDS;
+  const priceId = STRIPE_PRICE_IDS[priceKey];
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -242,19 +245,21 @@ export async function startCharacterPackCheckoutAction(
         pack_id: pack.id,
         characters: String(pack.characters),
       },
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: "brl",
-            unit_amount: cents,
-            product_data: {
-              name: `Estúdio Mágico — ${pack.name}`,
-              description: pack.description,
+      line_items: priceId
+        ? [{ quantity: 1, price: priceId }]
+        : [
+            {
+              quantity: 1,
+              price_data: {
+                currency: "brl",
+                unit_amount: cents,
+                product_data: {
+                  name: `Estúdio Mágico — ${pack.name}`,
+                  description: pack.description,
+                },
+              },
             },
-          },
-        },
-      ],
+          ],
       success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=character_pack&pack_id=${pack.id}`,
       cancel_url: `${origin}/app/parent/billing/cancel`,
       locale: "pt-BR",
@@ -268,7 +273,7 @@ export async function startCharacterPackCheckoutAction(
   }
 }
 
-/** Compra custom 6–15 avatares a R$ 9,90 cada. */
+/** Compra custom 6–15 avatares a R$ 9,90 cada (price unitário × quantity). */
 export async function startCustomAvatarsCheckoutAction(
   count: number,
 ): Promise<CheckoutActionResult> {
@@ -314,15 +319,8 @@ export async function startCustomAvatarsCheckoutAction(
       },
       line_items: [
         {
-          quantity: 1,
-          price_data: {
-            currency: "brl",
-            unit_amount: cents,
-            product_data: {
-              name: `Estúdio Mágico — ${count} avatares`,
-              description: `${count} × R$ 9,90`,
-            },
-          },
+          quantity: count,
+          price: STRIPE_PRICE_IDS.avatar_unit,
         },
       ],
       success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=custom_avatars&count=${count}`,
@@ -343,6 +341,12 @@ export async function mockActivateSubscriptionAction(
 ): Promise<CheckoutActionResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
+  if (isStripeSecretValid()) {
+    return {
+      error:
+        "Checkout real está ativo — use Assinar (Stripe). Simulação desligada.",
+    };
+  }
   const result = await mockFulfillCheckout({
     userId: user.id,
     kind: "subscription",
@@ -357,6 +361,11 @@ export async function mockActivatePackAction(
 ): Promise<CheckoutActionResult> {
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
+  if (isStripeSecretValid()) {
+    return {
+      error: "Checkout real está ativo — use Comprar com Stripe.",
+    };
+  }
   const result = await mockFulfillCheckout({
     userId: user.id,
     kind: "character_pack",

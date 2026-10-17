@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth/get-user";
 import { getStripe } from "@/lib/stripe/client";
 import {
   fulfillCharacterPack,
+  fulfillExtraStory,
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
 
@@ -15,13 +16,16 @@ export default async function BillingSuccessPage({
     session_id?: string;
     kind?: string;
     pack_id?: string;
+    plan_id?: string;
+    count?: string;
   }>;
 }) {
   const user = await getCurrentUser();
   if (!user) return null;
 
   const params = await searchParams;
-  let note = "Pagamento recebido. Se o webhook estiver configurado, o plano já foi atualizado.";
+  let note =
+    "Pagamento recebido. Se o webhook estiver configurado, o plano já foi atualizado.";
 
   const stripe = getStripe();
   if (stripe && params.session_id) {
@@ -31,8 +35,12 @@ export default async function BillingSuccessPage({
         session.metadata?.supabase_user_id ||
         session.client_reference_id ||
         user.id;
-      if (session.payment_status === "paid" || session.status === "complete") {
-        if (params.kind === "character_pack" || session.metadata?.kind === "character_pack") {
+      const kind = params.kind || session.metadata?.kind || "";
+      const paid =
+        session.payment_status === "paid" || session.status === "complete";
+
+      if (paid && userId) {
+        if (kind === "character_pack") {
           const packId = params.pack_id || session.metadata?.pack_id;
           if (packId) {
             const result = await fulfillCharacterPack(userId, packId);
@@ -40,10 +48,26 @@ export default async function BillingSuccessPage({
               ? "Pacote de personagens creditado."
               : `Pagamento ok, mas crédito falhou: ${result.error}`;
           }
-        } else {
-          const result = await fulfillSubscription(userId);
+        } else if (kind === "custom_avatars") {
+          const count = Number.parseInt(
+            params.count || session.metadata?.characters || "0",
+            10,
+          );
+          const result = await fulfillCharacterPack(userId, "custom", count);
           note = result.ok
-            ? "Assinatura Família ativada."
+            ? `${count} avatares creditados.`
+            : `Pagamento ok, mas crédito falhou: ${result.error}`;
+        } else if (kind === "extra_story") {
+          const result = await fulfillExtraStory(userId);
+          note = result.ok
+            ? "História adicional creditada."
+            : `Pagamento ok, mas crédito falhou: ${result.error}`;
+        } else {
+          const planId =
+            params.plan_id || session.metadata?.plan_id || "family";
+          const result = await fulfillSubscription(userId, planId);
+          note = result.ok
+            ? `Assinatura (${planId}) ativada.`
             : `Pagamento ok, mas ativação falhou: ${result.error}`;
         }
       }
@@ -61,7 +85,7 @@ export default async function BillingSuccessPage({
         </h1>
         <p className="max-w-xl text-muted-foreground">{note}</p>
         <Button asChild>
-          <Link href="/app/parent">Voltar ao painel</Link>
+          <Link href="/app/parent/settings">Ir ao perfil / assinatura</Link>
         </Button>
       </div>
     </AppShell>

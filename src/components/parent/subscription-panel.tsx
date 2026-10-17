@@ -96,14 +96,13 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
           Assinatura
         </h2>
         <p className="text-sm text-muted-foreground">
-          Planos do Estúdio Mágico — Checkout Stripe (requer secret key no servidor).
+          Planos do Estúdio Mágico — pagamento via Stripe Checkout.
         </p>
       </div>
 
-      {!billing.stripeReady ? (
+      {billing.keyIssue ? (
         <p className="rounded-md border border-amber-600/30 bg-amber-500/5 px-3 py-2 text-sm text-amber-900">
-          {billing.keyIssue ||
-            "Checkout real aguarda STRIPE_SECRET_KEY (sk_/rk_) e preferencialmente STRIPE_WEBHOOK_SECRET. A publishable key já está configurada."}
+          {billing.keyIssue}
         </p>
       ) : null}
 
