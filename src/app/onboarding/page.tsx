@@ -65,7 +65,11 @@ async function OnboardingPageInner() {
           fromDb.childAvatarUrl ?? fromCookie?.childAvatarUrl ?? null,
         friendAvatarUrl:
           fromDb.friendAvatarUrl ?? fromCookie?.friendAvatarUrl ?? null,
-        wizardStep: fromCookie?.wizardStep || fromDb.wizardStep || null,
+        childFaceSheetUrl: fromDb.childFaceSheetUrl ?? null,
+        childBodySheetUrl: fromDb.childBodySheetUrl ?? null,
+        friendSheetUrl: fromDb.friendSheetUrl ?? null,
+        // DB manda no passo — cookie stale ("preview") fazia voltar ao Pronto após o PIN
+        wizardStep: fromDb.wizardStep || fromCookie?.wizardStep || null,
         completed: false,
       };
     } else if (user.onboardingCompleted) {

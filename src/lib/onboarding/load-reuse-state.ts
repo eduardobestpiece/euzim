@@ -60,6 +60,18 @@ export async function loadOnboardingBootstrap(
     : isPixarGeneratedUrl(child?.avatar_url)
       ? child!.avatar_url!
       : null;
+  const childFaceSheetUrl = isPixarGeneratedUrl(prefs.pixar?.child_face_sheet)
+    ? prefs.pixar!.child_face_sheet!
+    : null;
+  const childBodySheetUrl = isPixarGeneratedUrl(prefs.pixar?.child_body_sheet)
+    ? prefs.pixar!.child_body_sheet!
+    : null;
+  const friendSheetUrl = isPixarGeneratedUrl(prefs.pixar?.friend_sheet)
+    ? prefs.pixar!.friend_sheet!
+    : null;
+  const friendAvatarUrl = isPixarGeneratedUrl(prefs.pixar?.friend_hero)
+    ? prefs.pixar!.friend_hero!
+    : null;
   const savedStep =
     typeof prefs.onboarding_wizard_step === "string"
       ? prefs.onboarding_wizard_step
@@ -107,9 +119,10 @@ export async function loadOnboardingBootstrap(
         friend: friendFromPrefs,
         friendPhotos,
         childAvatarUrl,
-        friendAvatarUrl: isPixarGeneratedUrl(prefs.pixar?.friend_hero)
-          ? prefs.pixar!.friend_hero!
-          : null,
+        friendAvatarUrl,
+        childFaceSheetUrl,
+        childBodySheetUrl,
+        friendSheetUrl,
         wizardStep: savedStep,
         completed: false,
       },
@@ -147,11 +160,12 @@ export async function loadOnboardingBootstrap(
     childAvatarUrl:
       childAvatarUrl ||
       (isPixarGeneratedUrl(primary?.avatar_url) ? primary!.avatar_url! : null),
-    friendAvatarUrl: isPixarGeneratedUrl(prefs.pixar?.friend_hero)
-      ? prefs.pixar!.friend_hero!
-      : isPixarGeneratedUrl(friend?.avatar_url)
-        ? friend!.avatar_url!
-        : null,
+    friendAvatarUrl:
+      friendAvatarUrl ||
+      (isPixarGeneratedUrl(friend?.avatar_url) ? friend!.avatar_url! : null),
+    childFaceSheetUrl,
+    childBodySheetUrl,
+    friendSheetUrl,
     wizardStep: savedStep,
     completed: false,
   };

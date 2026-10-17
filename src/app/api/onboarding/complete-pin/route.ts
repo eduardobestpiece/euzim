@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import {
-  readMockOnboarding,
   writeMockOnboarding,
   writeMockSession,
   readMockSession,
@@ -53,32 +52,23 @@ export async function POST(request: Request) {
     );
   }
 
-  // Cookie mínimo — só PIN + passo (fotos ficam no DB)
-  try {
-    const prev = (await readMockOnboarding()) ?? {
-      securityPin: "",
-      child: null,
-      childPhotos: [],
-      friend: null,
-      friendPhotos: [],
-      completed: false,
-    };
-    await writeMockOnboarding({
-      ...prev,
-      securityPin: pin,
-      childPhotos: [],
-      friendPhotos: [],
-      wizardStep: "pin",
-      completed: true,
-    });
-  } catch {
-    /* cookie opcional */
-  }
-
   if (!isSupabaseConfigured() || user.isMock) {
-    const session = await readMockSession();
-    if (session) {
-      await writeMockSession({ ...session, onboardingCompleted: true });
+    try {
+      await writeMockOnboarding({
+        securityPin: pin,
+        child: null,
+        childPhotos: [],
+        friend: null,
+        friendPhotos: [],
+        wizardStep: "pin",
+        completed: true,
+      });
+      const session = await readMockSession();
+      if (session) {
+        await writeMockSession({ ...session, onboardingCompleted: true });
+      }
+    } catch {
+      /* cookie opcional */
     }
     return NextResponse.json({ success: true, redirectTo: "/app/parent" });
   }
@@ -127,7 +117,7 @@ export async function POST(request: Request) {
     );
   }
 
-  prefs.onboarding_wizard_step = "pin";
+  prefs.onboarding_wizard_step = "done";
   await db
     .from("children")
     .update({ preferences: prefs })
@@ -157,7 +147,7 @@ export async function POST(request: Request) {
   // Confirma que gravou
   const { data: saved } = await db
     .from("users")
-    .select("security_pin, onboarding_completed")
+    .select("security_pin, onboarding_completed, onboarding_reset_mode")
     .eq("id", user.id)
     .maybeSingle();
   if (
@@ -168,6 +158,21 @@ export async function POST(request: Request) {
       { error: "Não foi possível confirmar o PIN. Tente de novo." },
       { status: 500 },
     );
+  }
+
+  // Cookie mínimo pós-sucesso (não pode sobrescrever com wizard "preview")
+  try {
+    await writeMockOnboarding({
+      securityPin: pin,
+      child: null,
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
+      wizardStep: "done",
+      completed: true,
+    });
+  } catch {
+    /* cookie opcional */
   }
 
   return NextResponse.json({ success: true, redirectTo: "/app/parent" });

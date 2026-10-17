@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import {
   Camera,
   Check,
@@ -26,11 +33,14 @@ import {
   type SlotPhotos,
 } from "@/components/onboarding/photo-slot-grid";
 import {
+  AvatarStudyDialog,
+  type AvatarStudySubject,
+} from "@/components/onboarding/avatar-study-dialog";
+import {
   saveChildAvatarProfileAction,
   saveFriendProfileAction,
   saveSubjectPhotosAction,
 } from "@/lib/onboarding/actions";
-import { useRouter } from "next/navigation";
 import {
   REQUIRED_CHILD_PHOTO_COUNT,
   REQUIRED_FRIEND_PHOTO_COUNT,
@@ -118,7 +128,6 @@ export function OnboardingWizard({
   resetMode?: "full" | "reuse" | null;
 }) {
   const isReuse = resetMode === "reuse";
-  const router = useRouter();
   const [step, setStep] = useState<Step>(() =>
     resolveInitialStep(initialState, isReuse),
   );
@@ -153,13 +162,18 @@ export function OnboardingWizard({
     initialState?.friendAvatarUrl ?? null,
   );
   const [childFaceSheetUrl, setChildFaceSheetUrl] = useState<string | null>(
-    null,
+    initialState?.childFaceSheetUrl ?? null,
   );
   const [childBodySheetUrl, setChildBodySheetUrl] = useState<string | null>(
+    initialState?.childBodySheetUrl ?? null,
+  );
+  const [friendSheetUrl, setFriendSheetUrl] = useState<string | null>(
+    initialState?.friendSheetUrl ?? null,
+  );
+  const [engine, setEngine] = useState<string | null>(null);
+  const [studySubject, setStudySubject] = useState<AvatarStudySubject | null>(
     null,
   );
-  const [friendSheetUrl, setFriendSheetUrl] = useState<string | null>(null);
-  const [engine, setEngine] = useState<string | null>(null);
 
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
@@ -250,13 +264,14 @@ export function OnboardingWizard({
     });
   }, [step, childAvatarUrl, friendAvatarUrl]);
 
-  function submitPin(formData: FormData) {
+  function submitPin(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setError(null);
-    const pin = String(formData.get("pin") ?? "").trim();
-    const confirmPin = String(formData.get("confirmPin") ?? "").trim();
+    const form = e.currentTarget;
+    const pin = String(new FormData(form).get("pin") ?? "").trim();
+    const confirmPin = String(new FormData(form).get("confirmPin") ?? "").trim();
     startTransition(async () => {
       try {
-        // API leve — evita Server Action / Set-Cookie que falhava no console
         const res = await fetch("/api/onboarding/complete-pin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -270,13 +285,46 @@ export function OnboardingWizard({
           setError(body.error || `Falha ao salvar PIN (${res.status}).`);
           return;
         }
-        router.push(body.redirectTo || "/app/parent");
-        router.refresh();
+        // Navegação dura — evita soft nav voltar ao Pronto com cookie stale
+        window.location.assign(body.redirectTo || "/app/parent");
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Falha de rede ao salvar PIN.",
         );
       }
+    });
+  }
+
+  function openChildStudy() {
+    const sheets: AvatarStudySubject["sheets"] = [];
+    if (childFaceSheetUrl) {
+      sheets.push({ label: "Rosto — turnaround", url: childFaceSheetUrl });
+    }
+    if (childBodySheetUrl) {
+      sheets.push({ label: "Corpo — turnaround", url: childBodySheetUrl });
+    }
+    setStudySubject({
+      name: childName || "Criança",
+      kindLabel: "Avatar da criança",
+      heroUrl: childAvatarUrl,
+      sheets,
+    });
+  }
+
+  function openFriendStudy() {
+    const sheets: AvatarStudySubject["sheets"] = [];
+    if (friendSheetUrl) {
+      sheets.push({
+        label: "Personagem — turnaround",
+        url: friendSheetUrl,
+      });
+    }
+    setStudySubject({
+      name: friendName || "Amigo",
+      kindLabel:
+        friendKind === "pet" ? "Pet da criança" : "Brinquedo da criança",
+      heroUrl: friendAvatarUrl,
+      sheets,
     });
   }
 
@@ -748,14 +796,18 @@ export function OnboardingWizard({
               Seus avatares Pixar
             </CardTitle>
             <CardDescription>
-              Gerados a partir das suas fotos
+              Toque no avatar para ver o estudo em várias poses
               {engine ? ` · ${engine}` : ""}. Falta só o PIN dos pais.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <figure className="space-y-2">
-                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-amber-50 to-sky-50 shadow-sm">
+              <button
+                type="button"
+                onClick={openChildStudy}
+                className="group space-y-2 text-left transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-amber-50 to-sky-50 shadow-sm ring-offset-2 group-hover:ring-2 group-hover:ring-amber-400/50">
                   {childAvatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -765,12 +817,19 @@ export function OnboardingWizard({
                     />
                   ) : null}
                 </div>
-                <figcaption className="text-center text-sm font-medium">
+                <span className="block text-center text-sm font-medium">
                   {childName}
-                </figcaption>
-              </figure>
-              <figure className="space-y-2">
-                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-rose-50 to-violet-50 shadow-sm">
+                </span>
+                <span className="block text-center text-xs text-muted-foreground">
+                  Ver poses / estudo
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={openFriendStudy}
+                className="group space-y-2 text-left transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-rose-50 to-violet-50 shadow-sm ring-offset-2 group-hover:ring-2 group-hover:ring-rose-400/50">
                   {friendAvatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -780,56 +839,17 @@ export function OnboardingWizard({
                     />
                   ) : null}
                 </div>
-                <figcaption className="text-center text-sm font-medium">
+                <span className="block text-center text-sm font-medium">
                   {friendName}{" "}
                   <span className="text-muted-foreground">
                     ({friendKind === "pet" ? "pet" : "brinquedo"})
                   </span>
-                </figcaption>
-              </figure>
+                </span>
+                <span className="block text-center text-xs text-muted-foreground">
+                  Ver poses / estudo
+                </span>
+              </button>
             </div>
-
-            {childFaceSheetUrl ? (
-              <figure className="space-y-2">
-                <p className="text-sm font-semibold">
-                  Estudo de personagem — rosto
-                </p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={childFaceSheetUrl}
-                  alt={`Folha de rosto de ${childName}`}
-                  className="w-full rounded-xl border border-border/60 object-contain"
-                />
-              </figure>
-            ) : null}
-
-            {childBodySheetUrl ? (
-              <figure className="space-y-2">
-                <p className="text-sm font-semibold">
-                  Estudo de personagem — corpo
-                </p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={childBodySheetUrl}
-                  alt={`Folha de corpo de ${childName}`}
-                  className="w-full rounded-xl border border-border/60 object-contain"
-                />
-              </figure>
-            ) : null}
-
-            {friendSheetUrl ? (
-              <figure className="space-y-2">
-                <p className="text-sm font-semibold">
-                  Estudo — {friendName}
-                </p>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={friendSheetUrl}
-                  alt={`Folha de ${friendName}`}
-                  className="w-full rounded-xl border border-border/60 object-contain"
-                />
-              </figure>
-            ) : null}
 
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
@@ -887,7 +907,7 @@ export function OnboardingWizard({
               painel e a primeira história.
             </CardDescription>
           </CardHeader>
-          <form action={submitPin}>
+          <form onSubmit={submitPin}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="pin">PIN (4–6 dígitos)</Label>
@@ -931,6 +951,14 @@ export function OnboardingWizard({
           </form>
         </Card>
       ) : null}
+
+      <AvatarStudyDialog
+        open={studySubject !== null}
+        onOpenChange={(open) => {
+          if (!open) setStudySubject(null);
+        }}
+        subject={studySubject}
+      />
     </div>
   );
 }

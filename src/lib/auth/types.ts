@@ -44,6 +44,10 @@ export type OnboardingState = {
   friendPhotos: OnboardingPhotoDraft[];
   childAvatarUrl?: string | null;
   friendAvatarUrl?: string | null;
+  /** Folhas turnaround Pixar (base para histórias) */
+  childFaceSheetUrl?: string | null;
+  childBodySheetUrl?: string | null;
+  friendSheetUrl?: string | null;
   /** Passo atual do wizard — retoma de onde parou */
   wizardStep?: string | null;
   /** @deprecated legado — preferir childPhotos */
