@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import {
   ProfilePanel,
@@ -16,7 +19,8 @@ import {
   stripeMissingKeys,
 } from "@/lib/stripe/config";
 
-export default async function ParentSettingsPage() {
+async function ParentSettingsPageInner() {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -96,5 +100,13 @@ export default async function ParentSettingsPage() {
         <ProfilePanel profile={profile} billing={billing} />
       </div>
     </AppShell>
+  );
+}
+
+export default function ParentSettingsPage() {
+  return (
+    <Suspense fallback={<AppPageFallback label="Carregando perfil…" />}>
+      <ParentSettingsPageInner />
+    </Suspense>
   );
 }

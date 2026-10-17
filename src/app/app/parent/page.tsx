@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { connection } from "next/server";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { ParentDashboard } from "@/components/parent/parent-dashboard";
 import { AvatarRefreshBanner } from "@/components/parent/avatar-refresh-banner";
@@ -20,7 +22,7 @@ import {
   stripeMissingKeys,
 } from "@/lib/stripe/config";
 
-export default async function ParentPage() {
+async function ParentPageInner() {
   await connection();
   const user = await getCurrentUser();
   if (!user) return null;
@@ -233,5 +235,13 @@ export default async function ParentPage() {
         />
       </div>
     </AppShell>
+  );
+}
+
+export default function ParentPage() {
+  return (
+    <Suspense fallback={<AppPageFallback label="Carregando área dos pais…" />}>
+      <ParentPageInner />
+    </Suspense>
   );
 }

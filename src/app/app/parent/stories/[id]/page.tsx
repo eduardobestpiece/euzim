@@ -1,15 +1,14 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { StoryFlipbook } from "@/components/kids/story-flipbook";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { loadStoryForParent } from "@/lib/stories/load-story";
 import { getQuizProgress } from "@/lib/stories/games-store";
 
-export default async function StoryReaderPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = await params;
+async function StoryReaderPageInner({ id }: { id: string }) {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -32,4 +31,25 @@ export default async function StoryReaderPage({
       showShare={false}
     />
   );
+}
+
+export default function StoryReaderPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  return (
+    <Suspense fallback={<AppPageFallback label="Carregando história…" />}>
+      <StoryReaderPageBridge params={params} />
+    </Suspense>
+  );
+}
+
+async function StoryReaderPageBridge({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  return <StoryReaderPageInner id={id} />;
 }

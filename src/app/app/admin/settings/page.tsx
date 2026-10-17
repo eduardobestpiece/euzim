@@ -1,12 +1,16 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/get-user";
 
-export default async function AdminSettingsPage() {
+async function AdminSettingsPageInner() {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return null;
   if (user.role !== "admin") redirect("/app/parent/settings");
@@ -36,5 +40,13 @@ export default async function AdminSettingsPage() {
         <ChangePasswordForm />
       </div>
     </AppShell>
+  );
+}
+
+export default function AdminSettingsPage() {
+  return (
+    <Suspense fallback={<AppPageFallback label="Carregando perfil…" />}>
+      <AdminSettingsPageInner />
+    </Suspense>
   );
 }

@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/get-user";
@@ -9,17 +12,20 @@ import {
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
 
-export default async function BillingSuccessPage({
+type SuccessParams = {
+  session_id?: string;
+  kind?: string;
+  pack_id?: string;
+  plan_id?: string;
+  count?: string;
+};
+
+async function BillingSuccessPageInner({
   searchParams,
 }: {
-  searchParams: Promise<{
-    session_id?: string;
-    kind?: string;
-    pack_id?: string;
-    plan_id?: string;
-    count?: string;
-  }>;
+  searchParams: Promise<SuccessParams>;
 }) {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -89,5 +95,17 @@ export default async function BillingSuccessPage({
         </Button>
       </div>
     </AppShell>
+  );
+}
+
+export default function BillingSuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<SuccessParams>;
+}) {
+  return (
+    <Suspense fallback={<AppPageFallback />}>
+      <BillingSuccessPageInner searchParams={searchParams} />
+    </Suspense>
   );
 }

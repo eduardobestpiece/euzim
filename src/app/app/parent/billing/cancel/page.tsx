@@ -1,9 +1,13 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/auth/get-user";
 
-export default async function BillingCancelPage() {
+async function BillingCancelPageInner() {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -21,5 +25,13 @@ export default async function BillingCancelPage() {
         </Button>
       </div>
     </AppShell>
+  );
+}
+
+export default function BillingCancelPage() {
+  return (
+    <Suspense fallback={<AppPageFallback />}>
+      <BillingCancelPageInner />
+    </Suspense>
   );
 }
