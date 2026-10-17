@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateStoryPipeline } from "@/lib/stories/generate-pipeline";
 import { generateStoryPageImages } from "@/lib/stories/generate-story-images";
 import { generateStoryQuiz } from "@/lib/stories/generate-story-quiz";
-import { loadStoryCast } from "@/lib/stories/story-cast";
+import { loadStoryCast, type CoPlayMember } from "@/lib/stories/story-cast";
 import {
   LANGUAGE_LEVELS,
   STORY_TYPES,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/stories/mock-store";
 import { attachUsageToStory } from "@/lib/usage/openai-meter";
 import { mergeUsageContext } from "@/lib/usage/usage-context";
+import { loadCharactersByIdsForStory } from "@/lib/social/friend-cast";
 
 export type GeneratePayload = {
   theme: string;
@@ -32,6 +33,8 @@ export type GeneratePayload = {
   answers?: Record<string, string>;
   characterIds?: string[];
   protagonistId?: string;
+  /** Conta amiga (users.id) cujo elenco pode entrar na história. */
+  friendParentId?: string;
 };
 
 export type GenerateResult = {
@@ -95,10 +98,27 @@ export function parseGeneratePayload(body: Record<string, unknown>): {
     );
   }
   if (Array.isArray(body.characterIds)) {
-    payload.characterIds = body.characterIds.map(String);
+    payload.characterIds = body.characterIds.map(String).slice(0, 5);
   }
   if (body.protagonistId) payload.protagonistId = String(body.protagonistId);
+  if (
+    typeof body.friendParentId === "string" &&
+    body.friendParentId.trim()
+  ) {
+    payload.friendParentId = body.friendParentId.trim();
+  }
   return { payload };
+}
+
+function traitsSummary(traits: unknown, description?: string | null): string {
+  const parts: string[] = [];
+  if (description?.trim()) parts.push(description.trim());
+  if (Array.isArray(traits)) {
+    parts.push(traits.map(String).filter(Boolean).join(", "));
+  } else if (traits && typeof traits === "object") {
+    parts.push(JSON.stringify(traits).slice(0, 120));
+  }
+  return parts.filter(Boolean).join(" — ").slice(0, 200);
 }
 
 /** Executa o pipeline completo e persiste a história. */
@@ -134,19 +154,39 @@ export async function runStoryGeneration(input: {
 
   let castNames: string[] | undefined;
   let protagonistName: string | undefined;
-  const adminForChars = createAdminClient() ?? (await createClient());
-  if (adminForChars && payload.characterIds?.length) {
-    const { data: chars } = await adminForChars
-      .from("characters")
-      .select("id, name, is_primary")
-      .eq("parent_id", userId)
-      .in("id", payload.characterIds);
-    castNames = (chars ?? []).map((c) => c.name);
-    const protag = (chars ?? []).find((c) => c.id === payload.protagonistId);
+  let coPlayMembers: CoPlayMember[] = [];
+  let guestCharacterIds: string[] = [];
+
+  if (payload.characterIds?.length) {
+    const selected = await loadCharactersByIdsForStory({
+      userId,
+      characterIds: payload.characterIds,
+      friendParentId: payload.friendParentId ?? null,
+    });
+    castNames = selected.map((c) => c.name);
+    coPlayMembers = selected.map((c) => ({
+      id: c.id,
+      name: c.name,
+      avatarUrl: c.avatarUrl ?? null,
+      parentId: c.parentId,
+      source: c.source,
+      traitsSummary: traitsSummary(c.traits, c.description),
+      kind: c.kind,
+      isPrimary: c.isPrimary,
+    }));
+    guestCharacterIds = selected
+      .filter((c) => c.source === "friend")
+      .map((c) => c.id);
+    const protag = selected.find((c) => c.id === payload.protagonistId);
     if (protag) protagonistName = protag.name;
-    else if ((chars ?? []).some((c) => c.is_primary)) {
-      protagonistName = (chars ?? []).find((c) => c.is_primary)?.name;
+    else {
+      const primaryOwn = selected.find(
+        (c) => c.source === "own" && c.isPrimary,
+      );
+      protagonistName = primaryOwn?.name ?? selected[0]?.name;
     }
+    cast.coPlayMembers = coPlayMembers;
+    cast.friendParentId = payload.friendParentId ?? null;
   }
   if (!protagonistName) protagonistName = cast.childName;
 
@@ -266,6 +306,10 @@ export async function runStoryGeneration(input: {
               kind: cast.friendKind,
               gender: cast.friendGender,
             },
+            characterIds: payload.characterIds ?? [],
+            guestCharacterIds,
+            friendParentId: payload.friendParentId ?? null,
+            coPlayNames: castNames ?? [],
             moral: pipeline.moral,
             stamp: PLATFORM_BUILD,
             auxModel: "gpt-4o-mini",
@@ -307,6 +351,10 @@ export async function runStoryGeneration(input: {
                 kind: cast.friendKind,
                 gender: cast.friendGender,
               },
+              characterIds: payload.characterIds ?? [],
+              guestCharacterIds,
+              friendParentId: payload.friendParentId ?? null,
+              coPlayNames: castNames ?? [],
               moral: pipeline.moral,
               stamp: PLATFORM_BUILD,
               auxModel: "gpt-4o-mini",

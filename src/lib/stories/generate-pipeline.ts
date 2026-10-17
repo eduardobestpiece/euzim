@@ -168,6 +168,26 @@ function friendGenderBrief(cast: StoryCast): string {
   return `Co-protagonista: ${name} (${kind}). Prefira o nome próprio; evite assumir gênero sem pista.`;
 }
 
+function coPlayBrief(cast: StoryCast, opts?: PipelineOptions): string {
+  const members = cast.coPlayMembers ?? [];
+  if (members.length === 0) return "";
+  const lines = members.map((m) => {
+    const meta = [m.kind, m.traitsSummary].filter(Boolean).join("; ");
+    const tag = m.source === "friend" ? "amigo da outra família" : "da família";
+    return `- ${m.name} (${tag}${meta ? `: ${meta}` : ""})`;
+  });
+  const names =
+    opts?.castNames && opts.castNames.length > 0
+      ? opts.castNames.join(", ")
+      : members.map((m) => m.name).join(", ");
+  return [
+    `HISTÓRIA COM AMIGOS — elenco obrigatório (${members.length}): ${names}.`,
+    ...lines,
+    `REGRA DE INTERAÇÃO: TODOS os personagens listados devem aparecer com presença clara, agir e interagir uns com os outros ao longo da história (diálogos, brincadeiras, ajuda mútua).`,
+    `Não deixe ninguém do elenco só como figurante; cada um precisa de pelo menos um momento ativo com outro personagem.`,
+  ].join("\n");
+}
+
 function castBrief(cast: StoryCast, opts?: PipelineOptions): string {
   const age =
     cast.childAgeYears != null ? `${cast.childAgeYears} anos` : "idade infantil";
@@ -177,6 +197,18 @@ function castBrief(cast: StoryCast, opts?: PipelineOptions): string {
     opts?.castNames && opts.castNames.length > 0
       ? `Elenco selecionado: ${opts.castNames.join(", ")}.`
       : "";
+  const coPlay = coPlayBrief(cast, opts);
+  if (coPlay) {
+    return [
+      `Criança protagonista: ${protagonist} (${age}${cast.childGender ? `, ${cast.childGender}` : ""}).`,
+      coPlay,
+      cast.friendName
+        ? `Companheiro clássico da casa (se estiver no elenco): ${cast.friendName}.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   return [
     `Criança protagonista: ${protagonist} (${age}${cast.childGender ? `, ${cast.childGender}` : ""}).`,
     friendGenderBrief(cast),

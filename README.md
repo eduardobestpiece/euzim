@@ -6,9 +6,10 @@ Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supaba
 
 **Porta do app: `5050`.** A porta `8080` é reservada para BP Sales — não use neste Project.
 
-Stamp da plataforma: `v34` (`src/lib/platform-build.ts`). Brand assets em `public/brand/`.
+Stamp da plataforma: `v35` (`src/lib/platform-build.ts`). Brand assets em `public/brand/`.
 
 Área Social: `/app/social` (feed 3:1, amizades, curtidas). Convite de perfil: `/invite/[token]`.
+Nova História: botão **Criar história com amigos** (elenco próprio + amigo aceito, máx. 5).
 Antes de usar Social em produção, aplique `supabase/migrations/20261017_area_social.sql` no projeto `zlzgkivktvnyvehjwcjw`.
 
 ## Pré-requisitos

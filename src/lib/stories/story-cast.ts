@@ -5,6 +5,18 @@ import { readMockOnboarding } from "@/lib/auth/mock-session";
 
 export type FriendGender = "male" | "female" | "unknown";
 
+/** Personagem convidado (conta amiga) ou extra selecionado no wizard. */
+export type CoPlayMember = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  parentId: string;
+  source: "own" | "friend";
+  traitsSummary?: string;
+  kind?: string | null;
+  isPrimary?: boolean;
+};
+
 export type StoryCast = {
   childId: string;
   childName: string;
@@ -25,6 +37,10 @@ export type StoryCast = {
    * Sem isso, ilustrações devem esconder rostos de família.
    */
   hasFamilyMemberAvatars: boolean;
+  /** Elenco expandido (próprios + amigos) para história com amigos. */
+  coPlayMembers?: CoPlayMember[];
+  /** Conta amiga cujo elenco entrou na história (se houver). */
+  friendParentId?: string | null;
 };
 
 /** Normaliza gender da tabela characters / onboarding para PT. */

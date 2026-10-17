@@ -61,8 +61,12 @@ async function prepareJpeg(bytes: Buffer): Promise<Buffer> {
 }
 
 async function loadRefs(cast: StoryCast): Promise<Buffer[]> {
+  const coPlayUrls = (cast.coPlayMembers ?? [])
+    .map((m) => m.avatarUrl)
+    .filter((u): u is string => Boolean(u));
   const urls = [
     cast.childHeroUrl,
+    ...coPlayUrls,
     cast.friendHeroUrl,
     cast.childFaceSheetUrl,
     cast.friendSheetUrl,
@@ -70,7 +74,10 @@ async function loadRefs(cast: StoryCast): Promise<Buffer[]> {
   ].filter((u): u is string => Boolean(u));
 
   const out: Buffer[] = [];
+  const seen = new Set<string>();
   for (const url of urls) {
+    if (seen.has(url)) continue;
+    seen.add(url);
     const raw = await fetchBuf(url);
     if (!raw) continue;
     try {
@@ -78,7 +85,7 @@ async function loadRefs(cast: StoryCast): Promise<Buffer[]> {
     } catch {
       /* skip */
     }
-    if (out.length >= 4) break;
+    if (out.length >= 6) break;
   }
   return out;
 }
@@ -254,7 +261,9 @@ function scenePrompt(
     avoid,
     uniqueness,
     `Walt Disney / Pixar quality 3D animated cinematic still.`,
-    `Feature THIS exact child character "${cast.childName}" and THIS exact ${cast.friendKind} companion "${cast.friendName}" from the reference images as the clear protagonists.`,
+    cast.coPlayMembers && cast.coPlayMembers.length > 0
+      ? `Feature THESE exact characters from the reference images interacting together: ${cast.coPlayMembers.map((m) => `"${m.name}"`).join(", ")}. Show clear presence and interaction among them.`
+      : `Feature THIS exact child character "${cast.childName}" and THIS exact ${cast.friendKind} companion "${cast.friendName}" from the reference images as the clear protagonists.`,
     `Preserve Pixar face, hair, skin tone, and body identity from the references with high fidelity.`,
     `Do NOT lock clothing to the reference sheet blouse — change outfit when the story context changes.`,
     `Do not invent avatar face/hair details that contradict the reference sheets.`,

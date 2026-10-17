@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronLeft, ChevronRight, Wand2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, UsersRound, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,16 +39,32 @@ const THEME_CHIPS = [
   "Aprendendo a dividir",
 ];
 
+const MAX_CAST = 5;
+
 type CharacterOption = {
   id: string;
   name: string;
   isPrimary?: boolean;
   avatarUrl?: string | null;
+  parentId?: string;
+  source?: "own" | "friend";
+};
+
+type FriendOption = {
+  userId: string;
+  label: string;
+  authorAvatarUrl: string | null;
+  characters: CharacterOption[];
 };
 
 type ClarifyQ = { id: string; prompt: string };
 
-type Step = "theme" | "options" | "clarify" | "generating";
+type Step =
+  | "theme"
+  | "pick-friend"
+  | "options"
+  | "clarify"
+  | "generating";
 
 export function NewStoryForm({
   childName,
@@ -83,8 +99,14 @@ export function NewStoryForm({
   const [languageLevel, setLanguageLevel] = useState<LanguageLevel>("moderada");
   const [christianValues, setChristianValues] = useState<boolean | null>(null);
 
+  const [withFriends, setWithFriends] = useState(false);
+  const [friends, setFriends] = useState<FriendOption[]>([]);
+  const [friendParentId, setFriendParentId] = useState<string | null>(null);
+  const [displayCharacters, setDisplayCharacters] =
+    useState<CharacterOption[]>(characters);
+
   const defaultSelected = useMemo(
-    () => new Set(characters.map((c) => c.id)),
+    () => new Set(characters.map((c) => c.id).slice(0, MAX_CAST)),
     [characters],
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(defaultSelected);
@@ -93,11 +115,31 @@ export function NewStoryForm({
   const [protagonistId, setProtagonistId] = useState(primaryId);
 
   useEffect(() => {
-    setSelectedIds(new Set(characters.map((c) => c.id)));
+    if (withFriends) return;
+    setDisplayCharacters(characters);
+    setSelectedIds(new Set(characters.map((c) => c.id).slice(0, MAX_CAST)));
     const nextPrimary =
       characters.find((c) => c.isPrimary)?.id ?? characters[0]?.id ?? "";
     if (nextPrimary) setProtagonistId(nextPrimary);
-  }, [characters]);
+  }, [characters, withFriends]);
+
+  function applyCombinedCast(list: CharacterOption[], keepFriendId: string) {
+    setWithFriends(true);
+    setFriendParentId(keepFriendId);
+    setDisplayCharacters(list);
+    const ownPrimary =
+      list.find((c) => c.source !== "friend" && c.isPrimary)?.id ??
+      list.find((c) => c.source !== "friend")?.id ??
+      list[0]?.id ??
+      "";
+    const friendPrimary =
+      list.find((c) => c.source === "friend" && c.isPrimary)?.id ??
+      list.find((c) => c.source === "friend")?.id;
+    const initial = [ownPrimary, friendPrimary].filter(Boolean) as string[];
+    const unique = [...new Set(initial)].slice(0, MAX_CAST);
+    setSelectedIds(new Set(unique.length > 0 ? unique : list.slice(0, 1).map((c) => c.id)));
+    if (ownPrimary) setProtagonistId(ownPrimary);
+  }
 
   const [clarifyQs, setClarifyQs] = useState<ClarifyQ[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>(
@@ -198,6 +240,7 @@ export function NewStoryForm({
         if (next.size <= 1) return prev;
         next.delete(id);
       } else {
+        if (next.size >= MAX_CAST) return prev;
         next.add(id);
       }
       if (!next.has(protagonistId)) {
@@ -214,7 +257,91 @@ export function NewStoryForm({
       setError("Escreva o tema da história.");
       return;
     }
+    setWithFriends(false);
+    setFriendParentId(null);
+    setDisplayCharacters(characters);
     setStep("options");
+  }
+
+  async function startWithFriends() {
+    setError(null);
+    if (!theme.trim()) {
+      setError("Escreva o tema da história.");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        setStatus("Carregando amigos…");
+        const res = await fetch("/api/social/friends-cast");
+        const body = (await res.json()) as {
+          error?: string;
+          friends?: FriendOption[];
+        };
+        if (!res.ok || body.error) {
+          setError(body.error || "Não foi possível carregar amigos.");
+          setStatus(null);
+          return;
+        }
+        const list = body.friends ?? [];
+        setFriends(list);
+        setStatus(null);
+        if (list.length === 0) {
+          setError(
+            "Você ainda não tem amigos aceitos. Peça amizade no Social.",
+          );
+          return;
+        }
+        if (list.length === 1) {
+          const only = list[0]!;
+          await selectFriend(only.userId);
+          return;
+        }
+        setStep("pick-friend");
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Falha ao carregar amigos.",
+        );
+        setStatus(null);
+      }
+    });
+  }
+
+  async function selectFriend(friendId: string) {
+    setError(null);
+    startTransition(async () => {
+      try {
+        setStatus("Montando elenco…");
+        const res = await fetch(
+          `/api/social/friends-cast?friendParentId=${encodeURIComponent(friendId)}`,
+        );
+        const body = (await res.json()) as {
+          error?: string;
+          characters?: CharacterOption[];
+        };
+        if (!res.ok || body.error) {
+          setError(body.error || "Falha ao montar elenco.");
+          setStatus(null);
+          return;
+        }
+        const list = (body.characters ?? []).map((c) => ({
+          ...c,
+          source: c.source ?? (c.parentId === friendId ? "friend" : "own"),
+        }));
+        if (list.length === 0) {
+          setError("Nenhum personagem disponível para esse amigo.");
+          setStatus(null);
+          return;
+        }
+        applyCombinedCast(list, friendId);
+        setStatus(null);
+        setStep("options");
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Falha ao montar elenco.",
+        );
+        setStatus(null);
+      }
+    });
   }
 
   async function runClarify() {
@@ -227,7 +354,7 @@ export function NewStoryForm({
     startTransition(async () => {
       try {
         setStatus("Analisando o tema…");
-        const selectedNames = characters
+        const selectedNames = displayCharacters
           .filter((c) => selectedIds.has(c.id))
           .map((c) => c.name);
         const res = await fetch("/api/stories/clarify", {
@@ -239,9 +366,10 @@ export function NewStoryForm({
             languageLevel,
             castNames: selectedNames,
             protagonistName:
-              characters.find((c) => c.id === protagonistId)?.name ??
+              displayCharacters.find((c) => c.id === protagonistId)?.name ??
               childName,
             friendName,
+            withFriends,
           }),
         });
         const body = (await res.json()) as {
@@ -298,8 +426,9 @@ export function NewStoryForm({
             languageLevel,
             christianValues: Boolean(christianValues),
             answers: answersPayload,
-            characterIds: Array.from(selectedIds),
+            characterIds: Array.from(selectedIds).slice(0, MAX_CAST),
             protagonistId,
+            ...(friendParentId ? { friendParentId } : {}),
           }),
         });
         const body = (await res.json()) as {
@@ -387,16 +516,80 @@ export function NewStoryForm({
               Continuar
               <ChevronRight className="size-4" />
             </Button>
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              className="w-full gap-2"
+              disabled={disabled || pending}
+              onClick={() => void startWithFriends()}
+            >
+              <UsersRound className="size-4" />
+              Criar história com amigos
+            </Button>
+          </>
+        ) : null}
+
+        {step === "pick-friend" ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Escolha o amigo cujo elenco entra na história (máx. {MAX_CAST}{" "}
+              avatares no total).
+            </p>
+            <ul className="space-y-2">
+              {friends.map((f) => (
+                <li key={f.userId}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-xl border border-border/70 px-3 py-3 text-left transition hover:border-foreground/40"
+                    disabled={pending}
+                    onClick={() => void selectFriend(f.userId)}
+                  >
+                    {f.authorAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={f.authorAvatarUrl}
+                        alt=""
+                        className="size-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="size-12 rounded-full bg-muted" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{f.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {f.characters.length} personagem(ns)
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setStep("theme")}
+              disabled={pending}
+            >
+              <ChevronLeft className="size-4" />
+              Voltar
+            </Button>
           </>
         ) : null}
 
         {step === "options" ? (
           <>
-            {characters.length > 0 ? (
+            {displayCharacters.length > 0 ? (
               <div className="space-y-2">
-                <Label>Personagens na história</Label>
+                <Label>
+                  Personagens na história{" "}
+                  <span className="font-normal text-muted-foreground">
+                    ({selectedIds.size}/{MAX_CAST}
+                    {withFriends ? " · com amigos" : ""})
+                  </span>
+                </Label>
                 <ul className="space-y-2">
-                  {characters.map((c) => (
+                  {displayCharacters.map((c) => (
                     <li
                       key={c.id}
                       className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 px-3 py-2"
@@ -419,6 +612,11 @@ export function NewStoryForm({
                         {c.isPrimary ? (
                           <span className="text-[10px] uppercase text-muted-foreground">
                             primário
+                          </span>
+                        ) : null}
+                        {c.source === "friend" ? (
+                          <span className="rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] uppercase text-sky-800">
+                            amigo
                           </span>
                         ) : null}
                       </label>
@@ -539,7 +737,11 @@ export function NewStoryForm({
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setStep("theme")}
+                onClick={() =>
+                  setStep(
+                    withFriends && friends.length > 1 ? "pick-friend" : "theme",
+                  )
+                }
                 disabled={pending}
               >
                 <ChevronLeft className="size-4" />
@@ -549,7 +751,12 @@ export function NewStoryForm({
                 type="button"
                 size="lg"
                 className="flex-1 gap-2"
-                disabled={disabled || pending || christianValues === null}
+                disabled={
+                  disabled ||
+                  pending ||
+                  christianValues === null ||
+                  selectedIds.size === 0
+                }
                 onClick={() => void runClarify()}
               >
                 Continuar
