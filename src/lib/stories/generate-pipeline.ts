@@ -63,7 +63,12 @@ export type PipelineOptions = {
   protagonistName?: string;
 };
 
-async function chatJson(input: {
+type ChatJsonResult = {
+  data: Record<string, unknown> | null;
+  error?: string;
+};
+
+async function chatJsonOnce(input: {
   userId?: string | null;
   operation: string;
   model: string;
@@ -72,7 +77,8 @@ async function chatJson(input: {
   user: string;
   temperature?: number;
   timeoutMs?: number;
-}): Promise<Record<string, unknown> | null> {
+  maxTokens?: number;
+}): Promise<ChatJsonResult> {
   const result = await meteredChatCompletion({
     userId: input.userId,
     category: input.category ?? "story_text",
@@ -80,6 +86,7 @@ async function chatJson(input: {
     body: {
       model: input.model,
       temperature: input.temperature ?? 0.75,
+      max_tokens: input.maxTokens ?? 4096,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: input.system },
@@ -89,12 +96,54 @@ async function chatJson(input: {
     timeoutMs: input.timeoutMs ?? 180_000,
   });
 
-  if (!result.ok || !result.content) return null;
-  try {
-    return JSON.parse(result.content) as Record<string, unknown>;
-  } catch {
-    return null;
+  if (!result.ok || !result.content) {
+    return {
+      data: null,
+      error: result.error || `OpenAI sem conteúdo (${result.status})`,
+    };
   }
+  try {
+    return { data: JSON.parse(result.content) as Record<string, unknown> };
+  } catch {
+    return {
+      data: null,
+      error: `JSON inválido/truncado em ${input.operation}`,
+    };
+  }
+}
+
+/** Uma tentativa + retry em falha transitória (rede, JSON truncado, 5xx). */
+async function chatJson(input: {
+  userId?: string | null;
+  operation: string;
+  model: string;
+  category?: "story_text" | "other";
+  system: string;
+  user: string;
+  temperature?: number;
+  timeoutMs?: number;
+  maxTokens?: number;
+}): Promise<ChatJsonResult> {
+  const first = await chatJsonOnce(input);
+  if (first.data) return first;
+  const retryable =
+    !first.error?.includes("OPENAI_API_KEY") &&
+    !first.error?.includes("HTTP 401") &&
+    !first.error?.includes("HTTP 403");
+  if (!retryable) return first;
+  console.warn(`[pipeline] retry ${input.operation}:`, first.error);
+  return chatJsonOnce(input);
+}
+
+function openaiKeyPresent(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
+}
+
+function mockFallbackMessage(reason: string): string {
+  if (!openaiKeyPresent()) {
+    return "Não consegui gerar com a IA agora. Confira OPENAI_API_KEY e tente de novo.";
+  }
+  return `A IA não concluiu a narrativa (${reason}). Tente de novo em instantes.`;
 }
 
 function castBrief(cast: StoryCast, opts?: PipelineOptions): string {
@@ -167,21 +216,22 @@ function clarifyBrief(opts?: PipelineOptions): string {
   ].join("\n");
 }
 
+type OutlineResult =
+  | { ok: true; title: string; moral: string; beats: string[] }
+  | { ok: false; error: string };
+
 /** Outline estrutural barato (mini). */
 async function outlineStory(
   cast: StoryCast,
   theme: string,
   opts?: PipelineOptions,
-): Promise<{
-  title: string;
-  moral: string;
-  beats: string[];
-} | null> {
-  const parsed = await chatJson({
+): Promise<OutlineResult> {
+  const { data: parsed, error } = await chatJson({
     userId: opts?.userId,
     model: STORY_AUX_MODEL,
     operation: "outline_story",
     temperature: 0.6,
+    maxTokens: 2048,
     system: `${STORYTELLER_SKILL}
 
 Você faz só o OUTLINE (esqueleto), não a prosa final.
@@ -203,15 +253,26 @@ Tema: """${theme}"""
 Outline agora — prefira ~${PREFERRED_STORY_PAGES} batidas (range ${MIN_STORY_PAGES}–${MAX_STORY_PAGES}).`,
     timeoutMs: 90_000,
   });
-  if (!parsed) return null;
+  if (!parsed) {
+    return { ok: false, error: error || "outline vazio" };
+  }
   const title = String(parsed.title ?? "").trim();
   const moral = String(parsed.moral ?? "").trim();
   const beats = Array.isArray(parsed.beats)
     ? parsed.beats.map((b) => String(b).trim()).filter(Boolean)
     : [];
-  if (!title || beats.length < 5) return null;
-  return { title, moral, beats };
+  if (!title || beats.length < 5) {
+    return {
+      ok: false,
+      error: `outline incompleto (beats=${beats.length})`,
+    };
+  }
+  return { ok: true, title, moral, beats };
 }
+
+type ExpandResult =
+  | { ok: true; title: string; moral: string; fullText: string }
+  | { ok: false; error: string };
 
 /** Expansão narrativa final (modelo forte) — qualidade preservada. */
 async function expandNarrative(
@@ -219,13 +280,15 @@ async function expandNarrative(
   theme: string,
   outline: { title: string; moral: string; beats: string[] },
   opts?: PipelineOptions,
-): Promise<{ title: string; moral: string; fullText: string } | null> {
+): Promise<ExpandResult> {
   const vol = volumeBrief(opts);
-  const parsed = await chatJson({
+  const { data: parsed, error } = await chatJson({
     userId: opts?.userId,
     model: STORY_TEXT_MODEL,
     operation: "expand_story",
     temperature: 0.85,
+    // História longa em JSON — sem max_tokens alto a resposta corta e o parse falha.
+    maxTokens: 16_384,
     system: `${STORYTELLER_SKILL}
 
 Expanda o outline numa história COMPLETA, oral e cinematográfica.
@@ -251,13 +314,24 @@ ${outline.beats.map((b, i) => `${i + 1}. ${b}`).join("\n")}
 Escreva a prosa final completa (~${vol.target} palavras).
 Não invente detalhes visuais que contradigam o avatar da criança.`,
   });
-  if (!parsed) return null;
+  if (!parsed) {
+    return { ok: false, error: error || "expand vazio" };
+  }
   const title = String(parsed.title ?? outline.title).trim();
   const moral = String(parsed.moral ?? outline.moral).trim();
-  const fullText = String(parsed.full_text ?? "").trim();
-  const minWords = Math.min(700, Math.round(vol.min * 0.7));
-  if (!title || fullText.split(/\s+/).length < minWords) return null;
-  return { title, moral, fullText };
+  const fullText = String(
+    parsed.full_text ?? parsed.fullText ?? "",
+  ).trim();
+  const wordCount = fullText.split(/\s+/).filter(Boolean).length;
+  // Aceita ~55% do mínimo pedido — modelos às vezes entregam um pouco abaixo do alvo.
+  const minWords = Math.max(400, Math.round(vol.min * 0.55));
+  if (!title || wordCount < minWords) {
+    return {
+      ok: false,
+      error: `expand curto (${wordCount} palavras, mín ${minWords})`,
+    };
+  }
+  return { ok: true, title, moral, fullText };
 }
 
 /** Revisão leve (mini) — só ajusta se necessário. */
@@ -272,11 +346,12 @@ async function lightReview(
   fullText: string;
   reviewNotes: string;
 }> {
-  const parsed = await chatJson({
+  const { data: parsed } = await chatJson({
     userId: opts?.userId,
     model: STORY_AUX_MODEL,
     operation: "light_review",
     temperature: 0.35,
+    maxTokens: 16_384,
     system: `${STORYTELLER_SKILL}
 
 EDITOR LEVE: corrija só problemas graves (protagonistas, segurança parental,
@@ -301,8 +376,8 @@ ${draft.fullText}
   if (!parsed) {
     return { ...draft, reviewNotes: "revisão leve pulada" };
   }
-  const fullText = String(parsed.full_text ?? "").trim();
-  if (fullText.split(/\s+/).length < 400) {
+  const fullText = String(parsed.full_text ?? parsed.fullText ?? "").trim();
+  if (fullText.split(/\s+/).filter(Boolean).length < 400) {
     return { ...draft, reviewNotes: "revisão leve descartada — texto curto" };
   }
   return {
@@ -324,11 +399,12 @@ async function splitIntoChapters(
   },
   opts?: PipelineOptions,
 ): Promise<StoryChapter[] | null> {
-  const parsed = await chatJson({
+  const { data: parsed } = await chatJson({
     userId: opts?.userId,
     model: STORY_AUX_MODEL,
     operation: "split_chapters",
     temperature: 0.4,
+    maxTokens: 12_288,
     system: `${STORYTELLER_SKILL}
 
 Divida a história FINAL em ${MIN_STORY_PAGES} a ${MAX_STORY_PAGES} ATOS/páginas
@@ -400,6 +476,8 @@ export type GeneratePipelineResult = {
   story: GeneratedStory;
   pipeline: PipelineStory;
   engine: StoryEngine;
+  /** Motivo quando engine === mock-v1 (mensagem amigável). */
+  error?: string;
 };
 
 /**
@@ -455,7 +533,7 @@ export async function generateStoryPipeline(input: {
 
   // 2) Outline (mini) → expand (forte) → light review (mini) → split (mini)
   const outline = await outlineStory(cast, theme, opts);
-  if (!outline) {
+  if (!outline.ok) {
     return {
       story: generateMockStory({
         childName: cast.childName,
@@ -467,14 +545,15 @@ export async function generateStoryPipeline(input: {
         moral: "",
         pages: [],
         fullText: "",
-        reviewNotes: "fallback mock",
+        reviewNotes: `fallback mock: ${outline.error}`,
       },
       engine: "mock-v1",
+      error: mockFallbackMessage(outline.error),
     };
   }
 
   const expanded = await expandNarrative(cast, theme, outline, opts);
-  if (!expanded) {
+  if (!expanded.ok) {
     return {
       story: generateMockStory({
         childName: cast.childName,
@@ -486,9 +565,10 @@ export async function generateStoryPipeline(input: {
         moral: outline.moral,
         pages: [],
         fullText: "",
-        reviewNotes: "expand failed",
+        reviewNotes: `expand failed: ${expanded.error}`,
       },
       engine: "mock-v1",
+      error: mockFallbackMessage(expanded.error),
     };
   }
 

@@ -124,40 +124,56 @@ export async function processStoryJob(jobId: string): Promise<{
   const payload = (job.payload ?? {}) as GeneratePayload;
   if (!payload.theme) payload.theme = job.theme;
 
-  const result = await runStoryGeneration({
-    userId: job.parent_id,
-    payload,
-    onProgress: async (msg) => {
+  try {
+    const result = await runStoryGeneration({
+      userId: job.parent_id,
+      payload,
+      onProgress: async (msg) => {
+        await client
+          .from("story_jobs")
+          .update({ progress: msg })
+          .eq("id", jobId);
+      },
+    });
+
+    if (!result.ok) {
       await client
         .from("story_jobs")
-        .update({ progress: msg })
+        .update({
+          status: "failed",
+          error: result.error || "Falha na geração.",
+          progress: "Falhou",
+          finished_at: new Date().toISOString(),
+        })
         .eq("id", jobId);
-    },
-  });
+      return { ok: false, error: result.error, status: "failed" };
+    }
 
-  if (!result.ok) {
+    await client
+      .from("story_jobs")
+      .update({
+        status: "ready",
+        story_id: result.storyId ?? null,
+        progress: `Pronta: “${result.title ?? "História"}”`,
+        finished_at: new Date().toISOString(),
+        error: null,
+      })
+      .eq("id", jobId);
+
+    return { ok: true, status: "ready" };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Falha inesperada na geração.";
+    console.error("[story_jobs] process crash", jobId, err);
     await client
       .from("story_jobs")
       .update({
         status: "failed",
-        error: result.error || "Falha na geração.",
+        error: message,
         progress: "Falhou",
         finished_at: new Date().toISOString(),
       })
       .eq("id", jobId);
-    return { ok: false, error: result.error, status: "failed" };
+    return { ok: false, error: message, status: "failed" };
   }
-
-  await client
-    .from("story_jobs")
-    .update({
-      status: "ready",
-      story_id: result.storyId ?? null,
-      progress: `Pronta: “${result.title ?? "História"}”`,
-      finished_at: new Date().toISOString(),
-      error: null,
-    })
-    .eq("id", jobId);
-
-  return { ok: true, status: "ready" };
 }

@@ -46,6 +46,13 @@ export function trackStoryJob(jobId: string) {
   );
 }
 
+/** Evento quando um job chega em ready|failed — o formulário limpa MagicalLoading. */
+export function emitStoryJobTerminal(job: JobStatus) {
+  window.dispatchEvent(
+    new CustomEvent("em-story-job-terminal", { detail: job }),
+  );
+}
+
 async function maybeNotifyBrowser(title: string, body: string) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   try {
@@ -109,6 +116,7 @@ export function StoryJobNotifier({
             stillActive.push(id);
             if (!notifiedRef.current.has(id)) {
               notifiedRef.current.add(id);
+              emitStoryJobTerminal(body);
               setToast(body);
               void maybeNotifyBrowser(
                 "História pronta!",
@@ -118,6 +126,7 @@ export function StoryJobNotifier({
           } else if (body.status === "failed") {
             if (!notifiedRef.current.has(id)) {
               notifiedRef.current.add(id);
+              emitStoryJobTerminal(body);
               setToast(body);
             }
           }

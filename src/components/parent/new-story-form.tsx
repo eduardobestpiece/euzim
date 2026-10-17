@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Wand2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,15 @@ import {
   type StoryType,
   type WordVolume,
 } from "@/lib/stories/storyteller-skill";
+
+type JobPoll = {
+  id: string;
+  status: string;
+  progress?: string | null;
+  storyId?: string | null;
+  redirectTo?: string | null;
+  error?: string | null;
+};
 
 const THEME_CHIPS = [
   "Vencer o medo de agulha",
@@ -60,6 +69,12 @@ export function NewStoryForm({
   const [step, setStep] = useState<Step>("theme");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const activeJobIdRef = useRef<string | null>(null);
+  const stepRef = useRef<Step>("theme");
+  const handledTerminalRef = useRef<Set<string>>(new Set());
+  activeJobIdRef.current = activeJobId;
+  stepRef.current = step;
 
   const [theme, setTheme] = useState("");
   const [storyType, setStoryType] = useState<StoryType>("aventura");
@@ -88,6 +103,91 @@ export function NewStoryForm({
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>(
     {},
   );
+
+  function leaveGenerating(next: {
+    error?: string | null;
+    status?: string | null;
+    step?: Step;
+  }) {
+    setActiveJobId(null);
+    setStep(next.step ?? "options");
+    setError(next.error ?? null);
+    setStatus(next.status ?? null);
+  }
+
+  function handleJobTerminal(job: JobPoll) {
+    if (!job?.id || handledTerminalRef.current.has(job.id)) return;
+    if (stepRef.current !== "generating") return;
+    const watching = activeJobIdRef.current;
+    if (!watching || job.id !== watching) return;
+    if (job.status !== "ready" && job.status !== "failed") return;
+    handledTerminalRef.current.add(job.id);
+
+    if (job.status === "ready") {
+      setActiveJobId(null);
+      setStatus(job.progress || "História pronta!");
+      const dest =
+        job.redirectTo ||
+        (job.storyId ? `/app/parent/stories/${job.storyId}` : null);
+      if (dest) {
+        window.location.assign(dest);
+        return;
+      }
+      leaveGenerating({
+        status: job.progress || "História pronta — abra a Biblioteca.",
+        step: "options",
+      });
+      return;
+    }
+
+    leaveGenerating({
+      error:
+        job.error ||
+        job.progress ||
+        "A geração falhou. Ajuste o tema e tente de novo.",
+      step: "options",
+    });
+  }
+
+  // Poll do job enfileirado — limpa MagicalLoading em ready|failed.
+  useEffect(() => {
+    if (!activeJobId || step !== "generating") return;
+    let cancelled = false;
+
+    async function pollOnce() {
+      try {
+        const res = await fetch(`/api/stories/jobs/${activeJobId}`);
+        if (!res.ok || cancelled) return;
+        const body = (await res.json()) as JobPoll;
+        if (body.status === "pending" || body.status === "running") {
+          if (body.progress) setStatus(body.progress);
+          return;
+        }
+        handleJobTerminal(body);
+      } catch {
+        /* próxima rodada */
+      }
+    }
+
+    void pollOnce();
+    const timer = window.setInterval(() => void pollOnce(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJobId, step]);
+
+  // Notifier global também libera o formulário (toast failed/ready).
+  useEffect(() => {
+    function onTerminal(e: Event) {
+      const job = (e as CustomEvent<JobPoll>).detail;
+      if (job) handleJobTerminal(job);
+    }
+    window.addEventListener("em-story-job-terminal", onTerminal);
+    return () => window.removeEventListener("em-story-job-terminal", onTerminal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const disabled = remaining <= 0;
 
@@ -217,6 +317,7 @@ export function NewStoryForm({
           return;
         }
         if (body.jobId) {
+          setActiveJobId(body.jobId);
           setStatus(
             body.message ||
               "História na fila. Pode sair — avisamos quando ficar pronta.",
@@ -504,6 +605,7 @@ export function NewStoryForm({
 
         {step === "generating" ? (
           <MagicalLoading
+            canLeave
             status={status}
             messages={[
               "História na fila…",
@@ -511,15 +613,30 @@ export function NewStoryForm({
               "Aplicando continuidade visual…",
               "Pintando cena Pixar…",
               "Criando o quiz inteligente…",
-              "Pode fechar esta aba — avisamos quando ficar pronta.",
             ]}
           />
         ) : null}
 
-        {error ? (
-          <p className="text-sm text-destructive" role="alert">
-            {error}
-          </p>
+        {error && step !== "generating" ? (
+          <div className="space-y-2" role="alert">
+            <p className="text-sm text-destructive">{error}</p>
+            {theme.trim() ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={pending || disabled}
+                onClick={() => {
+                  setError(null);
+                  generateStory();
+                }}
+              >
+                <Wand2 className="size-4" />
+                Tentar de novo
+              </Button>
+            ) : null}
+          </div>
         ) : null}
         {status && step !== "generating" ? (
           <p className="text-sm text-amber-800" role="status">

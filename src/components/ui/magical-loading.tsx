@@ -14,10 +14,13 @@ const DEFAULT_MESSAGES = [
 export function MagicalLoading({
   messages = DEFAULT_MESSAGES,
   status,
+  canLeave = false,
 }: {
   messages?: string[];
   /** Mensagem atual (ex.: “Pintando cena 3/7…”). Sobrescreve a rotação. */
   status?: string | null;
+  /** Quando true, não pede para manter a aba aberta (job em background). */
+  canLeave?: boolean;
 }) {
   const [tick, setTick] = useState(0);
 
@@ -60,7 +63,9 @@ export function MagicalLoading({
         {label}
       </p>
       <p className="relative mt-1 text-xs text-amber-900/70">
-        Pode levar alguns minutos — não feche esta aba.
+        {canLeave
+          ? "Pode levar alguns minutos — você pode sair; avisamos quando ficar pronta."
+          : "Pode levar alguns minutos — não feche esta aba."}
       </p>
     </div>
   );

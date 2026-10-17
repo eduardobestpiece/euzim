@@ -62,16 +62,18 @@ export async function generateStoryAction(
     return { error: "Cadastre a criança no onboarding antes de gerar." };
   }
 
-  const { story: drafted, pipeline, engine } = await generateStoryPipeline({
-    cast,
-    theme,
-    options: { userId: user.id },
-  });
+  const { story: drafted, pipeline, engine, error: pipelineError } =
+    await generateStoryPipeline({
+      cast,
+      theme,
+      options: { userId: user.id },
+    });
 
   if (engine === "mock-v1") {
     return {
       error:
-        "Não consegui gerar com a IA agora. Confira OPENAI_API_KEY e tente de novo.",
+        pipelineError ||
+        "Não consegui gerar com a IA agora. Tente de novo em instantes.",
     };
   }
 

@@ -100,37 +100,85 @@ export async function meteredChatCompletion(input: {
   status: number;
   json: Record<string, unknown>;
   content: string | null;
+  error?: string;
 }> {
   const key = process.env.OPENAI_API_KEY?.trim();
   if (!key) {
-    return { ok: false, status: 0, json: { error: "no key" }, content: null };
+    return {
+      ok: false,
+      status: 0,
+      json: { error: "no key" },
+      content: null,
+      error: "OPENAI_API_KEY ausente",
+    };
   }
   const model = String(input.body.model ?? "gpt-4o");
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input.body),
-    signal: AbortSignal.timeout(input.timeoutMs ?? 180_000),
-  });
-  const json = (await res.json()) as Record<string, unknown>;
-  const usage = json.usage as ChatUsage | undefined;
-  const est = estimateChatUsd(model, usage);
-  await recordUsageEvent({
-    userId: input.userId,
-    category: input.category,
-    model,
-    operation: input.operation,
-    promptTokens: est.prompt,
-    completionTokens: est.completion,
-    totalTokens: est.total,
-    estimatedUsd: est.usd,
-  });
-  const content =
-    (
-      json.choices as { message?: { content?: string } }[] | undefined
-    )?.[0]?.message?.content ?? null;
-  return { ok: res.ok, status: res.status, json, content };
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input.body),
+      signal: AbortSignal.timeout(input.timeoutMs ?? 180_000),
+    });
+    let json: Record<string, unknown> = {};
+    try {
+      json = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return {
+        ok: false,
+        status: res.status,
+        json: {},
+        content: null,
+        error: `OpenAI respondeu sem JSON (${res.status})`,
+      };
+    }
+    const usage = json.usage as ChatUsage | undefined;
+    const est = estimateChatUsd(model, usage);
+    await recordUsageEvent({
+      userId: input.userId,
+      category: input.category,
+      model,
+      operation: input.operation,
+      promptTokens: est.prompt,
+      completionTokens: est.completion,
+      totalTokens: est.total,
+      estimatedUsd: est.usd,
+    });
+    const content =
+      (
+        json.choices as { message?: { content?: string } }[] | undefined
+      )?.[0]?.message?.content ?? null;
+    const apiErr =
+      typeof (json.error as { message?: string } | undefined)?.message ===
+      "string"
+        ? (json.error as { message: string }).message
+        : undefined;
+    if (!res.ok) {
+      console.error(
+        `[openai] ${input.operation} ${model} HTTP ${res.status}`,
+        apiErr ?? json,
+      );
+    }
+    return {
+      ok: res.ok,
+      status: res.status,
+      json,
+      content,
+      error: res.ok ? undefined : apiErr || `OpenAI HTTP ${res.status}`,
+    };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Falha de rede na OpenAI";
+    console.error(`[openai] ${input.operation} ${model} throw`, message);
+    return {
+      ok: false,
+      status: 0,
+      json: { error: message },
+      content: null,
+      error: message,
+    };
+  }
 }

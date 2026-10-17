@@ -143,27 +143,29 @@ export async function runStoryGeneration(input: {
   if (!protagonistName) protagonistName = cast.childName;
 
   await notify("Contador Sábio escrevendo…");
-  const { story: drafted, pipeline, engine } = await generateStoryPipeline({
-    cast,
-    theme,
-    options: {
-      userId,
-      storyType: payload.storyType,
-      wordTarget: payload.wordTarget,
-      wordVolume: payload.wordVolume,
-      languageLevel: payload.languageLevel,
-      christianValues: payload.christianValues,
-      clarifyAnswers: payload.answers,
-      castNames,
-      protagonistName,
-    },
-  });
+  const { story: drafted, pipeline, engine, error: pipelineError } =
+    await generateStoryPipeline({
+      cast,
+      theme,
+      options: {
+        userId,
+        storyType: payload.storyType,
+        wordTarget: payload.wordTarget,
+        wordVolume: payload.wordVolume,
+        languageLevel: payload.languageLevel,
+        christianValues: payload.christianValues,
+        clarifyAnswers: payload.answers,
+        castNames,
+        protagonistName,
+      },
+    });
 
   if (engine === "mock-v1") {
     return {
       ok: false,
       error:
-        "Não consegui gerar com a IA agora. Confira OPENAI_API_KEY e tente de novo.",
+        pipelineError ||
+        "Não consegui gerar com a IA agora. Tente de novo em instantes.",
     };
   }
 

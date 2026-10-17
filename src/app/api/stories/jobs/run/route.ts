@@ -16,12 +16,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "jobId obrigatório." }, { status: 400 });
   }
 
-  const result = await processStoryJob(jobId);
-  if (!result.ok && result.status !== "running") {
+  try {
+    const result = await processStoryJob(jobId);
+    // Falha de negócio (job failed) → 200 para o poller/UI; 500 só em erro inesperado.
+    if (!result.ok && result.status === "failed") {
+      return NextResponse.json({
+        ok: false,
+        error: result.error,
+        status: "failed",
+      });
+    }
+    if (!result.ok && result.status !== "running") {
+      return NextResponse.json(
+        { ok: false, error: result.error, status: result.status },
+        { status: 500 },
+      );
+    }
+    return NextResponse.json({ ok: true, status: result.status });
+  } catch (err) {
+    console.error("[story_jobs/run] crash", jobId, err);
     return NextResponse.json(
-      { ok: false, error: result.error, status: result.status },
+      {
+        ok: false,
+        error: err instanceof Error ? err.message : "Worker crash",
+        status: "error",
+      },
       { status: 500 },
     );
   }
-  return NextResponse.json({ ok: true, status: result.status });
 }
