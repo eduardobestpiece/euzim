@@ -15,6 +15,7 @@ import { useImagePalette } from "@/hooks/use-image-palette";
 import {
   paletteBackgroundStyle,
   palettePaperStyle,
+  withAlpha,
   type StoryPalette,
 } from "@/lib/stories/palette";
 import type { QuizQuestion } from "@/lib/stories/quiz";
@@ -36,7 +37,7 @@ function ReadingShell({
 }) {
   return (
     <div
-      className="relative w-full overflow-hidden rounded-[1.75rem] transition-[background] duration-700 md:rounded-[2rem]"
+      className="relative min-h-[calc(100vh-4.5rem)] w-full overflow-hidden transition-[background] duration-700"
       style={paletteBackgroundStyle(palette)}
     >
       <div
@@ -44,7 +45,7 @@ function ReadingShell({
         style={{
           backgroundImage: `
             radial-gradient(circle at 18% 12%, ${palette.glow}, transparent 42%),
-            radial-gradient(circle at 88% 78%, ${palette.accent}33, transparent 38%)
+            radial-gradient(circle at 88% 78%, ${withAlpha(palette.accent, 0.2)}, transparent 38%)
           `,
         }}
         aria-hidden
@@ -87,8 +88,8 @@ function NavOrb({
       style={{
         background: palette.paper,
         color: palette.deep,
-        border: `2px solid ${palette.paperEdge}55`,
-        boxShadow: `0 10px 28px ${palette.deep}33`,
+        border: `2px solid ${withAlpha(palette.paperEdge, 0.33)}`,
+        boxShadow: `0 10px 28px ${withAlpha(palette.deep, 0.2)}`,
       }}
     >
       {side === "left" ? (
@@ -234,8 +235,8 @@ export function StoryFlipbook({
             style={{
               background: palette.paper,
               boxShadow: `
-                0 4px 0 ${palette.paperEdge}33,
-                0 22px 48px ${palette.deep}40,
+                0 4px 0 ${withAlpha(palette.paperEdge, 0.2)},
+                0 22px 48px ${withAlpha(palette.deep, 0.25)},
                 0 2px 0 rgba(255,255,255,0.35) inset
               `,
             }}
@@ -261,7 +262,7 @@ export function StoryFlipbook({
               <div
                 className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
                 style={{
-                  background: `linear-gradient(to top, ${palette.deep}33, transparent)`,
+                  background: `linear-gradient(to top, ${withAlpha(palette.deep, 0.2)}, transparent)`,
                 }}
                 aria-hidden
               />
@@ -271,7 +272,7 @@ export function StoryFlipbook({
             <div
               className="h-2 w-full"
               style={{
-                background: `linear-gradient(90deg, ${palette.accent}55, ${palette.soft}, ${palette.accent}55)`,
+                background: `linear-gradient(90deg, ${withAlpha(palette.accent, 0.33)}, ${palette.soft}, ${withAlpha(palette.accent, 0.33)})`,
               }}
               aria-hidden
             />
@@ -287,7 +288,7 @@ export function StoryFlipbook({
               >
                 <span
                   className="h-px w-8"
-                  style={{ background: `${palette.paperEdge}55` }}
+                  style={{ background: withAlpha(palette.paperEdge, 0.33) }}
                 />
                 <span
                   className="size-1.5 rounded-full"
@@ -295,7 +296,7 @@ export function StoryFlipbook({
                 />
                 <span
                   className="h-px w-8"
-                  style={{ background: `${palette.paperEdge}55` }}
+                  style={{ background: withAlpha(palette.paperEdge, 0.33) }}
                 />
               </div>
 
@@ -346,7 +347,7 @@ export function StoryFlipbook({
             className="storybook-page-enter relative z-10 rounded-[1.35rem] p-3 md:rounded-[1.6rem] md:p-4"
             style={{
               background: palette.paper,
-              boxShadow: `0 22px 48px ${palette.deep}40`,
+              boxShadow: `0 22px 48px ${withAlpha(palette.deep, 0.25)}`,
             }}
           >
             <div
@@ -386,7 +387,7 @@ export function StoryFlipbook({
             style={{
               background: palette.paper,
               color: palette.deep,
-              border: `2px solid ${palette.paperEdge}44`,
+              border: `2px solid ${withAlpha(palette.paperEdge, 0.27)}`,
             }}
           >
             {shareState === "idle" ? (

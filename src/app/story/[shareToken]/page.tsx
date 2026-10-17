@@ -15,11 +15,11 @@ export default async function PublicShareStoryPage({
   if (!story) notFound();
 
   return (
-    <main className="relative min-h-full">
-      <header className="sticky top-0 z-30 border-b border-border/40 bg-background/80 px-4 py-3 backdrop-blur md:px-6">
+    <main className="relative min-h-full bg-[#f3ebe0]">
+      <header className="sticky top-0 z-30 border-b border-border/40 bg-[#f3ebe0]/90 px-4 py-3 backdrop-blur md:px-6">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
-            <Sparkles className="size-4 shrink-0 text-amber-600" />
+            <Sparkles className="size-4 shrink-0 text-amber-700" />
             <span className="truncate font-heading text-sm font-semibold sm:text-base">
               Estúdio Mágico
             </span>

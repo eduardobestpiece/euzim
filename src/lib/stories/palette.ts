@@ -33,6 +33,23 @@ export function rgbToRgba(c: Rgb, a: number): string {
   return `rgba(${clamp(c.r)}, ${clamp(c.g)}, ${clamp(c.b)}, ${a})`;
 }
 
+/** Aceita `rgb(r g b)` / `rgb(r, g, b)` e devolve rgba com alpha 0–1. */
+export function withAlpha(cssColor: string, alpha: number): string {
+  const spaced = cssColor.match(
+    /rgba?\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)/,
+  );
+  if (spaced) {
+    return `rgba(${spaced[1]}, ${spaced[2]}, ${spaced[3]}, ${alpha})`;
+  }
+  const commas = cssColor.match(
+    /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/,
+  );
+  if (commas) {
+    return `rgba(${commas[1]}, ${commas[2]}, ${commas[3]}, ${alpha})`;
+  }
+  return cssColor;
+}
+
 function luminance(c: Rgb): number {
   const srgb = [c.r, c.g, c.b].map((v) => {
     const x = v / 255;
@@ -184,8 +201,8 @@ export function paletteBackgroundStyle(palette: StoryPalette): CSSProperties {
   return {
     background: `
       radial-gradient(ellipse 70% 45% at 12% 8%, ${palette.glow}, transparent 58%),
-      radial-gradient(ellipse 60% 40% at 92% 18%, ${palette.accent}44, transparent 52%),
-      radial-gradient(ellipse 80% 55% at 50% 100%, ${palette.deep}55, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 92% 18%, ${withAlpha(palette.accent, 0.27)}, transparent 52%),
+      radial-gradient(ellipse 80% 55% at 50% 100%, ${withAlpha(palette.deep, 0.33)}, transparent 60%),
       linear-gradient(168deg, ${palette.soft} 0%, ${palette.dominant} 42%, ${palette.deep} 100%)
     `,
   };
@@ -198,7 +215,7 @@ export function palettePaperStyle(palette: StoryPalette): CSSProperties {
     color: palette.text,
     boxShadow: `
       inset 0 1px 0 rgba(255,255,255,0.55),
-      inset 0 -18px 40px ${palette.deep}14
+      inset 0 -18px 40px ${withAlpha(palette.deep, 0.08)}
     `,
   };
 }
