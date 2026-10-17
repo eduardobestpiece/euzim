@@ -14,8 +14,11 @@ import {
   trackStoryJob,
 } from "@/components/parent/story-job-notifier";
 import { WallpaperDialog } from "@/components/parent/wallpaper-dialog";
+import { ShareProfileButton } from "@/components/social/share-profile-button";
+import { VisibilityToggle } from "@/components/social/visibility-toggle";
 import type { StoryUsage } from "@/lib/stories/usage";
 import type { ChildFamilyMeta } from "@/lib/characters/types";
+import type { StoryVisibility } from "@/lib/social/types";
 
 type StoryListItem = {
   id: string;
@@ -23,6 +26,7 @@ type StoryListItem = {
   coverImageUrl?: string | null;
   wallpaperImageUrl?: string | null;
   createdAt?: string;
+  visibility?: StoryVisibility;
 };
 
 export function ParentDashboard({
@@ -100,6 +104,12 @@ export function ParentDashboard({
               <Button asChild variant="outline">
                 <Link href="/app/kids">Abrir Kids</Link>
               </Button>
+              <Button asChild variant="outline">
+                <Link href="/app/social">Social</Link>
+              </Button>
+            </div>
+            <div className="flex justify-center pt-2 sm:justify-start">
+              <ShareProfileButton />
             </div>
           </div>
         </div>
@@ -169,21 +179,27 @@ export function ParentDashboard({
                         </div>
                       </Link>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/app/parent/stories/${story.id}`}>
-                          Ler
-                        </Link>
-                      </Button>
-                      {wallpaperUrl ? (
-                        <WallpaperDialog
-                          imageUrl={wallpaperUrl}
-                          title={story.title}
-                          triggerLabel="Wallpaper"
-                          size="sm"
-                          variant="secondary"
-                        />
-                      ) : null}
+                    <div className="mt-3 space-y-2">
+                      <VisibilityToggle
+                        storyId={story.id}
+                        initial={story.visibility ?? "private"}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/app/parent/stories/${story.id}`}>
+                            Ler
+                          </Link>
+                        </Button>
+                        {wallpaperUrl ? (
+                          <WallpaperDialog
+                            imageUrl={wallpaperUrl}
+                            title={story.title}
+                            triggerLabel="Wallpaper"
+                            size="sm"
+                            variant="secondary"
+                          />
+                        ) : null}
+                      </div>
                     </div>
                   </li>
                 );

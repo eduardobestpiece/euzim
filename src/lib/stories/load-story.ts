@@ -119,6 +119,7 @@ export async function listStoriesForParent(parentId: string): Promise<
     /** Última página (retrato wallpaper 1024×1536), se existir. */
     wallpaperImageUrl?: string | null;
     createdAt?: string;
+    visibility?: "private" | "friends" | "public";
   }[]
 > {
   const admin = createAdminClient();
@@ -129,7 +130,7 @@ export async function listStoriesForParent(parentId: string): Promise<
     try {
       const { data, error } = await db
         .from("stories")
-        .select("id, title, cover_image_url, created_at")
+        .select("id, title, cover_image_url, created_at, visibility, is_public")
         .eq("parent_id", parentId)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -149,13 +150,24 @@ export async function listStoriesForParent(parentId: string): Promise<
             wallpaperByStory.set(row.story_id, row.image_url);
           }
         }
-        return data.map((s) => ({
-          id: s.id,
-          title: s.title,
-          coverImageUrl: s.cover_image_url,
-          wallpaperImageUrl: wallpaperByStory.get(s.id) ?? s.cover_image_url,
-          createdAt: s.created_at,
-        }));
+        return data.map((s) => {
+          const visibility =
+            s.visibility === "private" ||
+            s.visibility === "friends" ||
+            s.visibility === "public"
+              ? s.visibility
+              : s.is_public
+                ? "public"
+                : "private";
+          return {
+            id: s.id,
+            title: s.title,
+            coverImageUrl: s.cover_image_url,
+            wallpaperImageUrl: wallpaperByStory.get(s.id) ?? s.cover_image_url,
+            createdAt: s.created_at,
+            visibility,
+          };
+        });
       }
     } catch {
       // mock
@@ -173,6 +185,7 @@ export async function listStoriesForParent(parentId: string): Promise<
         coverImageUrl: s.coverImageUrl,
         wallpaperImageUrl: last?.imageUrl || s.coverImageUrl,
         createdAt: s.createdAt,
+        visibility: "private" as const,
       };
     });
 }

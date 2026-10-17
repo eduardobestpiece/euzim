@@ -46,14 +46,17 @@ export async function loadStoryByShareToken(
       const { data: story, error } = await db
         .from("stories")
         .select(
-          "id, title, cover_image_url, text_content, questions_data, share_token, is_public, status",
+          "id, title, cover_image_url, text_content, questions_data, share_token, is_public, visibility, status",
         )
         .eq("share_token", shareToken)
-        .eq("is_public", true)
         .eq("status", "ready")
         .maybeSingle();
 
-      if (!error && story) {
+      const isPublicShare =
+        story &&
+        (story.visibility === "public" || story.is_public === true);
+
+      if (!error && isPublicShare && story) {
         const { data: images } = await db
           .from("story_images")
           .select("page_index, image_url, alt_text")

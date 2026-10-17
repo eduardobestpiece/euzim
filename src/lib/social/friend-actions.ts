@@ -1,0 +1,333 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth/get-user";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { loadPrimaryAuthors } from "@/lib/social/primary-author";
+import type {
+  FriendProfile,
+  FriendshipStatus,
+  PendingFriendship,
+} from "@/lib/social/types";
+
+async function dbClient() {
+  return createAdminClient() ?? (await createClient());
+}
+
+async function existingFriendship(
+  db: NonNullable<Awaited<ReturnType<typeof dbClient>>>,
+  a: string,
+  b: string,
+) {
+  const { data } = await db
+    .from("friendships")
+    .select("id, requester_id, addressee_id, status")
+    .or(
+      `and(requester_id.eq.${a},addressee_id.eq.${b}),and(requester_id.eq.${b},addressee_id.eq.${a})`,
+    )
+    .maybeSingle();
+  return data;
+}
+
+export async function requestFriendshipAction(
+  addresseeId: string,
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Não autenticado." };
+  if (addresseeId === user.id) return { error: "Não é possível adicionar a si mesmo." };
+
+  const db = await dbClient();
+  if (!db) return { error: "Banco indisponível." };
+
+  const existing = await existingFriendship(db, user.id, addresseeId);
+  if (existing?.status === "accepted") {
+    return { error: "Vocês já são amigos." };
+  }
+  if (existing?.status === "pending") {
+    return { error: "Pedido já enviado." };
+  }
+
+  if (existing?.status === "rejected") {
+    const { error } = await db
+      .from("friendships")
+      .update({
+        status: "pending",
+        requester_id: user.id,
+        addressee_id: addresseeId,
+      })
+      .eq("id", existing.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await db.from("friendships").insert({
+      requester_id: user.id,
+      addressee_id: addresseeId,
+      status: "pending",
+    });
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/app/social");
+  return { success: true };
+}
+
+export async function respondFriendshipAction(
+  friendshipId: string,
+  decision: "accepted" | "rejected",
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const db = await dbClient();
+  if (!db) return { error: "Banco indisponível." };
+
+  const { data: row, error: loadError } = await db
+    .from("friendships")
+    .select("id, addressee_id, status")
+    .eq("id", friendshipId)
+    .maybeSingle();
+
+  if (loadError) return { error: loadError.message };
+  if (!row) return { error: "Pedido não encontrado." };
+  if (row.addressee_id !== user.id) {
+    return { error: "Só o destinatário pode responder." };
+  }
+  if (row.status !== "pending") {
+    return { error: "Este pedido já foi respondido." };
+  }
+
+  const { error } = await db
+    .from("friendships")
+    .update({ status: decision })
+    .eq("id", friendshipId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/app/social");
+  revalidatePath("/invite");
+  return { success: true };
+}
+
+export async function searchParentByEmailAction(
+  email: string,
+): Promise<{ error?: string; profile?: FriendProfile }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const trimmed = email.trim().toLowerCase();
+  if (!trimmed || !trimmed.includes("@")) {
+    return { error: "Informe um e-mail válido." };
+  }
+
+  const db = await dbClient();
+  if (!db) return { error: "Banco indisponível." };
+
+  const { data: found, error } = await db
+    .from("users")
+    .select("id, email")
+    .ilike("email", trimmed)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!found) return { error: "Nenhuma conta encontrada com este e-mail." };
+  if (found.id === user.id) {
+    return {
+      profile: {
+        userId: found.id,
+        email: found.email ?? trimmed,
+        authorName: "Você",
+        authorAvatarUrl: null,
+        friendshipStatus: "self",
+      },
+    };
+  }
+
+  const authors = await loadPrimaryAuthors(db, [found.id]);
+  const author = authors.get(found.id) ?? { name: "Amigo", avatarUrl: null };
+  const friendship = await existingFriendship(db, user.id, found.id);
+
+  return {
+    profile: {
+      userId: found.id,
+      email: found.email ?? trimmed,
+      authorName: author.name,
+      authorAvatarUrl: author.avatarUrl,
+      friendshipStatus: (friendship?.status as FriendshipStatus) ?? "none",
+    },
+  };
+}
+
+export async function listPendingFriendRequests(
+  userId: string,
+): Promise<PendingFriendship[]> {
+  const db = await dbClient();
+  if (!db) return [];
+
+  const { data } = await db
+    .from("friendships")
+    .select("id, requester_id, created_at")
+    .eq("addressee_id", userId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  const rows = data ?? [];
+  const authors = await loadPrimaryAuthors(
+    db,
+    rows.map((r) => r.requester_id),
+  );
+
+  return rows.map((r) => {
+    const author = authors.get(r.requester_id) ?? {
+      name: "Amigo",
+      avatarUrl: null,
+    };
+    return {
+      id: r.id,
+      requesterId: r.requester_id,
+      authorName: author.name,
+      authorAvatarUrl: author.avatarUrl,
+      createdAt: r.created_at,
+    };
+  });
+}
+
+export async function createFriendInviteAction(): Promise<{
+  error?: string;
+  token?: string;
+  url?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const db = await dbClient();
+  if (!db) return { error: "Banco indisponível." };
+
+  const { data, error } = await db
+    .from("friend_invites")
+    .insert({ inviter_id: user.id, status: "pending" })
+    .select("token")
+    .single();
+
+  if (error || !data?.token) {
+    return { error: error?.message ?? "Falha ao criar convite." };
+  }
+
+  return {
+    token: data.token,
+    url: `/invite/${data.token}`,
+  };
+}
+
+export async function loadFriendInvite(token: string): Promise<{
+  error?: string;
+  invite?: {
+    token: string;
+    inviterId: string;
+    authorName: string;
+    authorAvatarUrl: string | null;
+    status: string;
+    expired: boolean;
+  };
+}> {
+  const db = await dbClient();
+  if (!db) return { error: "Banco indisponível." };
+
+  const { data, error } = await db
+    .from("friend_invites")
+    .select("token, inviter_id, status, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Convite não encontrado." };
+
+  const expired =
+    data.status !== "pending" ||
+    (data.expires_at ? new Date(data.expires_at).getTime() < Date.now() : false);
+
+  const authors = await loadPrimaryAuthors(db, [data.inviter_id]);
+  const author = authors.get(data.inviter_id) ?? {
+    name: "Amigo",
+    avatarUrl: null,
+  };
+
+  return {
+    invite: {
+      token: data.token,
+      inviterId: data.inviter_id,
+      authorName: author.name,
+      authorAvatarUrl: author.avatarUrl,
+      status: data.status,
+      expired,
+    },
+  };
+}
+
+export async function respondFriendInviteAction(
+  token: string,
+  decision: "accepted" | "rejected",
+): Promise<{ error?: string; success?: boolean }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const db = await dbClient();
+  if (!db) return { error: "Banco indisponível." };
+
+  const { data: invite, error: loadError } = await db
+    .from("friend_invites")
+    .select("id, inviter_id, status, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (loadError) return { error: loadError.message };
+  if (!invite) return { error: "Convite não encontrado." };
+  if (invite.status !== "pending") {
+    return { error: "Este convite já foi usado." };
+  }
+  if (
+    invite.expires_at &&
+    new Date(invite.expires_at).getTime() < Date.now()
+  ) {
+    await db
+      .from("friend_invites")
+      .update({ status: "expired" })
+      .eq("id", invite.id);
+    return { error: "Convite expirado." };
+  }
+  if (invite.inviter_id === user.id) {
+    return { error: "Você não pode aceitar o próprio convite." };
+  }
+
+  if (decision === "rejected") {
+    const { error } = await db
+      .from("friend_invites")
+      .update({ status: "rejected", accepted_by: user.id })
+      .eq("id", invite.id);
+    if (error) return { error: error.message };
+    return { success: true };
+  }
+
+  const existing = await existingFriendship(db, user.id, invite.inviter_id);
+  if (!existing) {
+    const { error: friendError } = await db.from("friendships").insert({
+      requester_id: invite.inviter_id,
+      addressee_id: user.id,
+      status: "accepted",
+    });
+    if (friendError) return { error: friendError.message };
+  } else if (existing.status !== "accepted") {
+    const { error: friendError } = await db
+      .from("friendships")
+      .update({ status: "accepted" })
+      .eq("id", existing.id);
+    if (friendError) return { error: friendError.message };
+  }
+
+  const { error } = await db
+    .from("friend_invites")
+    .update({ status: "accepted", accepted_by: user.id })
+    .eq("id", invite.id);
+
+  if (error) return { error: error.message };
+  revalidatePath("/app/social");
+  return { success: true };
+}
