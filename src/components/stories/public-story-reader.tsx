@@ -9,7 +9,7 @@ type Page = {
   altText: string;
 };
 
-/** Leitura pública — mesmo modo livro (setas / swipe / página ilustrada). */
+/** Leitura pública — modo imersivo (imagem fixa + texto rolável). */
 export function PublicStoryReader({
   title,
   pages,
@@ -31,6 +31,9 @@ export function PublicStoryReader({
       shareToken={shareToken}
       readingMode
       showTitle
+      backHref="/signup"
+      backLabel="Criar minha história"
+      showShare
     />
   );
 }

@@ -1,2 +1,2 @@
 /** Versão única da plataforma — exibida ao lado de Sair / headers. */
-export const PLATFORM_BUILD = "v24";
+export const PLATFORM_BUILD = "v25";

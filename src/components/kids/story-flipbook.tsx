@@ -5,16 +5,15 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactNode,
   type TouchEvent,
 } from "react";
-import { Check, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuizTherapy } from "@/components/kids/quiz-therapy";
 import { useImagePalette } from "@/hooks/use-image-palette";
 import {
   paletteBackgroundStyle,
-  palettePaperStyle,
   withAlpha,
   type StoryPalette,
 } from "@/lib/stories/palette";
@@ -28,76 +27,42 @@ type Page = {
   altText: string;
 };
 
-function ReadingShell({
-  palette,
-  children,
-}: {
-  palette: StoryPalette;
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className="relative min-h-[calc(100vh-4.5rem)] w-full overflow-hidden transition-[background] duration-700"
-      style={paletteBackgroundStyle(palette)}
-    >
-      <div
-        className="pointer-events-none absolute inset-0 opacity-50"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 18% 12%, ${palette.glow}, transparent 42%),
-            radial-gradient(circle at 88% 78%, ${withAlpha(palette.accent, 0.2)}, transparent 38%)
-          `,
-        }}
-        aria-hidden
-      />
-      {/* textura suave de papel no ambiente */}
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-multiply"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E")`,
-        }}
-        aria-hidden
-      />
-      <div className="relative z-10">{children}</div>
-    </div>
-  );
-}
-
-function NavOrb({
-  label,
-  disabled,
-  onClick,
-  side,
+function TitleBlock({
+  title,
+  subtitle,
   palette,
 }: {
-  label: string;
-  disabled: boolean;
-  onClick: () => void;
-  side: "left" | "right";
+  title: string;
+  subtitle: string;
   palette: StoryPalette;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={`fixed top-1/2 z-40 hidden size-12 -translate-y-1/2 items-center justify-center rounded-full shadow-lg transition duration-300 hover:scale-105 disabled:pointer-events-none disabled:opacity-25 md:flex ${
-        side === "left" ? "left-3 lg:left-5" : "right-3 lg:right-5"
-      }`}
-      style={{
-        background: palette.paper,
-        color: palette.deep,
-        border: `2px solid ${withAlpha(palette.paperEdge, 0.33)}`,
-        boxShadow: `0 10px 28px ${withAlpha(palette.deep, 0.2)}`,
-      }}
-    >
-      {side === "left" ? (
-        <ChevronLeft className="size-6" />
-      ) : (
-        <ChevronRight className="size-6" />
-      )}
-    </button>
+    <header className="mx-auto w-full max-w-lg shrink-0 px-3 pb-2 pt-1 text-center">
+      <div
+        className="rounded-2xl px-4 py-3 shadow-md"
+        style={{
+          background: palette.paper,
+          color: palette.text,
+          boxShadow: `0 8px 24px ${withAlpha(palette.deep, 0.28)}`,
+        }}
+      >
+        <p
+          className="font-story-body text-[0.65rem] font-extrabold uppercase tracking-[0.2em]"
+          style={{ color: palette.textMuted }}
+        >
+          Estúdio Mágico
+        </p>
+        <h1 className="font-story-display mt-1 text-[1.35rem] font-semibold leading-tight tracking-tight md:text-2xl">
+          {title}
+        </h1>
+        <p
+          className="font-story-body mt-1 text-sm font-bold"
+          style={{ color: palette.textMuted }}
+        >
+          {subtitle}
+        </p>
+      </div>
+    </header>
   );
 }
 
@@ -110,6 +75,9 @@ export function StoryFlipbook({
   shareToken,
   readingMode: _readingMode = true,
   showTitle = true,
+  backHref,
+  backLabel = "Voltar para a biblioteca",
+  showShare = false,
 }: {
   storyId: string;
   title: string;
@@ -117,14 +85,18 @@ export function StoryFlipbook({
   questions: QuizQuestion[];
   initialQuizScore?: number | null;
   shareToken?: string | null;
-  /** Mantido por compatibilidade — layout sempre usa página de livro. */
   readingMode?: boolean;
   showTitle?: boolean;
+  /** Link único de saída do modo imersivo. */
+  backHref?: string | null;
+  backLabel?: string;
+  showShare?: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const [shareState, setShareState] = useState<"idle" | "copied" | "shared">(
     "idle",
   );
+  const textScrollRef = useRef<HTMLDivElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
@@ -151,6 +123,11 @@ export function StoryFlipbook({
     return () => window.removeEventListener("keydown", onKey);
   }, [goPrev, goNext]);
 
+  // Nova página → texto volta ao topo (imagem permanece fixa)
+  useEffect(() => {
+    textScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [index]);
+
   function onTouchStart(e: TouchEvent) {
     const t = e.changedTouches[0];
     touchStartX.current = t.clientX;
@@ -164,7 +141,7 @@ export function StoryFlipbook({
     const dy = t.clientY - touchStartY.current;
     touchStartX.current = null;
     touchStartY.current = null;
-    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
+    if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy)) return;
     if (dx < 0) goNext();
     else goPrev();
   }
@@ -180,181 +157,166 @@ export function StoryFlipbook({
 
   const atLastStoryPage = index >= pages.length - 1;
   const nextDisabled = isQuiz || (!hasQuiz && atLastStoryPage);
+  const subtitle = isQuiz
+    ? "Hora do quiz!"
+    : `Página ${index + 1} de ${pages.length}`;
 
   return (
-    <ReadingShell palette={palette}>
+    <div
+      className="fixed inset-0 z-50 flex flex-col"
+      style={paletteBackgroundStyle(palette)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
       <div
-        className="relative mx-auto flex w-full max-w-3xl flex-col px-3 py-4 md:px-5 md:py-6"
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-      >
-        <NavOrb
-          label="Página anterior"
-          disabled={index === 0}
-          onClick={goPrev}
-          side="left"
-          palette={palette}
-        />
-        <NavOrb
-          label="Próxima página"
-          disabled={nextDisabled}
-          onClick={goNext}
-          side="right"
-          palette={palette}
-        />
+        className="pointer-events-none absolute inset-0 opacity-45"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 18% 12%, ${palette.glow}, transparent 42%),
+            radial-gradient(circle at 88% 78%, ${withAlpha(palette.accent, 0.22)}, transparent 38%)
+          `,
+        }}
+        aria-hidden
+      />
+
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        {backHref ? (
+          <div className="flex shrink-0 items-center px-3 pb-1 pt-3 md:px-5">
+            <Button
+              asChild
+              variant="secondary"
+              size="sm"
+              className="font-story-body gap-1.5 border-0 shadow-sm"
+              style={{ background: palette.paper, color: palette.text }}
+            >
+              <Link href={backHref}>
+                <ArrowLeft className="size-3.5" />
+                {backLabel}
+              </Link>
+            </Button>
+          </div>
+        ) : null}
 
         {showTitle ? (
-          <header className="mb-4 space-y-1.5 px-2 text-center md:mb-5">
-            <p
-              className="font-story-body text-[0.7rem] font-extrabold uppercase tracking-[0.22em]"
-              style={{ color: palette.deep, opacity: 0.75 }}
-            >
-              Estúdio Mágico
-            </p>
-            <h1
-              className="font-story-display text-[1.65rem] font-semibold leading-tight tracking-tight md:text-3xl"
-              style={{ color: palette.deep }}
-            >
-              {title}
-            </h1>
-            <p
-              className="font-story-body text-sm font-bold tracking-wide"
-              style={{ color: palette.deep, opacity: 0.72 }}
-            >
-              {isQuiz
-                ? "Hora do quiz!"
-                : `Página ${index + 1} de ${pages.length}`}
-            </p>
-          </header>
+          <TitleBlock title={title} subtitle={subtitle} palette={palette} />
         ) : null}
 
         {!isQuiz && page ? (
-          <article
-            key={`page-${index}-${page.imageUrl}`}
-            className="storybook-page-enter overflow-hidden rounded-[1.35rem] shadow-2xl md:rounded-[1.6rem]"
-            style={{
-              background: palette.paper,
-              boxShadow: `
-                0 4px 0 ${withAlpha(palette.paperEdge, 0.2)},
-                0 22px 48px ${withAlpha(palette.deep, 0.25)},
-                0 2px 0 rgba(255,255,255,0.35) inset
-              `,
-            }}
-          >
-            {/* Ilustração — sem sticky, sem overlap com o texto */}
-            <figure className="relative m-0 overflow-hidden">
-              {page.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={page.imageUrl}
-                  src={page.imageUrl}
-                  alt={page.altText}
-                  crossOrigin="anonymous"
-                  className="aspect-[4/3] w-full object-cover md:aspect-[16/10]"
-                />
-              ) : (
-                <div
-                  className="aspect-[4/3] w-full md:aspect-[16/10]"
-                  style={{ background: palette.soft }}
-                />
-              )}
-              {/* Vinheta só dentro da imagem — não invade o papel */}
+          <>
+            {/* Imagem fixa — nunca rola */}
+            <figure className="mx-auto w-full max-w-3xl shrink-0 px-3 md:px-5">
               <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-16"
+                className="overflow-hidden rounded-t-[1.35rem] shadow-lg md:rounded-t-[1.6rem]"
                 style={{
-                  background: `linear-gradient(to top, ${withAlpha(palette.deep, 0.2)}, transparent)`,
+                  boxShadow: `0 12px 32px ${withAlpha(palette.deep, 0.28)}`,
+                }}
+              >
+                {page.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={page.imageUrl}
+                    src={page.imageUrl}
+                    alt={page.altText}
+                    crossOrigin="anonymous"
+                    className="aspect-[16/10] max-h-[38vh] w-full object-cover sm:max-h-[42vh]"
+                  />
+                ) : (
+                  <div
+                    className="aspect-[16/10] max-h-[38vh] w-full sm:max-h-[42vh]"
+                    style={{ background: palette.soft }}
+                  />
+                )}
+              </div>
+              <div
+                className="h-1.5 w-full"
+                style={{
+                  background: `linear-gradient(90deg, ${withAlpha(palette.accent, 0.35)}, ${palette.soft}, ${withAlpha(palette.accent, 0.35)})`,
                 }}
                 aria-hidden
               />
             </figure>
 
-            {/* Faixa de transição ilustração → papel */}
+            {/* Só o texto rola */}
             <div
-              className="h-2 w-full"
-              style={{
-                background: `linear-gradient(90deg, ${withAlpha(palette.accent, 0.33)}, ${palette.soft}, ${withAlpha(palette.accent, 0.33)})`,
-              }}
-              aria-hidden
-            />
-
-            {/* Papel opaco — tipografia com contraste forte */}
-            <div
-              className="storybook-text-enter relative px-5 pb-7 pt-5 md:px-9 md:pb-9 md:pt-6"
-              style={palettePaperStyle(palette)}
+              ref={textScrollRef}
+              className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto overscroll-contain px-3 pb-4 md:px-5"
             >
               <div
-                className="mb-4 flex items-center justify-center gap-2"
-                aria-hidden
+                key={`text-${index}`}
+                className="storybook-text-enter rounded-b-[1.35rem] px-5 pb-6 pt-5 md:rounded-b-[1.6rem] md:px-8 md:pb-8"
+                style={{
+                  backgroundColor: palette.paper,
+                  color: palette.text,
+                  boxShadow: `
+                    0 18px 40px ${withAlpha(palette.deep, 0.22)},
+                    inset 0 1px 0 rgba(255,255,255,0.55)
+                  `,
+                }}
               >
-                <span
-                  className="h-px w-8"
-                  style={{ background: withAlpha(palette.paperEdge, 0.33) }}
-                />
-                <span
-                  className="size-1.5 rounded-full"
-                  style={{ background: palette.accent }}
-                />
-                <span
-                  className="h-px w-8"
-                  style={{ background: withAlpha(palette.paperEdge, 0.33) }}
-                />
-              </div>
-
-              <p
-                className="font-story-body whitespace-pre-wrap text-[1.125rem] font-medium leading-[1.75] md:text-[1.3rem] md:leading-[1.8]"
-                style={{ color: palette.text }}
-              >
-                {page.text}
-              </p>
-
-              <div className="mt-8 flex items-center justify-between gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="font-story-body gap-1 border-0 shadow-sm"
-                  style={{
-                    background: `${palette.soft}`,
-                    color: palette.text,
-                  }}
-                  disabled={index === 0}
-                  onClick={goPrev}
+                <div
+                  className="mb-4 flex items-center justify-center gap-2"
+                  aria-hidden
                 >
-                  <ChevronLeft className="size-4" />
-                  Voltar
-                </Button>
-                <p
-                  className="font-story-body hidden text-xs font-bold tracking-[0.18em] uppercase sm:block"
-                  style={{ color: palette.textMuted }}
-                >
-                  {index + 1} / {pages.length}
+                  <span
+                    className="h-px w-8"
+                    style={{ background: withAlpha(palette.paperEdge, 0.33) }}
+                  />
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{ background: palette.accent }}
+                  />
+                  <span
+                    className="h-px w-8"
+                    style={{ background: withAlpha(palette.paperEdge, 0.33) }}
+                  />
+                </div>
+
+                <p className="font-story-body whitespace-pre-wrap text-[1.125rem] font-semibold leading-[1.75] md:text-[1.28rem] md:leading-[1.8]">
+                  {page.text}
                 </p>
-                <Button
-                  type="button"
-                  className="font-story-body gap-1 border-0 shadow-md"
-                  style={{ background: palette.deep, color: palette.paper }}
-                  onClick={goNext}
-                  disabled={nextDisabled && !hasQuiz}
-                >
-                  {atLastStoryPage && hasQuiz ? "Quiz" : "Próxima"}
-                  <ChevronRight className="size-4" />
-                </Button>
+
+                <div className="mt-8 flex items-center justify-between gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="font-story-body gap-1 border-0 shadow-sm"
+                    style={{
+                      background: palette.soft,
+                      color: palette.text,
+                    }}
+                    disabled={index === 0}
+                    onClick={goPrev}
+                  >
+                    <ChevronLeft className="size-4" />
+                    Anterior
+                  </Button>
+                  <p
+                    className="font-story-body text-xs font-bold tracking-[0.18em] uppercase"
+                    style={{ color: palette.textMuted }}
+                  >
+                    {index + 1} / {pages.length}
+                  </p>
+                  <Button
+                    type="button"
+                    className="font-story-body gap-1 border-0 shadow-md"
+                    style={{ background: palette.deep, color: palette.paper }}
+                    onClick={goNext}
+                    disabled={nextDisabled && !hasQuiz}
+                  >
+                    {atLastStoryPage && hasQuiz ? "Quiz" : "Próxima"}
+                    <ChevronRight className="size-4" />
+                  </Button>
+                </div>
               </div>
             </div>
-          </article>
+          </>
         ) : (
-          <div
-            key="quiz"
-            className="storybook-page-enter relative z-10 rounded-[1.35rem] p-3 md:rounded-[1.6rem] md:p-4"
-            style={{
-              background: palette.paper,
-              boxShadow: `0 22px 48px ${withAlpha(palette.deep, 0.25)}`,
-            }}
-          >
+          <div className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-3 pb-6 md:px-5">
             <div
-              className="rounded-3xl p-1"
+              className="storybook-page-enter rounded-[1.35rem] p-3 md:rounded-[1.6rem] md:p-4"
               style={{
-                background: palette.panelBg,
-                border: `1px solid ${palette.panelBorder}`,
+                background: palette.paper,
+                boxShadow: `0 22px 48px ${withAlpha(palette.deep, 0.25)}`,
               }}
             >
               <QuizTherapy
@@ -363,51 +325,51 @@ export function StoryFlipbook({
                 questions={questions}
                 initialScore={initialQuizScore}
               />
-            </div>
-            <div className="mt-4 flex justify-center">
-              <Button
-                type="button"
-                variant="outline"
-                className="font-story-body border-0"
-                style={{ background: palette.soft, color: palette.text }}
-                onClick={() => setIndex(pages.length - 1)}
-              >
-                Rever história
-              </Button>
+              <div className="mt-4 flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="font-story-body border-0"
+                  style={{ background: palette.soft, color: palette.text }}
+                  onClick={() => setIndex(pages.length - 1)}
+                >
+                  Rever história
+                </Button>
+              </div>
             </div>
           </div>
         )}
-
-        {shareToken ? (
-          <button
-            type="button"
-            aria-label="Compartilhar história"
-            onClick={() => void onShare()}
-            className="fixed bottom-5 right-5 z-50 flex size-12 items-center justify-center rounded-full shadow-lg transition hover:scale-105 active:scale-95"
-            style={{
-              background: palette.paper,
-              color: palette.deep,
-              border: `2px solid ${withAlpha(palette.paperEdge, 0.27)}`,
-            }}
-          >
-            {shareState === "idle" ? (
-              <Share2 className="size-5" />
-            ) : (
-              <Check className="size-5" style={{ color: palette.accent }} />
-            )}
-          </button>
-        ) : null}
-
-        {shareState !== "idle" ? (
-          <p
-            role="status"
-            className="font-story-body fixed bottom-20 right-5 z-50 rounded-full px-3 py-1 text-xs font-semibold shadow"
-            style={{ background: palette.paper, color: palette.text }}
-          >
-            {shareState === "copied" ? "Link copiado" : "Compartilhado"}
-          </p>
-        ) : null}
       </div>
-    </ReadingShell>
+
+      {showShare && shareToken ? (
+        <button
+          type="button"
+          aria-label="Compartilhar história"
+          onClick={() => void onShare()}
+          className="fixed bottom-5 right-5 z-50 flex size-12 items-center justify-center rounded-full shadow-lg transition hover:scale-105 active:scale-95"
+          style={{
+            background: palette.paper,
+            color: palette.deep,
+            border: `2px solid ${withAlpha(palette.paperEdge, 0.27)}`,
+          }}
+        >
+          {shareState === "idle" ? (
+            <Share2 className="size-5" />
+          ) : (
+            <Check className="size-5" style={{ color: palette.accent }} />
+          )}
+        </button>
+      ) : null}
+
+      {shareState !== "idle" ? (
+        <p
+          role="status"
+          className="font-story-body fixed bottom-20 right-5 z-50 rounded-full px-3 py-1 text-xs font-semibold shadow"
+          style={{ background: palette.paper, color: palette.text }}
+        >
+          {shareState === "copied" ? "Link copiado" : "Compartilhado"}
+        </p>
+      ) : null}
+    </div>
   );
 }
