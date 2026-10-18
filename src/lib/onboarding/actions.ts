@@ -64,7 +64,7 @@ function emptyState(): OnboardingState {
     childPhotos: [],
     friend: null,
     friendPhotos: [],
-    wizardStep: "welcome",
+    wizardStep: "child",
     completed: false,
   };
 }
