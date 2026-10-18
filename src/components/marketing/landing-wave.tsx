@@ -1,33 +1,39 @@
 import { cn } from "@/lib/utils";
 
-/** Separador ondulado entre seções da landing. */
+export type LandingBand =
+  | "paper"
+  | "cream"
+  | "mint"
+  | "lavender"
+  | "peach"
+  | "offer";
+
+/**
+ * Ponte fluida entre duas faixas.
+ * Fundo = seção de cima; onda SVG = seção de baixo (sem corte reto).
+ */
 export function LandingWave({
-  variant = "cream",
-  flip = false,
+  from,
+  to,
   className,
 }: {
-  variant?: "cream" | "mint" | "lavender" | "white" | "peach";
-  flip?: boolean;
+  from: LandingBand;
+  to: LandingBand;
   className?: string;
 }) {
   return (
     <div
       aria-hidden
-      className={cn(
-        "landing-wave",
-        `is-${variant}`,
-        flip && "is-flip",
-        className,
-      )}
+      className={cn("landing-wave", `from-${from}`, `to-${to}`, className)}
     >
       <svg
-        viewBox="0 0 1440 72"
+        viewBox="0 0 1440 120"
         preserveAspectRatio="none"
         className="landing-wave-svg"
       >
         <path
-          d="M0 36C180 64 360 72 720 44C1080 16 1260 8 1440 32V72H0Z"
-          fill="currentColor"
+          className="landing-wave-fill"
+          d="M0 52C240 108 480 120 720 76C960 32 1200 12 1440 44V120H0V52Z"
         />
       </svg>
     </div>

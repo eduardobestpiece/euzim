@@ -167,28 +167,28 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
         </div>
       </section>
 
-      <LandingWave variant="white" />
+      <LandingWave from="paper" to="cream" />
       <LandingStoryBook />
 
-      <LandingWave variant="mint" />
+      <LandingWave from="cream" to="mint" />
       <LandingRoadmap />
 
-      <LandingWave variant="peach" />
+      <LandingWave from="mint" to="offer" />
       <LandingOffer />
 
-      <LandingWave variant="lavender" />
+      <LandingWave from="offer" to="lavender" />
       <LandingAntiWoke />
 
-      <LandingWave variant="mint" />
+      <LandingWave from="lavender" to="mint" />
       <LandingCast />
 
-      <LandingWave variant="cream" />
+      <LandingWave from="mint" to="cream" />
       <LandingFaq />
 
-      <LandingWave variant="lavender" />
+      <LandingWave from="cream" to="lavender" />
       <LandingFinalCta />
 
-      <LandingWave variant="white" />
+      <LandingWave from="lavender" to="paper" />
       <LandingFooter />
     </div>
   );
