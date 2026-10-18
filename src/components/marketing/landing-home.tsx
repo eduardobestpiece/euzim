@@ -69,68 +69,66 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
           className="landing-hero-atmosphere pointer-events-none absolute inset-0"
         />
 
-        <div className="landing-hero-grid relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-5 px-5 pb-10 pt-2 sm:gap-6 sm:px-8 md:gap-4 md:px-12 md:pb-16 lg:gap-8">
-          <h1 className="landing-hero-title font-story-display max-w-[24ch] text-[1.85rem] leading-[1.05] text-[var(--euzim-ink)] uppercase sm:text-4xl md:text-[2.7rem] lg:text-[3.05rem]">
-            Crie histórias onde a sua criança é a protagonista
-          </h1>
+        <div className="landing-hero-grid relative z-10 mx-auto grid w-full max-w-6xl flex-1 items-center gap-5 px-5 pb-10 pt-2 sm:gap-6 sm:px-8 md:gap-8 md:px-12 md:pb-16 lg:gap-10">
+          <div className="landing-hero-stack">
+            <h1 className="landing-hero-title font-story-display max-w-[24ch] text-[1.85rem] leading-[1.05] text-[var(--euzim-ink)] uppercase sm:text-4xl md:text-[2.7rem] lg:text-[3.05rem]">
+              Crie histórias onde a sua criança é a protagonista
+            </h1>
+
+            <div className="landing-hero-aside flex w-full flex-col items-start gap-5 md:gap-5">
+              <div className="landing-hero-copy font-story-body max-w-md space-y-3 text-[0.98rem] leading-relaxed text-[var(--euzim-ink-soft)] sm:text-base md:max-w-lg md:text-[1.05rem]">
+                <p>
+                  Se o celular prende a atenção com jogos e vídeos sem fim, o{" "}
+                  <InlineBrand /> constrói o{" "}
+                  <span className="font-semibold text-[var(--euzim-ink)]">
+                    hábito da leitura
+                  </span>{" "}
+                  com histórias em que{" "}
+                  <span className="font-semibold text-[var(--euzim-ink)]">
+                    ela é a protagonista
+                  </span>
+                  .
+                </p>
+                <p className="landing-hero-reassure">
+                  E não se preocupe: você não precisa criar nenhuma história.{" "}
+                  <mark className="landing-mark">nós fazemos tudo por você</mark>.
+                </p>
+              </div>
+
+              <div className="landing-hero-cta flex flex-col items-start gap-2.5 pt-1">
+                <Button
+                  asChild
+                  size="lg"
+                  className="landing-cta-btn h-auto min-h-12 gap-2 rounded-2xl border-0 px-5 py-3.5 font-story-body text-[0.95rem] font-semibold sm:text-base"
+                >
+                  <Link href="/signup">
+                    <span className="landing-cta-star" aria-hidden />
+                    Começar a Criar Histórias · {priceLabel}
+                  </Link>
+                </Button>
+                <p className="landing-trust font-story-body text-[0.78rem] tracking-wide text-[var(--euzim-ink-soft)] sm:text-[0.82rem]">
+                  Compra Segura - Stripe - Acesso Imediato
+                </p>
+              </div>
+
+              {mockMode ? (
+                <p className="font-story-body text-sm text-amber-800/90">
+                  Modo demo - configure `.env.local` para login real.
+                </p>
+              ) : null}
+            </div>
+          </div>
 
           <div className="landing-hero-visual relative mx-auto w-full max-w-lg md:mx-0 md:max-w-none">
-            <div
-              aria-hidden
-              className="landing-hero-blob pointer-events-none absolute -inset-[12%] -z-10"
-            />
             <Image
               src="/brand/euzim-hero-book-breakout.png"
               alt="Crianças, um cachorro e um gato saltando de um livro mágico, como se saíssem da história"
               width={1152}
               height={864}
               priority
-              className="landing-hero-image h-auto w-full object-contain object-bottom"
+              className="landing-hero-image h-auto w-full bg-transparent object-contain object-bottom"
               sizes="(max-width: 768px) 92vw, 48vw"
             />
-          </div>
-
-          <div className="landing-hero-aside flex flex-col items-start gap-5 md:gap-6">
-            <div className="landing-hero-copy font-story-body max-w-md space-y-3 text-[0.98rem] leading-relaxed text-[var(--euzim-ink-soft)] sm:text-base md:max-w-lg md:text-[1.05rem]">
-              <p>
-                Se o celular prende a atenção com jogos e vídeos sem fim, o{" "}
-                <InlineBrand /> constrói o{" "}
-                <span className="font-semibold text-[var(--euzim-ink)]">
-                  hábito da leitura
-                </span>{" "}
-                com histórias em que{" "}
-                <span className="font-semibold text-[var(--euzim-ink)]">
-                  ela é a protagonista
-                </span>
-                .
-              </p>
-              <p className="landing-hero-reassure">
-                E não se preocupe: você não precisa criar nenhuma história.{" "}
-                <mark className="landing-mark">nós fazemos tudo por você</mark>.
-              </p>
-            </div>
-
-            <div className="landing-hero-cta flex flex-col items-start gap-2.5 pt-1">
-              <Button
-                asChild
-                size="lg"
-                className="landing-cta-btn h-auto min-h-12 gap-2 rounded-2xl border-0 px-5 py-3.5 font-story-body text-[0.95rem] font-semibold sm:text-base"
-              >
-                <Link href="/signup">
-                  <span className="landing-cta-star" aria-hidden />
-                  Começar a Criar Histórias · {priceLabel}
-                </Link>
-              </Button>
-              <p className="landing-trust font-story-body text-[0.78rem] tracking-wide text-[var(--euzim-ink-soft)] sm:text-[0.82rem]">
-                Compra Segura - Stripe - Acesso Imediato
-              </p>
-            </div>
-
-            {mockMode ? (
-              <p className="font-story-body text-sm text-amber-800/90">
-                Modo demo - configure `.env.local` para login real.
-              </p>
-            ) : null}
           </div>
         </div>
 
