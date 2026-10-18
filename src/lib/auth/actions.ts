@@ -53,7 +53,8 @@ export async function signUpAction(
       friendPhotos: [],
       completed: false,
     });
-    redirect("/onboarding");
+    const nextMock = String(formData.get("next") ?? "").trim();
+    redirect(nextMock.startsWith("/") ? nextMock : "/onboarding");
   }
 
   const supabase = await createClient();

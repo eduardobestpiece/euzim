@@ -18,31 +18,31 @@ export type StoryPlan = {
   kind: "subscription" | "extra_story";
 };
 
-/** R$ 24,90/mês → 4 histórias */
+/** R$ 24,90/mês → 2 personagens + 4 histórias */
 export const STARTER_SUBSCRIPTION: StoryPlan = {
   id: "starter-monthly",
   planId: "starter",
-  name: "Plano Essencial",
+  name: "Para Aventureiros",
   priceBrl: 24.9,
   priceCents: 2490,
   interval: "month",
   storiesPerMonth: 4,
   includedCharacters: 2,
-  description: "4 histórias por mês para começar a rotina mágica.",
+  description: "2 personagens e 4 histórias por mês para começar a aventura.",
   kind: "subscription",
 };
 
-/** R$ 49,90/mês → 10 histórias */
+/** R$ 49,90/mês → 2 avatares + 10 histórias */
 export const FAMILY_SUBSCRIPTION: StoryPlan = {
   id: "family-monthly",
   planId: "family",
-  name: "Plano Família",
+  name: "Para Realizadores",
   priceBrl: 49.9,
   priceCents: 4990,
   interval: "month",
   storiesPerMonth: 10,
-  includedCharacters: 3,
-  description: "10 histórias/mês para a família criar juntas.",
+  includedCharacters: 2,
+  description: "2 avatares e 10 histórias por mês para criar sem freio.",
   kind: "subscription",
 };
 

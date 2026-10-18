@@ -4,6 +4,7 @@ import { BrandLogo } from "@/components/brand/brand-logo";
 import { InlineBrand } from "@/components/brand/inline-brand";
 import { LandingStoryBook } from "@/components/marketing/landing-story-book";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
+import { LandingOffer } from "@/components/marketing/landing-offer";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -79,10 +80,10 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
               className="landing-hero-blob pointer-events-none absolute -inset-[12%] -z-10"
             />
             <Image
-              src="/brand/euzim-hero-serena-boy.png"
-              alt="Serena e um menino correndo juntos, protagonistas de uma história Euzim"
-              width={878}
-              height={665}
+              src="/brand/euzim-hero-book-breakout.jpg"
+              alt="Crianças, um cachorro e um gato saltando de um livro mágico, como se saíssem da história"
+              width={1152}
+              height={864}
               priority
               className="landing-hero-image h-auto w-full object-contain object-bottom"
               sizes="(max-width: 768px) 92vw, 48vw"
@@ -164,6 +165,8 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
       <LandingStoryBook />
 
       <LandingRoadmap />
+
+      <LandingOffer />
     </div>
   );
 }

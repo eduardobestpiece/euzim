@@ -12,6 +12,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import { normalizeSecurityPin } from "@/lib/onboarding/pin-format";
+import { parseSelectedPlanId } from "@/lib/billing/selected-plan";
 import type { OnboardingState } from "@/lib/auth/types";
 
 /** Geração Pixar no fluxo pode passar de 60s. */
@@ -28,13 +29,14 @@ function OnboardingFallback() {
 async function OnboardingPageInner({
   searchParams,
 }: {
-  searchParams: Promise<{ resume?: string; paid?: string }>;
+  searchParams: Promise<{ resume?: string; paid?: string; plan?: string }>;
 }) {
   // cacheComponents: connection() opts into request time — dentro de Suspense
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   const params = await searchParams;
+  const preferredPlan = parseSelectedPlanId(params.plan);
   const resumeAfterPay =
     params.resume === "1" ||
     params.resume === "generating" ||
@@ -113,6 +115,7 @@ async function OnboardingPageInner({
           mockMode={!isSupabaseConfigured() || user.isMock}
           resetMode={resetMode}
           resumeAfterPay={resumeAfterPay}
+          preferredPlan={preferredPlan}
         />
       </div>
     </main>
@@ -122,7 +125,7 @@ async function OnboardingPageInner({
 export default function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ resume?: string; paid?: string }>;
+  searchParams: Promise<{ resume?: string; paid?: string; plan?: string }>;
 }) {
   return (
     <Suspense fallback={<OnboardingFallback />}>

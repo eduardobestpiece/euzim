@@ -58,8 +58,14 @@ import {
   FAMILY_SUBSCRIPTION,
   STARTER_SUBSCRIPTION,
 } from "@/lib/billing/plans";
+import {
+  parseSelectedPlanId,
+  type SelectedPlanId,
+} from "@/lib/billing/selected-plan";
 import { formatBrl } from "@/lib/billing/character-packs";
 import { startPlanCheckoutAction } from "@/lib/stripe/checkout-actions";
+
+const PREFERRED_PLAN_KEY = "euzim_preferred_plan";
 
 type Step =
   | "welcome"
@@ -135,12 +141,15 @@ export function OnboardingWizard({
   mockMode,
   resetMode = null,
   resumeAfterPay = false,
+  preferredPlan = null,
 }: {
   initialState: OnboardingState | null;
   mockMode: boolean;
   resetMode?: "full" | "reuse" | null;
   /** Após Stripe: retoma em generating com fotos salvas. */
   resumeAfterPay?: boolean;
+  /** Plano pré-escolhido na oferta da landing → checkout direto. */
+  preferredPlan?: SelectedPlanId | null;
 }) {
   const isReuse = resetMode === "reuse";
   const [step, setStep] = useState<Step>(() =>
@@ -148,6 +157,30 @@ export function OnboardingWizard({
   );
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const autoCheckoutRef = useRef(false);
+  const [lockedPlan, setLockedPlan] = useState<SelectedPlanId | null>(
+    preferredPlan,
+  );
+
+  useEffect(() => {
+    if (preferredPlan) {
+      setLockedPlan(preferredPlan);
+      try {
+        window.sessionStorage.setItem(PREFERRED_PLAN_KEY, preferredPlan);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    try {
+      const stored = parseSelectedPlanId(
+        window.sessionStorage.getItem(PREFERRED_PLAN_KEY),
+      );
+      if (stored) setLockedPlan(stored);
+    } catch {
+      /* ignore */
+    }
+  }, [preferredPlan]);
   const [childPhotos, setChildPhotos] = useState<SlotPhotos>(() =>
     photosToMap(initialState?.childPhotos ?? initialState?.photos),
   );
@@ -449,7 +482,7 @@ export function OnboardingWizard({
     });
   }
 
-  function choosePlan(planId: "starter" | "family") {
+  function choosePlan(planId: SelectedPlanId) {
     setError(null);
     startTransition(async () => {
       const result = await startPlanCheckoutAction(planId, {
@@ -457,6 +490,7 @@ export function OnboardingWizard({
       });
       if (result.error) {
         setError(result.error);
+        autoCheckoutRef.current = false;
         return;
       }
       if (result.url) {
@@ -464,6 +498,7 @@ export function OnboardingWizard({
         return;
       }
       setError("Checkout sem URL.");
+      autoCheckoutRef.current = false;
     });
   }
 
@@ -492,10 +527,26 @@ export function OnboardingWizard({
     });
   }
 
-  // Resume Stripe: gera Pixar automaticamente no step generating
+  // Oferta da landing: pula a escolha e abre o Stripe do plano já selecionado
+  useEffect(() => {
+    if (step !== "choose-plan") return;
+    if (!lockedPlan) return;
+    if (resumeAfterPay) return;
+    if (autoCheckoutRef.current) return;
+    autoCheckoutRef.current = true;
+    choosePlan(lockedPlan);
+  }, [step, lockedPlan, resumeAfterPay]);
+
+  // Após pagamento: limpa intenção de plano e gera Pixar
   const resumeGenRef = useRef(false);
   useEffect(() => {
     if (!resumeAfterPay) return;
+    setLockedPlan(null);
+    try {
+      window.sessionStorage.removeItem(PREFERRED_PLAN_KEY);
+    } catch {
+      /* ignore */
+    }
     if (step !== "generating") return;
     if (resumeGenRef.current) return;
     resumeGenRef.current = true;
@@ -932,43 +983,62 @@ export function OnboardingWizard({
       {step === "choose-plan" ? (
         <Card className="shadow-none">
           <CardHeader>
-            <CardTitle>Escolha seu plano</CardTitle>
+            <CardTitle>
+              {lockedPlan
+                ? "Abrindo o pagamento do seu plano"
+                : "Escolha seu plano"}
+            </CardTitle>
             <CardDescription>
-              Suas fotos já estão salvas. Assine para liberar a geração dos
-              avatares Pixar.
+              {lockedPlan
+                ? `Suas fotos já estão salvas. Vamos direto para o checkout de ${
+                    lockedPlan === "starter"
+                      ? STARTER_SUBSCRIPTION.name
+                      : FAMILY_SUBSCRIPTION.name
+                  }.`
+                : "Suas fotos já estão salvas. Assine para liberar a geração dos avatares Pixar."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-3">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => choosePlan("starter")}
-                className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
-              >
-                <p className="font-heading text-lg font-semibold">
-                  {STARTER_SUBSCRIPTION.name}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {formatBrl(STARTER_SUBSCRIPTION.priceBrl)}/mês ·{" "}
-                  {STARTER_SUBSCRIPTION.description}
-                </p>
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => choosePlan("family")}
-                className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
-              >
-                <p className="font-heading text-lg font-semibold">
-                  {FAMILY_SUBSCRIPTION.name}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}/mês ·{" "}
-                  {FAMILY_SUBSCRIPTION.description}
-                </p>
-              </button>
-            </div>
+            {lockedPlan && !error ? (
+              <MagicalLoading
+                messages={[
+                  "Preparando o pagamento…",
+                  "Atrelando o plano à sua conta…",
+                  "Quase lá — Stripe a caminho…",
+                ]}
+              />
+            ) : (
+              <div className="grid gap-3">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => choosePlan("starter")}
+                  className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+                >
+                  <p className="font-heading text-lg font-semibold">
+                    {STARTER_SUBSCRIPTION.name}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatBrl(STARTER_SUBSCRIPTION.priceBrl)}/mês ·{" "}
+                    {STARTER_SUBSCRIPTION.description}
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => choosePlan("family")}
+                  className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+                >
+                  <p className="font-heading text-lg font-semibold">
+                    {FAMILY_SUBSCRIPTION.name}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}/mês ·{" "}
+                    {FAMILY_SUBSCRIPTION.description}
+                  </p>
+                </button>
+              </div>
+            )}
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
             ) : null}
