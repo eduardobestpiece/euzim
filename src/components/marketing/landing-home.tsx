@@ -123,8 +123,8 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
             <Image
               src="/brand/euzim-hero-book-breakout.png"
               alt="Crianças, um cachorro e um gato saltando de um livro mágico, como se saíssem da história"
-              width={1152}
-              height={864}
+              width={1131}
+              height={809}
               priority
               className="landing-hero-image h-auto w-full bg-transparent object-contain object-bottom"
               sizes="(max-width: 768px) 92vw, 48vw"
