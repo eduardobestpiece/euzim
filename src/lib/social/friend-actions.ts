@@ -108,53 +108,108 @@ export async function respondFriendshipAction(
   return { success: true };
 }
 
+async function profileFromUserRow(
+  db: NonNullable<Awaited<ReturnType<typeof dbClient>>>,
+  viewerId: string,
+  found: { id: string; email: string | null },
+): Promise<FriendProfile> {
+  if (found.id === viewerId) {
+    return {
+      userId: found.id,
+      email: found.email ?? "",
+      authorName: "Você",
+      authorAvatarUrl: null,
+      friendshipStatus: "self",
+    };
+  }
+  const authors = await loadPrimaryAuthors(db, [found.id]);
+  const author = authors.get(found.id) ?? { name: "Amigo", avatarUrl: null };
+  const friendship = await existingFriendship(db, viewerId, found.id);
+  return {
+    userId: found.id,
+    email: found.email ?? "",
+    authorName: author.name,
+    authorAvatarUrl: author.avatarUrl,
+    friendshipStatus: (friendship?.status as FriendshipStatus) ?? "none",
+  };
+}
+
 export async function searchParentByEmailAction(
   email: string,
 ): Promise<{ error?: string; profile?: FriendProfile }> {
+  return searchParentByQueryAction(email);
+}
+
+/** Busca amigo por e-mail ou nome (full_name / display_name). */
+export async function searchParentByQueryAction(
+  query: string,
+): Promise<{ error?: string; profile?: FriendProfile; profiles?: FriendProfile[] }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Não autenticado." };
 
-  const trimmed = email.trim().toLowerCase();
-  if (!trimmed || !trimmed.includes("@")) {
-    return { error: "Informe um e-mail válido." };
+  const trimmed = query.trim();
+  if (trimmed.length < 2) {
+    return { error: "Digite pelo menos 2 caracteres." };
   }
 
   const db = await dbClient();
   if (!db) return { error: "Banco indisponível." };
 
-  const { data: found, error } = await db
-    .from("users")
-    .select("id, email")
-    .ilike("email", trimmed)
-    .maybeSingle();
-
-  if (error) return { error: error.message };
-  if (!found) return { error: "Nenhuma conta encontrada com este e-mail." };
-  if (found.id === user.id) {
-    return {
-      profile: {
-        userId: found.id,
-        email: found.email ?? trimmed,
-        authorName: "Você",
-        authorAvatarUrl: null,
-        friendshipStatus: "self",
-      },
-    };
+  if (trimmed.includes("@")) {
+    const email = trimmed.toLowerCase();
+    const { data: found, error } = await db
+      .from("users")
+      .select("id, email")
+      .ilike("email", email)
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!found) return { error: "Nenhuma conta encontrada com este e-mail." };
+    const profile = await profileFromUserRow(db, user.id, found);
+    return { profile, profiles: [profile] };
   }
 
-  const authors = await loadPrimaryAuthors(db, [found.id]);
-  const author = authors.get(found.id) ?? { name: "Amigo", avatarUrl: null };
-  const friendship = await existingFriendship(db, user.id, found.id);
+  const pattern = `%${trimmed}%`;
+  const [{ data: byFull }, { data: byDisplay }, { data: byEmail }] =
+    await Promise.all([
+      db
+        .from("users")
+        .select("id, email")
+        .ilike("full_name", pattern)
+        .limit(8),
+      db
+        .from("users")
+        .select("id, email")
+        .ilike("display_name", pattern)
+        .limit(8),
+      db.from("users").select("id, email").ilike("email", pattern).limit(8),
+    ]);
 
-  return {
-    profile: {
-      userId: found.id,
-      email: found.email ?? trimmed,
-      authorName: author.name,
-      authorAvatarUrl: author.avatarUrl,
-      friendshipStatus: (friendship?.status as FriendshipStatus) ?? "none",
-    },
-  };
+  const merged = new Map<string, { id: string; email: string | null }>();
+  for (const row of [...(byFull ?? []), ...(byDisplay ?? []), ...(byEmail ?? [])]) {
+    if (row?.id) merged.set(row.id, row);
+  }
+  if (merged.size === 0) {
+    return { error: "Nenhuma conta encontrada com este nome ou e-mail." };
+  }
+
+  const profiles = await Promise.all(
+    [...merged.values()]
+      .slice(0, 8)
+      .map((row) => profileFromUserRow(db, user.id, row)),
+  );
+  return { profile: profiles[0], profiles };
+}
+
+export async function countAcceptedFriends(userId: string): Promise<number> {
+  const db = await dbClient();
+  if (!db) return 0;
+  const { data, error } = await db
+    .from("friendships")
+    .select("id")
+    .eq("status", "accepted")
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+  if (error) return 0;
+  return data?.length ?? 0;
 }
 
 export async function listPendingFriendRequests(

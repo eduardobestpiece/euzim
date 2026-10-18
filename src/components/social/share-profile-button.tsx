@@ -42,7 +42,7 @@ export function ShareProfileButton() {
         }}
       >
         <Share2 className="size-3.5" />
-        {pending ? "Gerando…" : "Compartilhar Perfil"}
+        {pending ? "Gerando…" : "Compartilhar perfil"}
       </Button>
       {url ? (
         <p className="flex items-start gap-1.5 break-all text-xs text-muted-foreground">

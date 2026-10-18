@@ -58,7 +58,7 @@ export function PendingGiftsBanner({ compact = false }: { compact?: boolean }) {
         <Gift className="mt-0.5 size-4 shrink-0 text-amber-800" />
         <div className="space-y-1">
           <p className="text-sm font-medium text-amber-950">
-            Alguém se cadastrou pelo seu link — escolha seu presente
+            Alguém se cadastrou pelo seu link  -  escolha seu presente
           </p>
           {!compact ? (
             <p className="text-xs text-amber-900/80">

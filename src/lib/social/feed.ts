@@ -106,13 +106,15 @@ export async function loadSocialFeed(viewerId: string): Promise<FeedPost[]> {
   const likeCount = new Map<string, number>();
   const likedByMe = new Set<string>();
   if (storyIds.length > 0) {
-    const { data: likes } = await db
+    const { data: likes, error: likesError } = await db
       .from("story_likes")
       .select("story_id, user_id")
       .in("story_id", storyIds);
-    for (const like of likes ?? []) {
-      likeCount.set(like.story_id, (likeCount.get(like.story_id) ?? 0) + 1);
-      if (like.user_id === viewerId) likedByMe.add(like.story_id);
+    if (!likesError) {
+      for (const like of likes ?? []) {
+        likeCount.set(like.story_id, (likeCount.get(like.story_id) ?? 0) + 1);
+        if (like.user_id === viewerId) likedByMe.add(like.story_id);
+      }
     }
   }
 
@@ -158,3 +160,22 @@ export async function loadSocialFeed(viewerId: string): Promise<FeedPost[]> {
 
   return interleaveFeed(friendPosts, publicPosts);
 }
+
+const FEED_PAGE_SIZE = 8;
+
+export async function loadSocialFeedPage(
+  viewerId: string,
+  offset = 0,
+  limit = FEED_PAGE_SIZE,
+): Promise<{ posts: FeedPost[]; hasMore: boolean; nextOffset: number }> {
+  const all = await loadSocialFeed(viewerId);
+  const slice = all.slice(offset, offset + limit);
+  const nextOffset = offset + slice.length;
+  return {
+    posts: slice,
+    hasMore: nextOffset < all.length,
+    nextOffset,
+  };
+}
+
+export { FEED_PAGE_SIZE };

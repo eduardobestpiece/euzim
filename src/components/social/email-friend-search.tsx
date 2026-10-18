@@ -5,45 +5,64 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AddFriendButton } from "@/components/social/add-friend-button";
-import { searchParentByEmailAction } from "@/lib/social/friend-actions";
+import { searchParentByQueryAction } from "@/lib/social/friend-actions";
 import type { FriendProfile } from "@/lib/social/types";
 
-export function EmailFriendSearch() {
-  const [email, setEmail] = useState("");
-  const [profile, setProfile] = useState<FriendProfile | null>(null);
+export function EmailFriendSearch({
+  title = "Buscar amigo",
+  placeholder = "Nome ou e-mail",
+  compact = false,
+}: {
+  title?: string;
+  placeholder?: string;
+  compact?: boolean;
+} = {}) {
+  const [query, setQuery] = useState("");
+  const [profiles, setProfiles] = useState<FriendProfile[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   return (
-    <section className="space-y-3 rounded-2xl border border-border/70 p-4">
-      <div>
-        <h2 className="font-heading text-lg font-semibold">Buscar amigo</h2>
-        <p className="text-sm text-muted-foreground">
-          Encontre outra família pelo e-mail da conta dos pais.
-        </p>
-      </div>
+    <section
+      className={
+        compact
+          ? "space-y-3"
+          : "space-y-3 rounded-2xl border border-border/70 p-4"
+      }
+    >
+      {!compact ? (
+        <div>
+          <h2 className="font-heading text-lg font-semibold">{title}</h2>
+          <p className="text-sm text-muted-foreground">
+            Encontre outra família pelo nome ou e-mail da conta dos pais.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm font-medium">{title}</p>
+      )}
       <form
         className="flex flex-col gap-2 sm:flex-row"
         onSubmit={(e) => {
           e.preventDefault();
           setError(null);
-          setProfile(null);
+          setProfiles([]);
           startTransition(async () => {
-            const result = await searchParentByEmailAction(email);
+            const result = await searchParentByQueryAction(query);
             if (result.error) {
               setError(result.error);
               return;
             }
-            setProfile(result.profile ?? null);
+            setProfiles(result.profiles ?? (result.profile ? [result.profile] : []));
           });
         }}
       >
         <Input
-          type="email"
-          placeholder="amigo@email.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          type="search"
+          placeholder={placeholder}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           required
+          minLength={2}
         />
         <Button type="submit" disabled={pending} className="gap-1.5">
           <Search className="size-3.5" />
@@ -51,8 +70,11 @@ export function EmailFriendSearch() {
         </Button>
       </form>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {profile ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/40 p-3">
+      {profiles.map((profile) => (
+        <div
+          key={profile.userId}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/40 p-3"
+        >
           <div className="flex items-center gap-3">
             {profile.authorAvatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -79,7 +101,7 @@ export function EmailFriendSearch() {
             <AddFriendButton userId={profile.userId} />
           )}
         </div>
-      ) : null}
+      ))}
     </section>
   );
 }
