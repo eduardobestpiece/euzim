@@ -274,7 +274,7 @@ async function loadState(): Promise<OnboardingState> {
       }
     | undefined;
 
-  // Só aceita avatar gerado — nunca foto crua do upload
+  // Só aceita avatar gerado - nunca foto crua do upload
   if (isPixarGeneratedUrl(pixar?.child_hero)) {
     state.childAvatarUrl = pixar!.child_hero!;
   } else if (isPixarGeneratedUrl(row.avatarUrl)) {
@@ -287,6 +287,14 @@ async function loadState(): Promise<OnboardingState> {
     state.friendAvatarUrl = pixar!.friend_hero!;
   } else if (!isPixarGeneratedUrl(state.friendAvatarUrl)) {
     state.friendAvatarUrl = null;
+  }
+
+  if (pixar?.child_face_sheet) state.childFaceSheetUrl = pixar.child_face_sheet;
+  if (pixar?.child_body_sheet) state.childBodySheetUrl = pixar.child_body_sheet;
+  if (pixar?.friend_sheet) state.friendSheetUrl = pixar.friend_sheet;
+
+  if (row.preferences.avatar_redo_used === true) {
+    state.avatarRedoUsed = true;
   }
 
   const friendMeta = row.preferences.friend as
@@ -858,6 +866,102 @@ export async function generateAvatarsAction(input?: {
     childBodySheetUrl: childPixar.bodySheetUrl,
     friendSheetUrl: friendPixar.faceSheetUrl,
     engine: childPixar.engine,
+  };
+}
+
+/** Confirma versões A/B após Refazer e marca o Refazer como usado. */
+export async function confirmAvatarSelectionAction(input: {
+  childAvatarUrl: string;
+  friendAvatarUrl: string;
+  childFaceSheetUrl?: string | null;
+  childBodySheetUrl?: string | null;
+  friendSheetUrl?: string | null;
+  engine?: string | null;
+  markRedoUsed?: boolean;
+}): Promise<OnboardingActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  if (
+    !isPixarGeneratedUrl(input.childAvatarUrl) ||
+    !isPixarGeneratedUrl(input.friendAvatarUrl)
+  ) {
+    return { error: "Selecione avatares Pixar válidos." };
+  }
+
+  const state = await loadState();
+  state.childAvatarUrl = input.childAvatarUrl;
+  state.friendAvatarUrl = input.friendAvatarUrl;
+  state.childFaceSheetUrl = input.childFaceSheetUrl ?? null;
+  state.childBodySheetUrl = input.childBodySheetUrl ?? null;
+  state.friendSheetUrl = input.friendSheetUrl ?? null;
+  if (input.markRedoUsed) state.avatarRedoUsed = true;
+  await writeMockOnboarding(state);
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      const childId = row?.childId;
+      if (childId) {
+        const prefs = { ...(row?.preferences ?? {}) };
+        const prevPixar =
+          prefs.pixar && typeof prefs.pixar === "object"
+            ? (prefs.pixar as Record<string, unknown>)
+            : {};
+        prefs.pixar = {
+          ...prevPixar,
+          child_hero: input.childAvatarUrl,
+          child_face_sheet:
+            input.childFaceSheetUrl ?? prevPixar.child_face_sheet ?? null,
+          child_body_sheet:
+            input.childBodySheetUrl ?? prevPixar.child_body_sheet ?? null,
+          friend_hero: input.friendAvatarUrl,
+          friend_sheet:
+            input.friendSheetUrl ?? prevPixar.friend_sheet ?? null,
+          engine: input.engine ?? prevPixar.engine ?? null,
+          selected_at: new Date().toISOString(),
+        };
+        if (input.markRedoUsed) prefs.avatar_redo_used = true;
+
+        await db
+          .from("children")
+          .update({
+            avatar_url: input.childAvatarUrl,
+            preferences: prefs,
+          })
+          .eq("id", childId);
+
+        const { data: existingChars } = await db
+          .from("characters")
+          .select("id, is_primary")
+          .eq("parent_id", user.id);
+        const primary = existingChars?.find((c) => c.is_primary);
+        if (primary) {
+          await db
+            .from("characters")
+            .update({ avatar_url: input.childAvatarUrl })
+            .eq("id", primary.id);
+        }
+        const friendExisting = existingChars?.find((c) => !c.is_primary);
+        if (friendExisting) {
+          await db
+            .from("characters")
+            .update({ avatar_url: input.friendAvatarUrl })
+            .eq("id", friendExisting.id);
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    childAvatarUrl: input.childAvatarUrl,
+    friendAvatarUrl: input.friendAvatarUrl,
+    childFaceSheetUrl: input.childFaceSheetUrl ?? undefined,
+    childBodySheetUrl: input.childBodySheetUrl ?? undefined,
+    friendSheetUrl: input.friendSheetUrl ?? undefined,
+    engine: input.engine ?? undefined,
   };
 }
 

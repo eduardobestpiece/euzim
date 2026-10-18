@@ -53,37 +53,37 @@ const FACE_COPY: Record<
   { labelChild: string; tipChild: string; labelFriend: string; tipFriend: string }
 > = {
   front: {
-    labelChild: "Rosto — frente",
+    labelChild: "Rosto  -  frente",
     tipChild: "Olhando para a câmera, rosto bem iluminado",
-    labelFriend: "Detalhe — frente",
+    labelFriend: "Detalhe  -  frente",
     tipFriend: "Pet/brinquedo de frente, bem nítido",
   },
   three_quarter_right: {
-    labelChild: "Rosto — ¾ direita",
+    labelChild: "Rosto  -  ¾ direita",
     tipChild: "Levemente virado para a direita",
     labelFriend: "¾ direita",
     tipFriend: "Gire um pouco para a direita",
   },
   profile_right: {
-    labelChild: "Rosto — perfil direita",
+    labelChild: "Rosto  -  perfil direita",
     tipChild: "Perfil completo do lado direito",
     labelFriend: "Perfil direita",
     tipFriend: "Perfil direito do pet/brinquedo",
   },
   three_quarter_left: {
-    labelChild: "Rosto — ¾ esquerda",
+    labelChild: "Rosto  -  ¾ esquerda",
     tipChild: "Levemente virado para a esquerda",
     labelFriend: "¾ esquerda",
     tipFriend: "Gire um pouco para a esquerda",
   },
   profile_left: {
-    labelChild: "Rosto — perfil esquerda",
+    labelChild: "Rosto  -  perfil esquerda",
     tipChild: "Perfil completo do lado esquerdo",
     labelFriend: "Perfil esquerda",
     tipFriend: "Perfil esquerdo do pet/brinquedo",
   },
   back: {
-    labelChild: "Rosto — costas / nuca",
+    labelChild: "Rosto  -  costas / nuca",
     tipChild: "De costas, mostrando cabelo e nuca",
     labelFriend: "Costas",
     tipFriend: "Vista de trás",
@@ -95,39 +95,39 @@ const BODY_COPY: Record<
   { labelChild: string; tipChild: string; labelFriend: string; tipFriend: string }
 > = {
   front: {
-    labelChild: "Corpo — frente",
+    labelChild: "Corpo  -  frente",
     tipChild: "Corpo inteiro de frente",
-    labelFriend: "Corpo inteiro — frente",
+    labelFriend: "Corpo inteiro  -  frente",
     tipFriend: "Pet/brinquedo inteiro de frente",
   },
   three_quarter_right: {
-    labelChild: "Corpo — ¾ direita",
+    labelChild: "Corpo  -  ¾ direita",
     tipChild: "Corpo inteiro, ¾ à direita",
-    labelFriend: "Corpo inteiro — ¾ direita",
+    labelFriend: "Corpo inteiro  -  ¾ direita",
     tipFriend: "Inteiro, levemente à direita",
   },
   profile_right: {
-    labelChild: "Corpo — perfil direita",
+    labelChild: "Corpo  -  perfil direita",
     tipChild: "Corpo inteiro de perfil direito",
-    labelFriend: "Corpo inteiro — perfil direita",
+    labelFriend: "Corpo inteiro  -  perfil direita",
     tipFriend: "Inteiro de perfil direito",
   },
   three_quarter_left: {
-    labelChild: "Corpo — ¾ esquerda",
+    labelChild: "Corpo  -  ¾ esquerda",
     tipChild: "Corpo inteiro, ¾ à esquerda",
-    labelFriend: "Corpo inteiro — ¾ esquerda",
+    labelFriend: "Corpo inteiro  -  ¾ esquerda",
     tipFriend: "Inteiro, levemente à esquerda",
   },
   profile_left: {
-    labelChild: "Corpo — perfil esquerda",
+    labelChild: "Corpo  -  perfil esquerda",
     tipChild: "Corpo inteiro de perfil esquerdo",
-    labelFriend: "Corpo inteiro — perfil esquerda",
+    labelFriend: "Corpo inteiro  -  perfil esquerda",
     tipFriend: "Inteiro de perfil esquerdo",
   },
   back: {
-    labelChild: "Corpo — costas",
+    labelChild: "Corpo  -  costas",
     tipChild: "Corpo inteiro de costas",
-    labelFriend: "Corpo inteiro — costas",
+    labelFriend: "Corpo inteiro  -  costas",
     tipFriend: "Inteiro de costas",
   },
 };
@@ -152,7 +152,7 @@ export const CHILD_PHOTO_SLOTS: PhotoSlotDef[] = [
 /** Pet/brinquedo: só 6 de corpo inteiro */
 export const FRIEND_PHOTO_SLOTS: PhotoSlotDef[] = buildSlots("body");
 
-/** @deprecated use CHILD_PHOTO_SLOTS — mantido para imports legados */
+/** @deprecated use CHILD_PHOTO_SLOTS  -  mantido para imports legados */
 export const PHOTO_SLOTS = CHILD_PHOTO_SLOTS;
 
 export const REQUIRED_CHILD_PHOTO_COUNT = CHILD_PHOTO_SLOTS.length; // 12

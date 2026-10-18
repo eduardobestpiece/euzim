@@ -21,7 +21,7 @@ function blockCopy(e: SyntheticEvent) {
   e.stopPropagation();
 }
 
-/** Imagem só para visualização — bloqueia menu, arraste e seleção. */
+/** Imagem só para visualização  -  bloqueia menu, arraste e seleção. */
 function ProtectedImage({
   src,
   alt,
@@ -97,10 +97,10 @@ export function AvatarStudyDialog({
       >
         <DialogHeader>
           <DialogTitle className="font-heading text-xl">
-            Estudo de personagem — {subject.name}
+            Estudo de personagem  -  {subject.name}
           </DialogTitle>
           <DialogDescription>
-            {subject.kindLabel}. Folhas em várias poses — só visualização (sem
+            {subject.kindLabel}. Folhas em várias poses  -  só visualização (sem
             baixar, copiar ou imprimir).
           </DialogDescription>
         </DialogHeader>
@@ -131,7 +131,7 @@ export function AvatarStudyDialog({
               <StudySection key={sheet.url} label={sheet.label}>
                 <ProtectedImage
                   src={sheet.url}
-                  alt={`${sheet.label} — ${subject.name}`}
+                  alt={`${sheet.label}  -  ${subject.name}`}
                   className="w-full border border-border/60 bg-muted/30 object-contain"
                 />
               </StudySection>

@@ -75,19 +75,36 @@ type Step =
   | "preview"
   | "pin";
 
-/** PIN por último — só então onboarding_completed. Começa em Avatar do filho. */
-const STEPS: { id: Step; label: string }[] = [
-  { id: "child", label: "Filho" },
-  { id: "child-photos", label: "Fotos" },
-  { id: "friend", label: "Amigo" },
-  { id: "friend-photos", label: "Fotos" },
-  { id: "choose-plan", label: "Plano" },
-  { id: "generating", label: "Magia" },
-  { id: "preview", label: "Pronto" },
-  { id: "pin", label: "PIN★" },
+/** Fluxo completo (Plano/Magia/Pronto/PIN fora da tab bar). */
+const FLOW_STEPS: Step[] = [
+  "child",
+  "child-photos",
+  "friend",
+  "friend-photos",
+  "choose-plan",
+  "generating",
+  "preview",
+  "pin",
 ];
 
-const STEP_IDS = new Set(STEPS.map((s) => s.id));
+/** Abas visíveis: só Sobre, Criança, Amigo, Fotos. */
+const TAB_STEPS: { id: Step; label: string }[] = [
+  { id: "child", label: "Sobre" },
+  { id: "child-photos", label: "Criança" },
+  { id: "friend", label: "Amigo" },
+  { id: "friend-photos", label: "Fotos" },
+];
+
+const STEP_IDS = new Set(FLOW_STEPS);
+
+type AvatarBundle = {
+  childAvatarUrl: string;
+  friendAvatarUrl: string;
+  childFaceSheetUrl: string | null;
+  childBodySheetUrl: string | null;
+  friendSheetUrl: string | null;
+  engine: string | null;
+};
 
 function photosToMap(
   photos: OnboardingState["childPhotos"] | undefined,
@@ -191,9 +208,19 @@ export function OnboardingWizard({
   const [birthDate, setBirthDate] = useState(
     initialState?.child?.birthDate ?? "",
   );
-  const [gender, setGender] = useState<ChildGender>(
-    initialState?.child?.gender ?? "other",
+  const [gender, setGender] = useState<ChildGender>(() => {
+    const g = initialState?.child?.gender;
+    return g === "girl" || g === "boy" ? g : "boy";
+  });
+  const [avatarRedoUsed, setAvatarRedoUsed] = useState(
+    Boolean(initialState?.avatarRedoUsed),
   );
+  const [versionPick, setVersionPick] = useState<{
+    a: AvatarBundle;
+    b: AvatarBundle;
+  } | null>(null);
+  const [pickChild, setPickChild] = useState<"a" | "b">("b");
+  const [pickFriend, setPickFriend] = useState<"a" | "b">("b");
   const derivedAge = birthDate ? ageYearsFromBirthDate(birthDate) : null;
   const [friendName, setFriendName] = useState(
     initialState?.friend?.displayName ?? "",
@@ -201,9 +228,10 @@ export function OnboardingWizard({
   const [friendKind, setFriendKind] = useState<"pet" | "toy">(
     initialState?.friend?.kind ?? "pet",
   );
-  const [friendGender, setFriendGender] = useState(
-    initialState?.friend?.gender ?? "",
-  );
+  const [friendGender, setFriendGender] = useState(() => {
+    const g = initialState?.friend?.gender ?? "";
+    return g === "male" || g === "female" ? g : "";
+  });
   const [hasFather, setHasFather] = useState(
     Boolean(initialState?.child?.hasFather),
   );
@@ -242,7 +270,8 @@ export function OnboardingWizard({
     null,
   );
 
-  const stepIndex = STEPS.findIndex((s) => s.id === step);
+  const tabIndex = TAB_STEPS.findIndex((s) => s.id === step);
+  const tabsComplete = tabIndex < 0;
 
   const childFilled = useMemo(
     () => Object.keys(childPhotos).length,
@@ -256,7 +285,7 @@ export function OnboardingWizard({
   function go(next: Step) {
     setError(null);
     setStep(next);
-    // API leve — evita Server Action / Set-Cookie >4KB que falhava no console
+    // API leve  -  evita Server Action / Set-Cookie >4KB que falhava no console
     void fetch("/api/onboarding/wizard-step", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -266,7 +295,7 @@ export function OnboardingWizard({
     });
   }
 
-  async function runPixarGeneration(): Promise<boolean> {
+  async function runPixarGeneration(): Promise<AvatarBundle | false> {
     const res = await fetch("/api/onboarding/generate-avatars", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -296,7 +325,7 @@ export function OnboardingWizard({
       !isPixarGeneratedUrl(gen.friendAvatarUrl)
     ) {
       setError(
-        "A IA não devolveu avatares Pixar. Confira OPENAI_API_KEY e tente Regenerar.",
+        "A IA não devolveu avatares Pixar. Confira OPENAI_API_KEY e tente Refazer.",
       );
       return false;
     }
@@ -306,7 +335,98 @@ export function OnboardingWizard({
     setChildBodySheetUrl(gen.childBodySheetUrl ?? null);
     setFriendSheetUrl(gen.friendSheetUrl ?? null);
     setEngine(gen.engine ?? null);
-    return true;
+    return {
+      childAvatarUrl: gen.childAvatarUrl!,
+      friendAvatarUrl: gen.friendAvatarUrl!,
+      childFaceSheetUrl: gen.childFaceSheetUrl ?? null,
+      childBodySheetUrl: gen.childBodySheetUrl ?? null,
+      friendSheetUrl: gen.friendSheetUrl ?? null,
+      engine: gen.engine ?? null,
+    } satisfies AvatarBundle;
+  }
+
+  function snapshotCurrentAvatars(): AvatarBundle | null {
+    if (
+      !isPixarGeneratedUrl(childAvatarUrl) ||
+      !isPixarGeneratedUrl(friendAvatarUrl)
+    ) {
+      return null;
+    }
+    return {
+      childAvatarUrl: childAvatarUrl!,
+      friendAvatarUrl: friendAvatarUrl!,
+      childFaceSheetUrl,
+      childBodySheetUrl,
+      friendSheetUrl,
+      engine,
+    };
+  }
+
+  function applyAvatarBundle(bundle: AvatarBundle) {
+    setChildAvatarUrl(bundle.childAvatarUrl);
+    setFriendAvatarUrl(bundle.friendAvatarUrl);
+    setChildFaceSheetUrl(bundle.childFaceSheetUrl);
+    setChildBodySheetUrl(bundle.childBodySheetUrl);
+    setFriendSheetUrl(bundle.friendSheetUrl);
+    setEngine(bundle.engine);
+  }
+
+  async function confirmVersionPicks() {
+    if (!versionPick) return;
+    const child =
+      pickChild === "a" ? versionPick.a : versionPick.b;
+    const friend =
+      pickFriend === "a" ? versionPick.a : versionPick.b;
+    const chosen: AvatarBundle = {
+      childAvatarUrl: child.childAvatarUrl,
+      friendAvatarUrl: friend.friendAvatarUrl,
+      childFaceSheetUrl: child.childFaceSheetUrl,
+      childBodySheetUrl: child.childBodySheetUrl,
+      friendSheetUrl: friend.friendSheetUrl,
+      engine: friend.engine || child.engine,
+    };
+    setError(null);
+    startTransition(async () => {
+      const res = await fetch("/api/onboarding/confirm-avatars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...chosen,
+          markRedoUsed: true,
+        }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok || body.error) {
+        setError(body.error || `Falha ao salvar escolha (${res.status}).`);
+        return;
+      }
+      applyAvatarBundle(chosen);
+      setVersionPick(null);
+      setAvatarRedoUsed(true);
+    });
+  }
+
+  function startRefazerBoth() {
+    if (avatarRedoUsed || versionPick || pending) return;
+    const previous = snapshotCurrentAvatars();
+    if (!previous) {
+      setError("Gere os avatares antes de refazer.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      go("generating");
+      const next = await runPixarGeneration();
+      if (!next) {
+        applyAvatarBundle(previous);
+        setStep("preview");
+        return;
+      }
+      setPickChild("b");
+      setPickFriend("b");
+      setVersionPick({ a: previous, b: next });
+      go("preview");
+    });
   }
 
   // Se o preview abriu com foto crua (build antigo / reuse), gera Pixar na hora
@@ -352,7 +472,7 @@ export function OnboardingWizard({
           setError(body.error || `Falha ao salvar PIN (${res.status}).`);
           return;
         }
-        // Navegação dura — evita soft nav voltar ao Pronto com cookie stale
+        // Navegação dura: evita soft nav voltar ao Pronto com cookie stale
         window.location.assign(body.redirectTo || "/app/parent");
       } catch (err) {
         setError(
@@ -365,10 +485,10 @@ export function OnboardingWizard({
   function openChildStudy() {
     const sheets: AvatarStudySubject["sheets"] = [];
     if (childFaceSheetUrl) {
-      sheets.push({ label: "Rosto — turnaround", url: childFaceSheetUrl });
+      sheets.push({ label: "Rosto - turnaround", url: childFaceSheetUrl });
     }
     if (childBodySheetUrl) {
-      sheets.push({ label: "Corpo — turnaround", url: childBodySheetUrl });
+      sheets.push({ label: "Corpo - turnaround", url: childBodySheetUrl });
     }
     setStudySubject({
       name: childName || "Criança",
@@ -382,7 +502,7 @@ export function OnboardingWizard({
     const sheets: AvatarStudySubject["sheets"] = [];
     if (friendSheetUrl) {
       sheets.push({
-        label: "Personagem — turnaround",
+        label: "Personagem - turnaround",
         url: friendSheetUrl,
       });
     }
@@ -520,7 +640,7 @@ export function OnboardingWizard({
           return;
         }
       }
-      // Paywall antes do avatar IA — fotos já persistidas
+      // Paywall antes do avatar IA: fotos já persistidas
       go("choose-plan");
     });
   }
@@ -559,40 +679,44 @@ export function OnboardingWizard({
   }, [resumeAfterPay, step]);
 
   return (
-    <div className="mx-auto w-full max-w-lg space-y-6 pb-10">
+    <div className="mx-auto w-full max-w-3xl space-y-6 pb-10">
       <header className="space-y-2 text-center sm:text-left">
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {isReuse
             ? "Revisar experiência do avatar"
-            : "Vamos começar criando o Avatar da sua Criança"}
+            : "Vamos começar criando o Avatar"}
         </h1>
         {mockMode ? (
           <p className="text-xs text-amber-800">
-            Modo local — uploads podem ficar só no dispositivo se o Storage
+            Modo local: uploads podem ficar só no dispositivo se o Storage
             falhar.
           </p>
         ) : null}
       </header>
 
       <ol className="flex gap-1 overflow-x-auto pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {STEPS.map((s, i) => (
-          <li key={s.id} className="shrink-0">
-            <button
-              type="button"
-              onClick={() => go(s.id)}
-              aria-current={i === stepIndex ? "step" : undefined}
-              className={`rounded-md px-2 py-1.5 transition-colors ${
-                i === stepIndex
-                  ? "bg-foreground text-background"
-                  : i < stepIndex
-                    ? "bg-emerald-600/15 text-emerald-800 hover:bg-emerald-600/25"
-                    : "bg-muted/60 hover:bg-muted"
-              }`}
-            >
-              {s.label}
-            </button>
-          </li>
-        ))}
+        {TAB_STEPS.map((s, i) => {
+          const current = !tabsComplete && i === tabIndex;
+          const done = tabsComplete || i < tabIndex;
+          return (
+            <li key={s.id} className="shrink-0">
+              <button
+                type="button"
+                onClick={() => go(s.id)}
+                aria-current={current ? "step" : undefined}
+                className={`rounded-md px-2 py-1.5 transition-colors ${
+                  current
+                    ? "bg-foreground text-background"
+                    : done
+                      ? "bg-emerald-600/15 text-emerald-800 hover:bg-emerald-600/25"
+                      : "bg-muted/60 hover:bg-muted"
+                }`}
+              >
+                {s.label}
+              </button>
+            </li>
+          );
+        })}
       </ol>
 
       {step === "child" ? (
@@ -600,10 +724,10 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <UserRound className="size-4" />
-              Avatar do filho
+              Informações da Criança
             </CardTitle>
             <CardDescription>
-              Nome e idade — a estrela das aventuras.
+              Preencha as informações abaixo
             </CardDescription>
           </CardHeader>
           <form action={submitChild}>
@@ -638,8 +762,9 @@ export function OnboardingWizard({
               </div>
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">Gênero</legend>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                  {(Object.keys(GENDER_LABELS) as ChildGender[]).map((key) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(GENDER_LABELS) as Array<keyof typeof GENDER_LABELS>).map(
+                    (key) => (
                     <label
                       key={key}
                       className={`flex cursor-pointer items-center justify-center rounded-xl border px-3 py-3 text-sm font-medium ${
@@ -739,11 +864,11 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Camera className="size-4" />
-              {REQUIRED_CHILD_PHOTO_COUNT} fotos de {childName || "sua criança"}
+              Fotos da Criança
             </CardTitle>
             <CardDescription>
-              6 do rosto + 6 do corpo. Tire agora ou envie da galeria — cada
-              slot tem a pose certa. As fotos são salvas no banco ao enviar.
+              Envie 6 fotos de rosto e 6 fotos de corpo inteiro conforme a
+              plataforma orienta
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -792,7 +917,7 @@ export function OnboardingWizard({
               Melhor amigo
             </CardTitle>
             <CardDescription>
-              Pet ou brinquedo favorito — entra nas histórias junto.
+              Adicione informações dos pets ou dos brinquedos da criança
             </CardDescription>
           </CardHeader>
           <form action={submitFriend}>
@@ -859,9 +984,8 @@ export function OnboardingWizard({
                   <option value="" disabled>
                     Selecione…
                   </option>
-                  <option value="male">Macho / masculino</option>
-                  <option value="female">Fêmea / feminino</option>
-                  <option value="other">Outro / não informar</option>
+                  <option value="male">Masculino</option>
+                  <option value="female">Feminino</option>
                 </select>
               </div>
               {error ? (
@@ -889,12 +1013,11 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Camera className="size-4" />
-              {REQUIRED_FRIEND_PHOTO_COUNT} fotos de corpo —{" "}
-              {friendName || "melhor amigo"}
+              Fotos do Amigo
             </CardTitle>
             <CardDescription>
-              Só corpo inteiro (6 ângulos) do{" "}
-              {friendKind === "pet" ? "pet" : "brinquedo"}. Sem fotos de rosto.
+              Adicione fotos de corpo inteiro do pet ou brinquedo favorito da
+              criança
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -959,38 +1082,58 @@ export function OnboardingWizard({
                 messages={[
                   "Preparando o pagamento…",
                   "Atrelando o plano à sua conta…",
-                  "Quase lá — Stripe a caminho…",
+                  "Quase lá  -  Stripe a caminho…",
                 ]}
               />
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-3 md:grid-cols-2">
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => choosePlan("starter")}
-                  className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+                  className="flex h-full flex-col rounded-2xl border border-border/70 p-5 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
                 >
                   <p className="font-heading text-lg font-semibold">
                     {STARTER_SUBSCRIPTION.name}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatBrl(STARTER_SUBSCRIPTION.priceBrl)}/mês ·{" "}
-                    {STARTER_SUBSCRIPTION.description}
+                  <p className="mt-1 text-2xl font-semibold tracking-tight">
+                    {formatBrl(STARTER_SUBSCRIPTION.priceBrl)}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      /mês
+                    </span>
                   </p>
+                  <ul className="mt-4 flex-1 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                    <li>2 avatares Pixar (criança + amigo)</li>
+                    <li>{STARTER_SUBSCRIPTION.storiesPerMonth} histórias por mês</li>
+                    <li>Estúdio mágico e controle parental</li>
+                  </ul>
+                  <span className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background">
+                    Assinar
+                  </span>
                 </button>
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => choosePlan("family")}
-                  className="rounded-2xl border border-border/70 p-4 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+                  className="flex h-full flex-col rounded-2xl border border-border/70 p-5 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
                 >
                   <p className="font-heading text-lg font-semibold">
                     {FAMILY_SUBSCRIPTION.name}
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}/mês ·{" "}
-                    {FAMILY_SUBSCRIPTION.description}
+                  <p className="mt-1 text-2xl font-semibold tracking-tight">
+                    {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      /mês
+                    </span>
                   </p>
+                  <ul className="mt-4 flex-1 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                    <li>2 avatares Pixar (criança + amigo)</li>
+                    <li>{FAMILY_SUBSCRIPTION.storiesPerMonth} histórias por mês</li>
+                    <li>Mais espaço para criar sem freio</li>
+                  </ul>
+                  <span className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background">
+                    Assinar
+                  </span>
                 </button>
               </div>
             )}
@@ -1040,63 +1183,138 @@ export function OnboardingWizard({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Check className="size-5 text-emerald-600" />
-              Seus avatares Pixar
+              Seus avatares
             </CardTitle>
             <CardDescription>
-              Toque no avatar para ver o estudo em várias poses
-              {engine ? ` · ${engine}` : ""}. Falta só o PIN dos pais.
+              {versionPick
+                ? "Refazer gerou novas versões. Escolha qual ficar da criança e qual ficar do amigo."
+                : "Toque no avatar para ver o estudo em várias poses"}
+              {!versionPick && engine ? ` · ${engine}` : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={openChildStudy}
-                className="group space-y-2 text-left transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-amber-50 to-sky-50 shadow-sm ring-offset-2 group-hover:ring-2 group-hover:ring-amber-400/50">
-                  {childAvatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={childAvatarUrl}
-                      alt={childName}
-                      className="aspect-square w-full object-cover"
-                    />
-                  ) : null}
+            {versionPick ? (
+              <div className="space-y-6">
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold">
+                    Criança ({childName || "avatar"})
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(["a", "b"] as const).map((key) => {
+                      const bundle = versionPick[key];
+                      const selected = pickChild === key;
+                      return (
+                        <button
+                          key={`child-${key}`}
+                          type="button"
+                          onClick={() => setPickChild(key)}
+                          className={`space-y-2 rounded-2xl border p-2 text-left transition ${
+                            selected
+                              ? "border-foreground ring-2 ring-foreground/20"
+                              : "border-border/70"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={bundle.childAvatarUrl}
+                            alt={`Versão ${key.toUpperCase()}`}
+                            className="aspect-square w-full rounded-xl object-cover"
+                          />
+                          <span className="block text-center text-xs font-medium">
+                            Versão {key.toUpperCase()}
+                            {selected ? " (escolhida)" : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <span className="block text-center text-sm font-medium">
-                  {childName}
-                </span>
-                <span className="block text-center text-xs text-muted-foreground">
-                  Ver poses / estudo
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={openFriendStudy}
-                className="group space-y-2 text-left transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-rose-50 to-violet-50 shadow-sm ring-offset-2 group-hover:ring-2 group-hover:ring-rose-400/50">
-                  {friendAvatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={friendAvatarUrl}
-                      alt={friendName}
-                      className="aspect-square w-full object-cover"
-                    />
-                  ) : null}
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold">
+                    Amigo ({friendName || "amigo"})
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(["a", "b"] as const).map((key) => {
+                      const bundle = versionPick[key];
+                      const selected = pickFriend === key;
+                      return (
+                        <button
+                          key={`friend-${key}`}
+                          type="button"
+                          onClick={() => setPickFriend(key)}
+                          className={`space-y-2 rounded-2xl border p-2 text-left transition ${
+                            selected
+                              ? "border-foreground ring-2 ring-foreground/20"
+                              : "border-border/70"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={bundle.friendAvatarUrl}
+                            alt={`Versão ${key.toUpperCase()}`}
+                            className="aspect-square w-full rounded-xl object-cover"
+                          />
+                          <span className="block text-center text-xs font-medium">
+                            Versão {key.toUpperCase()}
+                            {selected ? " (escolhida)" : ""}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <span className="block text-center text-sm font-medium">
-                  {friendName}{" "}
-                  <span className="text-muted-foreground">
-                    ({friendKind === "pet" ? "pet" : "brinquedo"})
+              </div>
+            ) : (
+              <div className="mx-auto flex max-w-md flex-col gap-5">
+                <button
+                  type="button"
+                  onClick={openChildStudy}
+                  className="group space-y-2 text-left transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-amber-50 to-sky-50 shadow-sm ring-offset-2 group-hover:ring-2 group-hover:ring-amber-400/50">
+                    {childAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={childAvatarUrl}
+                        alt={childName}
+                        className="aspect-square w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <span className="block text-center text-sm font-medium">
+                    {childName}
                   </span>
-                </span>
-                <span className="block text-center text-xs text-muted-foreground">
-                  Ver poses / estudo
-                </span>
-              </button>
-            </div>
+                  <span className="block text-center text-xs text-muted-foreground">
+                    Ver poses / estudo
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={openFriendStudy}
+                  className="group space-y-2 text-left transition hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-rose-50 to-violet-50 shadow-sm ring-offset-2 group-hover:ring-2 group-hover:ring-rose-400/50">
+                    {friendAvatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={friendAvatarUrl}
+                        alt={friendName}
+                        className="aspect-square w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <span className="block text-center text-sm font-medium">
+                    {friendName}{" "}
+                    <span className="text-muted-foreground">
+                      ({friendKind === "pet" ? "pet" : "brinquedo"})
+                    </span>
+                  </span>
+                  <span className="block text-center text-xs text-muted-foreground">
+                    Ver poses / estudo
+                  </span>
+                </button>
+              </div>
+            )}
 
             {error ? (
               <p className="text-sm text-destructive">{error}</p>
@@ -1106,37 +1324,45 @@ export function OnboardingWizard({
                 type="button"
                 variant="outline"
                 className="sm:flex-1"
+                disabled={Boolean(versionPick)}
                 onClick={() => go("friend-photos")}
               >
                 Voltar
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                className="sm:flex-1"
-                disabled={pending}
-                onClick={() => {
-                  setError(null);
-                  startTransition(async () => {
-                    go("generating");
-                    const ok = await runPixarGeneration();
-                    if (!ok) {
-                      setStep("preview");
-                      return;
-                    }
-                    go("preview");
-                  });
-                }}
-              >
-                {pending ? "Regenerando…" : "Regenerar Pixar"}
-              </Button>
-              <Button
-                className="w-full sm:flex-[2]"
-                size="lg"
-                onClick={() => go("pin")}
-              >
-                Definir PIN e abrir painel
-              </Button>
+              {versionPick ? (
+                <Button
+                  type="button"
+                  className="w-full sm:flex-[2]"
+                  size="lg"
+                  disabled={pending}
+                  onClick={confirmVersionPicks}
+                >
+                  {pending ? "Salvando…" : "Confirmar versões"}
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="sm:flex-1"
+                    disabled={pending || avatarRedoUsed}
+                    onClick={startRefazerBoth}
+                  >
+                    {pending
+                      ? "Refazendo…"
+                      : avatarRedoUsed
+                        ? "Refazer já usado"
+                        : "Refazer"}
+                  </Button>
+                  <Button
+                    className="w-full sm:flex-[2]"
+                    size="lg"
+                    onClick={() => go("pin")}
+                  >
+                    Definir PIN e abrir painel
+                  </Button>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1150,14 +1376,14 @@ export function OnboardingWizard({
               PIN dos pais
             </CardTitle>
             <CardDescription>
-              Último passo — protege Kids ↔ Pais. Ao salvar, liberamos o
-              painel e a primeira história.
+              O PIN de segurança será usado para criar histórias e aceitar
+              amizades, mais controle e segurança para os seus filhos
             </CardDescription>
           </CardHeader>
           <form onSubmit={submitPin}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="pin">PIN (4–6 dígitos)</Label>
+                <Label htmlFor="pin">PIN (4 a 6 dígitos)</Label>
                 <Input
                   id="pin"
                   name="pin"

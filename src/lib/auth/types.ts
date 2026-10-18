@@ -55,9 +55,11 @@ export type OnboardingState = {
   childFaceSheetUrl?: string | null;
   childBodySheetUrl?: string | null;
   friendSheetUrl?: string | null;
-  /** Passo atual do wizard — retoma de onde parou */
+  /** Passo atual do wizard - retoma de onde parou */
   wizardStep?: string | null;
-  /** @deprecated legado — preferir childPhotos */
+  /** Refazer avatares já usado (1x) */
+  avatarRedoUsed?: boolean;
+  /** @deprecated legado - preferir childPhotos */
   photos?: OnboardingPhotoDraft[];
   completed: boolean;
 };

@@ -1,13 +1,13 @@
 export type ChildGender = "boy" | "girl" | "other";
 
-export const GENDER_LABELS: Record<ChildGender, string> = {
-  boy: "Menino",
-  girl: "Menina",
-  other: "Prefiro não dizer",
+/** Só Masculino / Feminino na UI do onboard. */
+export const GENDER_LABELS: Record<"boy" | "girl", string> = {
+  boy: "Masculino",
+  girl: "Feminino",
 };
 
 /** Cache-bust quando as guias 3D mudam (evita SVG flat antigo no browser). */
-export const GUIDE_ASSET_VERSION = "6";
+export const GUIDE_ASSET_VERSION = "7";
 
 export function guideFolderForGender(
   gender: ChildGender | null | undefined,
@@ -18,12 +18,17 @@ export function guideFolderForGender(
   return "neutral";
 }
 
-/** Só PNG das folhas Pixar — nunca SVG. */
+/** Só PNG das folhas Pixar - nunca SVG. */
 export function guideSrc(
   gender: ChildGender | null | undefined,
   slotId: string,
 ): string {
   return `/onboarding/guides/${guideFolderForGender(gender)}/${slotId}.png?v=${GUIDE_ASSET_VERSION}`;
+}
+
+/** Guias do amigo: dog/cat/toy Disney-like em public/onboarding/guides/friend. */
+export function friendGuideSrc(slotId: string): string {
+  return `/onboarding/guides/friend/${slotId}.png?v=${GUIDE_ASSET_VERSION}`;
 }
 
 /** Idade em anos completos a partir de YYYY-MM-DD. */
