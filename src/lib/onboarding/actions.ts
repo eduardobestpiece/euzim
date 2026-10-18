@@ -1,0 +1,1058 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/auth/get-user";
+import {
+  readMockOnboarding,
+  readMockSession,
+  writeMockOnboarding,
+  writeMockSession,
+} from "@/lib/auth/mock-session";
+import type {
+  FriendKind,
+  OnboardingFriendDraft,
+  OnboardingPhotoDraft,
+  OnboardingState,
+} from "@/lib/auth/types";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import {
+  generateChildPixarAvatars,
+  generateFriendPixarAvatar,
+  isPixarGeneratedUrl,
+} from "@/lib/onboarding/generate-pixar-avatar";
+import {
+  slotsForSubject,
+  requiredPhotoCount,
+  missingSlotIds,
+  type PhotoSubject,
+} from "@/lib/onboarding/photo-slots";
+import {
+  draftsFromStoredPaths,
+  preferenceKeyForSubject,
+  storedPathsFromDrafts,
+  type StoredPhotoPath,
+} from "@/lib/onboarding/photo-persistence";
+import {
+  ageYearsFromBirthDate,
+  nextAvatarRefreshDue,
+  validateBirthDate,
+  type ChildGender,
+} from "@/lib/onboarding/child-profile";
+import {
+  isValidSecurityPin,
+  normalizeSecurityPin,
+} from "@/lib/onboarding/pin-format";
+
+export type OnboardingActionResult = {
+  error?: string;
+  success?: boolean;
+  childAvatarUrl?: string;
+  friendAvatarUrl?: string;
+  childFaceSheetUrl?: string;
+  childBodySheetUrl?: string;
+  friendSheetUrl?: string;
+  engine?: string;
+};
+
+function emptyState(): OnboardingState {
+  return {
+    securityPin: "",
+    child: null,
+    childPhotos: [],
+    friend: null,
+    friendPhotos: [],
+    wizardStep: "child",
+    completed: false,
+  };
+}
+
+const WIZARD_STEPS = new Set([
+  "welcome",
+  "child",
+  "child-photos",
+  "friend",
+  "friend-photos",
+  "choose-plan",
+  "generating",
+  "preview",
+  "pin",
+]);
+
+/** Persiste o passo atual (cookie) para retomar de onde parou. */
+export async function saveWizardStepAction(
+  step: string,
+): Promise<OnboardingActionResult> {
+  if (!WIZARD_STEPS.has(step)) return { error: "Passo inválido." };
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const state = await loadState();
+  state.wizardStep = step;
+  await writeMockOnboarding(state);
+
+  // Também grava em children.preferences quando houver filho
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const { data: children } = await db
+        .from("children")
+        .select("id, preferences")
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const child = children?.[0];
+      if (child?.id) {
+        const prefs =
+          child.preferences && typeof child.preferences === "object"
+            ? (child.preferences as Record<string, unknown>)
+            : {};
+        await db
+          .from("children")
+          .update({
+            preferences: { ...prefs, onboarding_wizard_step: step },
+          })
+          .eq("id", child.id);
+      }
+    }
+  }
+
+  return { success: true };
+}
+
+function photosBySlot(
+  photos: OnboardingPhotoDraft[],
+): Record<string, OnboardingPhotoDraft> {
+  const map: Record<string, OnboardingPhotoDraft> = {};
+  for (const p of photos) {
+    if (p.slotId) map[p.slotId] = p;
+  }
+  return map;
+}
+
+function assertCompletePhotos(
+  photos: OnboardingPhotoDraft[],
+  subject: PhotoSubject,
+): string | null {
+  const bySlot = photosBySlot(photos);
+  const missing = missingSlotIds(bySlot, subject);
+  const slots = slotsForSubject(subject);
+  const required = requiredPhotoCount(subject);
+  if (missing.length) {
+    const labels = missing
+      .map((id) => {
+        const slot = slots.find((s) => s.id === id);
+        if (!slot) return id;
+        return subject === "friend" ? slot.labelFriend : slot.labelChild;
+      })
+      .slice(0, 4);
+    return `Faltam ${missing.length} foto(s): ${labels.join(", ")}${missing.length > 4 ? "…" : ""}`;
+  }
+  if (Object.keys(bySlot).length < required) {
+    return `Envie as ${required} fotos guiadas.`;
+  }
+  return null;
+}
+
+async function loadChildPreferences(userId: string): Promise<{
+  childId: string | null;
+  preferences: Record<string, unknown>;
+  displayName?: string;
+  birthDate?: string | null;
+  gender?: string | null;
+  avatarUrl?: string | null;
+  hasFather?: boolean;
+  fatherName?: string | null;
+  fatherBirthDate?: string | null;
+  hasMother?: boolean;
+  motherName?: string | null;
+  motherBirthDate?: string | null;
+} | null> {
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return null;
+  const { data: children } = await db
+    .from("children")
+    .select(
+      "id, display_name, birth_date, gender, avatar_url, preferences, has_father, father_name, father_birth_date, has_mother, mother_name, mother_birth_date",
+    )
+    .eq("parent_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+  const child = children?.[0];
+  if (!child) return null;
+  const preferences =
+    child.preferences && typeof child.preferences === "object"
+      ? (child.preferences as Record<string, unknown>)
+      : {};
+  return {
+    childId: child.id,
+    preferences,
+    displayName: child.display_name,
+    birthDate: child.birth_date,
+    gender: child.gender,
+    avatarUrl: child.avatar_url,
+    hasFather: Boolean(child.has_father),
+    fatherName: child.father_name,
+    fatherBirthDate: child.father_birth_date,
+    hasMother: Boolean(child.has_mother),
+    motherName: child.mother_name,
+    motherBirthDate: child.mother_birth_date,
+  };
+}
+
+/** Cookie + hidratação das fotos salvas no banco (fonte da verdade). */
+async function loadState(): Promise<OnboardingState> {
+  const cookie = (await readMockOnboarding()) ?? emptyState();
+  // Descarta PIN corrompido do cookie (ex.: legado "set")
+  cookie.securityPin = normalizeSecurityPin(cookie.securityPin) ?? "";
+
+  const user = await getCurrentUser();
+  if (!user || !isSupabaseConfigured() || user.isMock) {
+    return cookie;
+  }
+
+  const row = await loadChildPreferences(user.id);
+  if (!row) return cookie;
+
+  const state: OnboardingState = { ...cookie };
+
+  if (!state.child?.displayName && row.displayName) {
+    const gender =
+      row.gender === "boy" || row.gender === "girl" || row.gender === "other"
+        ? row.gender
+        : "other";
+    state.child = {
+      displayName: row.displayName,
+      birthDate: row.birthDate || "",
+      gender,
+      ageYears: ageYearsFromBirthDate(row.birthDate || "") ?? undefined,
+      hasFather: row.hasFather,
+      fatherName: row.fatherName ?? undefined,
+      fatherBirthDate: row.fatherBirthDate ?? undefined,
+      hasMother: row.hasMother,
+      motherName: row.motherName ?? undefined,
+      motherBirthDate: row.motherBirthDate ?? undefined,
+    };
+  } else if (state.child) {
+    // Completa família a partir do banco se o cookie ainda não tiver
+    if (state.child.hasFather == null && row.hasFather != null) {
+      state.child = {
+        ...state.child,
+        hasFather: row.hasFather,
+        fatherName: row.fatherName ?? undefined,
+        fatherBirthDate: row.fatherBirthDate ?? undefined,
+        hasMother: row.hasMother,
+        motherName: row.motherName ?? undefined,
+        motherBirthDate: row.motherBirthDate ?? undefined,
+      };
+    }
+  }
+
+  const childPaths = row.preferences.photo_paths as StoredPhotoPath[] | undefined;
+  const friendPaths = row.preferences.friend_photo_paths as
+    | StoredPhotoPath[]
+    | undefined;
+  const dbChildPhotos = draftsFromStoredPaths(childPaths);
+  const dbFriendPhotos = draftsFromStoredPaths(friendPaths);
+
+  if (dbChildPhotos.length >= (state.childPhotos?.length ?? 0)) {
+    state.childPhotos = dbChildPhotos;
+  }
+  if (dbFriendPhotos.length >= (state.friendPhotos?.length ?? 0)) {
+    state.friendPhotos = dbFriendPhotos;
+  }
+
+  const pixar = row.preferences.pixar as
+    | {
+        child_hero?: string;
+        friend_hero?: string;
+        child_face_sheet?: string;
+        child_body_sheet?: string;
+        friend_sheet?: string;
+      }
+    | undefined;
+
+  // Só aceita avatar gerado - nunca foto crua do upload
+  if (isPixarGeneratedUrl(pixar?.child_hero)) {
+    state.childAvatarUrl = pixar!.child_hero!;
+  } else if (isPixarGeneratedUrl(row.avatarUrl)) {
+    state.childAvatarUrl = row.avatarUrl!;
+  } else if (!isPixarGeneratedUrl(state.childAvatarUrl)) {
+    state.childAvatarUrl = null;
+  }
+
+  if (isPixarGeneratedUrl(pixar?.friend_hero)) {
+    state.friendAvatarUrl = pixar!.friend_hero!;
+  } else if (!isPixarGeneratedUrl(state.friendAvatarUrl)) {
+    state.friendAvatarUrl = null;
+  }
+
+  if (pixar?.child_face_sheet) state.childFaceSheetUrl = pixar.child_face_sheet;
+  if (pixar?.child_body_sheet) state.childBodySheetUrl = pixar.child_body_sheet;
+  if (pixar?.friend_sheet) state.friendSheetUrl = pixar.friend_sheet;
+
+  if (row.preferences.avatar_redo_used === true) {
+    state.avatarRedoUsed = true;
+  }
+
+  const friendMeta = row.preferences.friend as
+    | { kind?: string; displayName?: string; gender?: string | null }
+    | undefined;
+  if (!state.friend?.displayName && friendMeta?.displayName) {
+    state.friend = {
+      kind: friendMeta.kind === "toy" ? "toy" : "pet",
+      displayName: friendMeta.displayName,
+      gender: friendMeta.gender ?? null,
+    };
+  }
+
+  const step = row.preferences.onboarding_wizard_step;
+  if (typeof step === "string" && step && !state.wizardStep) {
+    state.wizardStep = step;
+  }
+
+  return state;
+}
+
+export async function saveOnboardingPinAction(
+  _prev: OnboardingActionResult,
+  formData: FormData,
+): Promise<OnboardingActionResult> {
+  const pin = String(formData.get("pin") ?? "").trim();
+  const confirm = String(formData.get("confirmPin") ?? "").trim();
+  if (!isValidSecurityPin(pin)) {
+    return { error: "O PIN deve ter 4 a 6 dígitos." };
+  }
+  if (pin !== confirm) return { error: "Os PINs não coincidem." };
+
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const state = await loadState();
+  state.securityPin = pin;
+  // Cookie mínimo — sem listas de fotos (evita Set-Cookie >4KB)
+  await writeMockOnboarding({
+    ...state,
+    childPhotos: [],
+    friendPhotos: [],
+  });
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      // UPDATE — upsert com security_pin="" violava users_security_pin_format
+      const { error } = await db
+        .from("users")
+        .update({ security_pin: pin })
+        .eq("id", user.id);
+      if (error) {
+        return {
+          error: error.message.includes("users_security_pin_format")
+            ? "PIN inválido. Use só 4 a 6 dígitos numéricos."
+            : error.message,
+        };
+      }
+    }
+  }
+
+  return { success: true };
+}
+
+export async function saveChildAvatarProfileAction(
+  _prev: OnboardingActionResult,
+  formData: FormData,
+): Promise<OnboardingActionResult> {
+  const displayName = String(formData.get("displayName") ?? "").trim();
+  const birthDate = String(formData.get("birthDate") ?? "").trim();
+  const genderRaw = String(formData.get("gender") ?? "").trim();
+  const gender: ChildGender | null =
+    genderRaw === "boy" || genderRaw === "girl" || genderRaw === "other"
+      ? genderRaw
+      : null;
+
+  const hasFather = String(formData.get("hasFather") ?? "") === "on";
+  const hasMother = String(formData.get("hasMother") ?? "") === "on";
+  const fatherName = String(formData.get("fatherName") ?? "").trim();
+  const fatherBirthDate = String(formData.get("fatherBirthDate") ?? "").trim();
+  const motherName = String(formData.get("motherName") ?? "").trim();
+  const motherBirthDate = String(formData.get("motherBirthDate") ?? "").trim();
+
+  if (!displayName || displayName.length > 80) {
+    return { error: "Informe o nome da criança (até 80 caracteres)." };
+  }
+  if (!gender) {
+    return { error: "Selecione o gênero (Menino, Menina ou Prefiro não dizer)." };
+  }
+
+  const birthError = validateBirthDate(birthDate);
+  if (birthError) return { error: birthError };
+  const ageYears = ageYearsFromBirthDate(birthDate) ?? undefined;
+
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const state = await loadState();
+  state.child = {
+    displayName,
+    birthDate,
+    gender,
+    ageYears,
+    hasFather,
+    fatherName: hasFather ? fatherName : undefined,
+    fatherBirthDate: hasFather ? fatherBirthDate || undefined : undefined,
+    hasMother,
+    motherName: hasMother ? motherName : undefined,
+    motherBirthDate: hasMother ? motherBirthDate || undefined : undefined,
+  };
+  await writeMockOnboarding(state);
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      await db.from("users").upsert({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        onboarding_completed: false,
+      });
+
+      const { data: existing } = await db
+        .from("children")
+        .select("id, preferences")
+        .eq("parent_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      const prevPrefs =
+        existing?.[0]?.preferences &&
+        typeof existing[0].preferences === "object"
+          ? (existing[0].preferences as Record<string, unknown>)
+          : {};
+
+      const payload = {
+        display_name: displayName,
+        birth_date: birthDate,
+        gender,
+        has_father: hasFather,
+        father_name: hasFather ? fatherName || null : null,
+        father_birth_date: hasFather ? fatherBirthDate || null : null,
+        has_mother: hasMother,
+        mother_name: hasMother ? motherName || null : null,
+        mother_birth_date: hasMother ? motherBirthDate || null : null,
+        preferences: { ...prevPrefs, age_years: ageYears ?? null },
+      };
+
+      if (existing?.[0]?.id) {
+        await db.from("children").update(payload).eq("id", existing[0].id);
+      } else {
+        await db.from("children").insert({
+          parent_id: user.id,
+          ...payload,
+        });
+      }
+    }
+  }
+
+  return { success: true };
+}
+
+export async function saveFriendProfileAction(
+  _prev: OnboardingActionResult,
+  formData: FormData,
+): Promise<OnboardingActionResult> {
+  const kind = String(formData.get("kind") ?? "") as FriendKind;
+  const displayName = String(formData.get("displayName") ?? "").trim();
+  const genderRaw = String(formData.get("gender") ?? "").trim();
+  const gender =
+    genderRaw === "male" ||
+    genderRaw === "female" ||
+    genderRaw === "other" ||
+    genderRaw === "boy" ||
+    genderRaw === "girl"
+      ? genderRaw
+      : null;
+
+  if (kind !== "pet" && kind !== "toy") {
+    return { error: "Escolha pet ou brinquedo favorito." };
+  }
+  if (!displayName || displayName.length > 80) {
+    return { error: "Informe o nome do melhor amigo." };
+  }
+  if (!gender) {
+    return { error: "Selecione o gênero do pet ou brinquedo." };
+  }
+
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const friend: OnboardingFriendDraft = { kind, displayName, gender };
+  const state = await loadState();
+  state.friend = friend;
+  await writeMockOnboarding(state);
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      if (row?.childId) {
+        const prefs = {
+          ...row.preferences,
+          friend: { kind, displayName, gender },
+        };
+        await db
+          .from("children")
+          .update({ preferences: prefs })
+          .eq("id", row.childId);
+
+        // Upsert leve do personagem amigo (nome/gênero/kind) antes da geração Pixar
+        const { data: existingChars } = await db
+          .from("characters")
+          .select("id, is_primary")
+          .eq("parent_id", user.id);
+        const friendExisting = existingChars?.find((c) => !c.is_primary);
+        const friendPayload = {
+          name: displayName,
+          kind,
+          gender,
+          relationship: kind,
+          description: `Melhor amigo (${kind})`,
+        };
+        if (friendExisting) {
+          await db
+            .from("characters")
+            .update(friendPayload)
+            .eq("id", friendExisting.id);
+        } else {
+          await db.from("characters").insert({
+            parent_id: user.id,
+            child_id: row.childId,
+            is_primary: false,
+            ...friendPayload,
+          });
+        }
+      }
+    }
+  }
+
+  return { success: true };
+}
+
+/** Persiste fotos no banco (preferences) + cookie enxuto (só paths). */
+export async function saveSubjectPhotosAction(input: {
+  subject: "child" | "friend";
+  photos: OnboardingPhotoDraft[];
+  allowPartial?: boolean;
+}): Promise<OnboardingActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  if (!input.allowPartial) {
+    const missing = assertCompletePhotos(input.photos, input.subject);
+    if (missing) return { error: missing };
+  } else if (input.photos.length < 1) {
+    return { error: "Nenhuma foto para salvar." };
+  }
+
+  const state = await loadState();
+  const light = input.photos.map((p) => ({
+    id: p.id,
+    slotId: p.slotId,
+    name: p.name,
+    previewUrl: "",
+    storagePath: p.storagePath,
+    publicUrl: p.publicUrl,
+  }));
+
+  if (input.subject === "child") {
+    state.childPhotos = light;
+  } else {
+    state.friendPhotos = light;
+  }
+  await writeMockOnboarding(state);
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      const childId = row?.childId;
+      if (childId) {
+        const prefs = { ...(row?.preferences ?? {}) };
+        const key = preferenceKeyForSubject(input.subject);
+        prefs[key] = storedPathsFromDrafts(input.photos);
+        prefs.age_years = state.child?.ageYears ?? prefs.age_years ?? null;
+        prefs.gender = state.child?.gender ?? prefs.gender ?? null;
+        if (state.friend) {
+          prefs.friend = {
+            kind: state.friend.kind,
+            displayName: state.friend.displayName,
+            gender: state.friend.gender ?? null,
+          };
+        }
+
+        const patch: Record<string, unknown> = {
+          preferences: prefs,
+        };
+
+        // Não gravar foto crua em avatar_url — isso confundia o preview com "reuse".
+        // avatar_url só recebe o Pixar gerado em generateAvatarsAction.
+        if (input.subject === "child" && !input.allowPartial) {
+          const capturedAt = new Date();
+          patch.avatar_photos_captured_at = capturedAt.toISOString();
+          patch.avatar_refresh_due_at =
+            nextAvatarRefreshDue(capturedAt).toISOString();
+        }
+
+        const { error } = await db
+          .from("children")
+          .update(patch)
+          .eq("id", childId);
+        if (error) {
+          return { error: `Não foi possível salvar as fotos: ${error.message}` };
+        }
+      } else {
+        return {
+          error:
+            "Perfil da criança não encontrado no banco. Volte e salve o nome/idade.",
+        };
+      }
+    }
+  }
+
+  return { success: true };
+}
+
+export async function uploadAvatarPhotoAction(formData: FormData): Promise<{
+  error?: string;
+  storagePath?: string;
+  publicUrl?: string;
+  previewUrl?: string;
+  slotId?: string;
+}> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const slotId = String(formData.get("slotId") ?? "");
+  const subject = String(formData.get("subject") ?? "child");
+  const file = formData.get("file");
+  if (!slotId || !(file instanceof File)) {
+    return { error: "Arquivo ou slot inválido." };
+  }
+  if (!file.type.startsWith("image/")) {
+    return { error: "Envie uma imagem." };
+  }
+
+  // Limite de segurança (cliente já comprime; config bodySizeLimit = 12mb)
+  const MAX_BYTES = 10 * 1024 * 1024;
+  if (file.size > MAX_BYTES) {
+    return {
+      error:
+        "A foto ultrapassa 10 MB. Escolha outra imagem ou tire novamente.",
+    };
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const safeExt = ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(ext)
+    ? ext === "jpeg"
+      ? "jpg"
+      : ext
+    : "jpg";
+  const storagePath = `${user.id}/${subject}/${slotId}.${safeExt}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
+
+  // Não devolver data URL base64 — estoura a resposta e o limite da action.
+  // O cliente usa preview local (object URL / data URL) até ter publicUrl.
+
+  if (!isSupabaseConfigured() || user.isMock) {
+    return {
+      storagePath: `mock/avatars/${storagePath}`,
+      publicUrl: undefined,
+      previewUrl: undefined,
+      slotId,
+    };
+  }
+
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return { error: "Supabase indisponível." };
+
+  const contentType =
+    file.type && file.type.startsWith("image/")
+      ? file.type
+      : "image/jpeg";
+
+  const { error: upErr } = await db.storage
+    .from("avatars")
+    .upload(storagePath, bytes, {
+      contentType,
+      upsert: true,
+    });
+
+  if (upErr) {
+    // Continua com path local se storage falhar — preview fica no cliente
+    return {
+      storagePath: `local/${storagePath}`,
+      publicUrl: undefined,
+      previewUrl: undefined,
+      slotId,
+    };
+  }
+
+  const { data: pub } = db.storage.from("avatars").getPublicUrl(storagePath);
+  return {
+    storagePath,
+    publicUrl: pub.publicUrl,
+    previewUrl: pub.publicUrl,
+    slotId,
+  };
+}
+
+export async function generateAvatarsAction(input?: {
+  /** Força nova geração mesmo se já existir Pixar salvo */
+  force?: boolean;
+}): Promise<OnboardingActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const state = await loadState();
+  if (!state.child?.displayName) {
+    return { error: "Complete o perfil da criança." };
+  }
+  if (!state.friend?.displayName) {
+    return { error: "Complete o melhor amigo." };
+  }
+
+  const childMiss = assertCompletePhotos(state.childPhotos, "child");
+  if (childMiss) {
+    return { error: `Fotos da criança: ${childMiss}` };
+  }
+  const friendMiss = assertCompletePhotos(state.friendPhotos, "friend");
+  if (friendMiss) {
+    return { error: `Fotos do amigo: ${friendMiss}` };
+  }
+
+  // Só reusa se já for avatar Pixar gerado (nunca foto crua do upload)
+  const canReuse =
+    !input?.force &&
+    isPixarGeneratedUrl(state.childAvatarUrl) &&
+    isPixarGeneratedUrl(state.friendAvatarUrl);
+
+  if (canReuse) {
+    return {
+      success: true,
+      childAvatarUrl: state.childAvatarUrl!,
+      friendAvatarUrl: state.friendAvatarUrl!,
+      engine: "reuse",
+    };
+  }
+
+  let childPixar;
+  let friendPixar;
+  try {
+    childPixar = await generateChildPixarAvatars({
+      userId: user.id,
+      name: state.child.displayName,
+      photos: state.childPhotos,
+    });
+    friendPixar = await generateFriendPixarAvatar({
+      userId: user.id,
+      name: state.friend.displayName,
+      kind: state.friend.kind,
+      photos: state.friendPhotos,
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Falha ao gerar avatares Pixar.";
+    return { error: message };
+  }
+
+  if (!childPixar.url || !friendPixar.url) {
+    return {
+      error:
+        "Não foi possível gerar os avatares. Confira OPENAI_API_KEY e as fotos enviadas.",
+    };
+  }
+
+  state.childAvatarUrl = childPixar.url;
+  state.friendAvatarUrl = friendPixar.url;
+  await writeMockOnboarding(state);
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      const childId = row?.childId;
+      if (childId) {
+        const prefs = { ...(row?.preferences ?? {}) };
+        prefs.pixar = {
+          child_hero: childPixar.url,
+          child_face_sheet: childPixar.faceSheetUrl ?? null,
+          child_body_sheet: childPixar.bodySheetUrl ?? null,
+          friend_hero: friendPixar.url,
+          friend_sheet: friendPixar.faceSheetUrl ?? null,
+          engine: childPixar.engine,
+          generated_at: new Date().toISOString(),
+        };
+
+        await db
+          .from("children")
+          .update({
+            avatar_url: childPixar.url,
+            avatar_model_id: `pixar:${childPixar.engine}:${user.id}`,
+            preferences: prefs,
+          })
+          .eq("id", childId);
+
+        const { data: existingChars } = await db
+          .from("characters")
+          .select("id, is_primary")
+          .eq("parent_id", user.id);
+
+        const primary = existingChars?.find((c) => c.is_primary);
+        const childChar = {
+          name: state.child.displayName,
+          kind: "child" as const,
+          gender: state.child.gender,
+          birth_date: state.child.birthDate || null,
+          relationship: "child",
+          description: "Avatar Pixar da criança",
+          avatar_url: childPixar.url,
+          lora_model_id: `pixar:${user.id}:child`,
+        };
+        if (primary) {
+          await db.from("characters").update(childChar).eq("id", primary.id);
+        } else {
+          await db.from("characters").insert({
+            parent_id: user.id,
+            child_id: childId,
+            is_primary: true,
+            ...childChar,
+          });
+        }
+
+        const friendName = state.friend.displayName;
+        const friendExisting = existingChars?.find((c) => !c.is_primary);
+        const friendChar = {
+          name: friendName,
+          kind: state.friend.kind,
+          gender: state.friend.gender ?? null,
+          relationship: state.friend.kind,
+          description: `Melhor amigo Pixar (${state.friend.kind})`,
+          avatar_url: friendPixar.url,
+          lora_model_id: `pixar:${user.id}:friend`,
+        };
+        if (friendExisting) {
+          await db
+            .from("characters")
+            .update(friendChar)
+            .eq("id", friendExisting.id);
+        } else {
+          await db.from("characters").insert({
+            parent_id: user.id,
+            child_id: childId,
+            is_primary: false,
+            ...friendChar,
+          });
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    childAvatarUrl: childPixar.url,
+    friendAvatarUrl: friendPixar.url,
+    childFaceSheetUrl: childPixar.faceSheetUrl,
+    childBodySheetUrl: childPixar.bodySheetUrl,
+    friendSheetUrl: friendPixar.faceSheetUrl,
+    engine: childPixar.engine,
+  };
+}
+
+/** Confirma versões A/B após Refazer e marca o Refazer como usado. */
+export async function confirmAvatarSelectionAction(input: {
+  childAvatarUrl: string;
+  friendAvatarUrl: string;
+  childFaceSheetUrl?: string | null;
+  childBodySheetUrl?: string | null;
+  friendSheetUrl?: string | null;
+  engine?: string | null;
+  markRedoUsed?: boolean;
+}): Promise<OnboardingActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  if (
+    !isPixarGeneratedUrl(input.childAvatarUrl) ||
+    !isPixarGeneratedUrl(input.friendAvatarUrl)
+  ) {
+    return { error: "Selecione avatares Pixar válidos." };
+  }
+
+  const state = await loadState();
+  state.childAvatarUrl = input.childAvatarUrl;
+  state.friendAvatarUrl = input.friendAvatarUrl;
+  state.childFaceSheetUrl = input.childFaceSheetUrl ?? null;
+  state.childBodySheetUrl = input.childBodySheetUrl ?? null;
+  state.friendSheetUrl = input.friendSheetUrl ?? null;
+  if (input.markRedoUsed) state.avatarRedoUsed = true;
+  await writeMockOnboarding(state);
+
+  if (isSupabaseConfigured() && !user.isMock) {
+    const db = createAdminClient() ?? (await createClient());
+    if (db) {
+      const row = await loadChildPreferences(user.id);
+      const childId = row?.childId;
+      if (childId) {
+        const prefs = { ...(row?.preferences ?? {}) };
+        const prevPixar =
+          prefs.pixar && typeof prefs.pixar === "object"
+            ? (prefs.pixar as Record<string, unknown>)
+            : {};
+        prefs.pixar = {
+          ...prevPixar,
+          child_hero: input.childAvatarUrl,
+          child_face_sheet:
+            input.childFaceSheetUrl ?? prevPixar.child_face_sheet ?? null,
+          child_body_sheet:
+            input.childBodySheetUrl ?? prevPixar.child_body_sheet ?? null,
+          friend_hero: input.friendAvatarUrl,
+          friend_sheet:
+            input.friendSheetUrl ?? prevPixar.friend_sheet ?? null,
+          engine: input.engine ?? prevPixar.engine ?? null,
+          selected_at: new Date().toISOString(),
+        };
+        if (input.markRedoUsed) prefs.avatar_redo_used = true;
+
+        await db
+          .from("children")
+          .update({
+            avatar_url: input.childAvatarUrl,
+            preferences: prefs,
+          })
+          .eq("id", childId);
+
+        const { data: existingChars } = await db
+          .from("characters")
+          .select("id, is_primary")
+          .eq("parent_id", user.id);
+        const primary = existingChars?.find((c) => c.is_primary);
+        if (primary) {
+          await db
+            .from("characters")
+            .update({ avatar_url: input.childAvatarUrl })
+            .eq("id", primary.id);
+        }
+        const friendExisting = existingChars?.find((c) => !c.is_primary);
+        if (friendExisting) {
+          await db
+            .from("characters")
+            .update({ avatar_url: input.friendAvatarUrl })
+            .eq("id", friendExisting.id);
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    childAvatarUrl: input.childAvatarUrl,
+    friendAvatarUrl: input.friendAvatarUrl,
+    childFaceSheetUrl: input.childFaceSheetUrl ?? undefined,
+    childBodySheetUrl: input.childBodySheetUrl ?? undefined,
+    friendSheetUrl: input.friendSheetUrl ?? undefined,
+    engine: input.engine ?? undefined,
+  };
+}
+
+export async function finishAvatarOnboardingAction(): Promise<OnboardingActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login." };
+
+  const state = await loadState();
+  let pin = normalizeSecurityPin(state.securityPin);
+
+  if (!isSupabaseConfigured() || user.isMock) {
+    if (!pin) return { error: "Defina o PIN de segurança." };
+    if (!state.child?.displayName) {
+      return { error: "Complete o avatar da criança." };
+    }
+    if (!state.friend?.displayName && !state.friendAvatarUrl) {
+      return { error: "Complete o melhor amigo." };
+    }
+    if (
+      !isPixarGeneratedUrl(state.childAvatarUrl) ||
+      !isPixarGeneratedUrl(state.friendAvatarUrl)
+    ) {
+      return { error: "Gere os personagens antes de continuar." };
+    }
+    state.completed = true;
+    state.securityPin = pin;
+    await writeMockOnboarding({
+      ...state,
+      childPhotos: [],
+      friendPhotos: [],
+    });
+    const session = await readMockSession();
+    if (session) {
+      await writeMockSession({ ...session, onboardingCompleted: true });
+    }
+    revalidatePath("/app/parent");
+    redirect("/app/parent");
+  }
+
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return { error: "Supabase indisponível." };
+
+  // PIN inválido no cookie (ex.: legado "set") → usa o do DB
+  if (!pin) {
+    const { data: row } = await db
+      .from("users")
+      .select("security_pin")
+      .eq("id", user.id)
+      .maybeSingle();
+    pin = normalizeSecurityPin(row?.security_pin);
+  }
+  if (!pin) return { error: "Defina o PIN de segurança." };
+
+  if (!state.child?.displayName) {
+    return { error: "Complete o avatar da criança." };
+  }
+  if (!state.friend?.displayName && !state.friendAvatarUrl) {
+    return { error: "Complete o melhor amigo." };
+  }
+  if (
+    !isPixarGeneratedUrl(state.childAvatarUrl) ||
+    !isPixarGeneratedUrl(state.friendAvatarUrl)
+  ) {
+    return { error: "Gere os personagens antes de continuar." };
+  }
+
+  state.completed = true;
+  state.securityPin = pin;
+  await writeMockOnboarding({
+    ...state,
+    childPhotos: [],
+    friendPhotos: [],
+  });
+
+  const { error } = await db
+    .from("users")
+    .update({
+      onboarding_completed: true,
+      security_pin: pin,
+      onboarding_reset_mode: null,
+    })
+    .eq("id", user.id);
+
+  if (error) {
+    return {
+      error: error.message.includes("users_security_pin_format")
+        ? "PIN inválido. Use só 4 a 6 dígitos numéricos."
+        : error.message,
+    };
+  }
+
+  revalidatePath("/app/parent");
+  redirect("/app/parent");
+}

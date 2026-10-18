@@ -71,12 +71,23 @@ CREATE TABLE public.users (
   stripe_customer_id text UNIQUE,
   subscription_status public.subscription_status NOT NULL DEFAULT 'none',
   subscription_plan_id text,
+  extra_characters_available integer NOT NULL DEFAULT 0,
+  last_active_at timestamptz,
+  last_story_at timestamptz,
+  complimentary_until timestamptz,
+  onboarding_reset_mode text,
+  admin_notes text,
   avatar_url text,
   locale text NOT NULL DEFAULT 'pt-BR',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT users_security_pin_format CHECK (
     security_pin IS NULL OR security_pin ~ '^[0-9]{4,6}$'
+  ),
+  CONSTRAINT users_extra_characters_nonneg CHECK (extra_characters_available >= 0),
+  CONSTRAINT users_onboarding_reset_mode_check CHECK (
+    onboarding_reset_mode IS NULL
+    OR onboarding_reset_mode IN ('full', 'reuse')
   )
 );
 
@@ -115,13 +126,19 @@ CREATE TABLE public.children (
   parent_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
   display_name text NOT NULL,
   birth_date date,
+  gender text,
   pin_code text,
   avatar_url text,
   avatar_model_id text,
+  avatar_photos_captured_at timestamptz,
+  avatar_refresh_due_at timestamptz,
   preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT children_display_name_len CHECK (char_length(display_name) BETWEEN 1 AND 80)
+  CONSTRAINT children_display_name_len CHECK (char_length(display_name) BETWEEN 1 AND 80),
+  CONSTRAINT children_gender_check CHECK (
+    gender IS NULL OR gender IN ('boy', 'girl', 'other')
+  )
 );
 
 CREATE INDEX children_parent_id_idx ON public.children (parent_id);
@@ -208,6 +225,8 @@ CREATE TABLE public.stories (
   character_id uuid REFERENCES public.characters (id) ON DELETE SET NULL,
   title text NOT NULL,
   status public.story_status NOT NULL DEFAULT 'draft',
+  visibility text NOT NULL DEFAULT 'private'
+    CHECK (visibility IN ('private', 'friends', 'public')),
   is_public boolean NOT NULL DEFAULT false,
   share_token uuid UNIQUE DEFAULT gen_random_uuid(),
   text_content jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -228,6 +247,24 @@ CREATE INDEX stories_share_token_idx ON public.stories (share_token)
 CREATE INDEX stories_public_ready_idx
   ON public.stories (is_public, status)
   WHERE is_public AND status = 'ready';
+CREATE INDEX stories_visibility_ready_idx
+  ON public.stories (visibility, status)
+  WHERE status = 'ready' AND visibility IN ('friends', 'public');
+
+CREATE OR REPLACE FUNCTION public.sync_story_is_public_from_visibility()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.is_public := (NEW.visibility = 'public');
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER stories_sync_is_public
+  BEFORE INSERT OR UPDATE OF visibility ON public.stories
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_story_is_public_from_visibility();
 
 CREATE TRIGGER stories_set_updated_at
   BEFORE UPDATE ON public.stories
@@ -281,6 +318,90 @@ CREATE TRIGGER games_set_updated_at
   EXECUTE FUNCTION public.set_updated_at();
 
 -- ---------------------------------------------------------------------------
+-- friendships — amizade entre contas parent (users.id)
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.friendships (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  requester_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  addressee_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  status text NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'accepted', 'rejected')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT friendships_not_self CHECK (requester_id <> addressee_id),
+  CONSTRAINT friendships_pair_unique UNIQUE (requester_id, addressee_id)
+);
+
+CREATE INDEX friendships_requester_idx
+  ON public.friendships (requester_id, status);
+CREATE INDEX friendships_addressee_idx
+  ON public.friendships (addressee_id, status);
+
+CREATE TRIGGER friendships_set_updated_at
+  BEFORE UPDATE ON public.friendships
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+CREATE OR REPLACE FUNCTION private.are_friends(a uuid, b uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.friendships f
+    WHERE f.status = 'accepted'
+      AND (
+        (f.requester_id = a AND f.addressee_id = b)
+        OR (f.requester_id = b AND f.addressee_id = a)
+      )
+  );
+$$;
+
+REVOKE ALL ON FUNCTION private.are_friends(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.are_friends(uuid, uuid) TO authenticated;
+
+-- ---------------------------------------------------------------------------
+-- friend_invites — link /invite/[token]
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.friend_invites (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  token uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+  inviter_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  status text NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'accepted', 'rejected', 'expired')),
+  expires_at timestamptz NOT NULL DEFAULT (now() + interval '30 days'),
+  accepted_by uuid REFERENCES public.users (id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX friend_invites_inviter_idx
+  ON public.friend_invites (inviter_id, status);
+CREATE INDEX friend_invites_token_idx
+  ON public.friend_invites (token)
+  WHERE status = 'pending';
+
+CREATE TRIGGER friend_invites_set_updated_at
+  BEFORE UPDATE ON public.friend_invites
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- story_likes
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.story_likes (
+  story_id uuid NOT NULL REFERENCES public.stories (id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (story_id, user_id)
+);
+
+CREATE INDEX story_likes_user_idx ON public.story_likes (user_id);
+
+-- ---------------------------------------------------------------------------
 -- subscription_limits — limites por plano (seedáveis / cacheáveis)
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.subscription_limits (
@@ -316,7 +437,7 @@ CREATE TRIGGER subscription_limits_set_updated_at
 INSERT INTO public.subscription_limits (plan_id, plan_name, max_children, max_stories_per_month, max_characters, max_images_per_story, features)
 VALUES
   ('free', 'Gratuito', 1, 3, 1, 4, '{"share": true, "lora": false}'::jsonb),
-  ('family', 'Família', 4, 30, 8, 12, '{"share": true, "lora": true}'::jsonb)
+  ('family', 'Família', 4, 15, 1, 8, '{"share": true, "lora": true, "stripe": true}'::jsonb)
 ON CONFLICT (plan_id) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
@@ -358,6 +479,9 @@ ALTER TABLE public.story_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.story_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friend_invites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.story_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscription_limits ENABLE ROW LEVEL SECURITY;
 
 -- users
@@ -432,14 +556,25 @@ CREATE POLICY story_templates_delete_own_or_admin
   ON public.story_templates FOR DELETE TO authenticated
   USING (created_by = auth.uid() OR private.is_admin());
 
--- stories: dono + admin; leitura pública por share_token / is_public
+-- stories: dono + admin; public/friends feed; share legado via is_public
 CREATE POLICY stories_select_own_or_admin
   ON public.stories FOR SELECT TO authenticated
   USING (parent_id = auth.uid() OR private.is_admin());
 
 CREATE POLICY stories_select_public_share
   ON public.stories FOR SELECT TO anon, authenticated
-  USING (is_public = true AND status = 'ready');
+  USING (
+    status = 'ready'
+    AND (visibility = 'public' OR is_public = true)
+  );
+
+CREATE POLICY stories_select_friends_feed
+  ON public.stories FOR SELECT TO authenticated
+  USING (
+    status = 'ready'
+    AND visibility = 'friends'
+    AND private.are_friends(auth.uid(), parent_id)
+  );
 
 CREATE POLICY stories_insert_own_or_admin
   ON public.stories FOR INSERT TO authenticated
@@ -454,7 +589,7 @@ CREATE POLICY stories_delete_own_or_admin
   ON public.stories FOR DELETE TO authenticated
   USING (parent_id = auth.uid() OR private.is_admin());
 
--- story_images: dono; leitura se a história for pública
+-- story_images: dono; leitura se a história for pública ou de amigos
 CREATE POLICY story_images_select_own_or_admin
   ON public.story_images FOR SELECT TO authenticated
   USING (parent_id = auth.uid() OR private.is_admin());
@@ -466,8 +601,21 @@ CREATE POLICY story_images_select_public_story
       SELECT 1
       FROM public.stories s
       WHERE s.id = story_images.story_id
-        AND s.is_public = true
         AND s.status = 'ready'
+        AND (s.visibility = 'public' OR s.is_public = true)
+    )
+  );
+
+CREATE POLICY story_images_select_friends_story
+  ON public.story_images FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.stories s
+      WHERE s.id = story_images.story_id
+        AND s.status = 'ready'
+        AND s.visibility = 'friends'
+        AND private.are_friends(auth.uid(), s.parent_id)
     )
   );
 
@@ -514,6 +662,95 @@ CREATE POLICY games_delete_own_or_admin
   ON public.games FOR DELETE TO authenticated
   USING (parent_id = auth.uid() OR private.is_admin());
 
+-- friendships
+CREATE POLICY friendships_select_involved
+  ON public.friendships FOR SELECT TO authenticated
+  USING (
+    requester_id = auth.uid()
+    OR addressee_id = auth.uid()
+    OR private.is_admin()
+  );
+
+CREATE POLICY friendships_insert_requester
+  ON public.friendships FOR INSERT TO authenticated
+  WITH CHECK (requester_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY friendships_update_involved
+  ON public.friendships FOR UPDATE TO authenticated
+  USING (
+    requester_id = auth.uid()
+    OR addressee_id = auth.uid()
+    OR private.is_admin()
+  )
+  WITH CHECK (
+    requester_id = auth.uid()
+    OR addressee_id = auth.uid()
+    OR private.is_admin()
+  );
+
+CREATE POLICY friendships_delete_involved
+  ON public.friendships FOR DELETE TO authenticated
+  USING (
+    requester_id = auth.uid()
+    OR addressee_id = auth.uid()
+    OR private.is_admin()
+  );
+
+-- friend_invites
+CREATE POLICY friend_invites_select_own_or_auth
+  ON public.friend_invites FOR SELECT TO authenticated
+  USING (
+    inviter_id = auth.uid()
+    OR status = 'pending'
+    OR private.is_admin()
+  );
+
+CREATE POLICY friend_invites_insert_own
+  ON public.friend_invites FOR INSERT TO authenticated
+  WITH CHECK (inviter_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY friend_invites_update_auth
+  ON public.friend_invites FOR UPDATE TO authenticated
+  USING (
+    inviter_id = auth.uid()
+    OR status = 'pending'
+    OR private.is_admin()
+  )
+  WITH CHECK (
+    inviter_id = auth.uid()
+    OR private.is_admin()
+    OR accepted_by = auth.uid()
+  );
+
+-- story_likes
+CREATE POLICY story_likes_select_auth
+  ON public.story_likes FOR SELECT TO authenticated
+  USING (true);
+
+CREATE POLICY story_likes_insert_own
+  ON public.story_likes FOR INSERT TO authenticated
+  WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1
+      FROM public.stories s
+      WHERE s.id = story_id
+        AND s.status = 'ready'
+        AND (
+          s.parent_id = auth.uid()
+          OR s.visibility = 'public'
+          OR (
+            s.visibility = 'friends'
+            AND private.are_friends(auth.uid(), s.parent_id)
+          )
+        )
+    )
+  );
+
+CREATE POLICY story_likes_delete_own
+  ON public.story_likes FOR DELETE TO authenticated
+  USING (user_id = auth.uid() OR private.is_admin());
+
 -- subscription_limits: leitura autenticada de planos ativos; escrita só admin
 CREATE POLICY subscription_limits_select_active
   ON public.subscription_limits FOR SELECT TO authenticated
@@ -535,3 +772,91 @@ GRANT SELECT ON public.games TO anon, authenticated;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- analytics_sessions — heartbeat PLG
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.analytics_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  duration_seconds integer NOT NULL DEFAULT 0,
+  path_sample text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT analytics_sessions_duration_nonneg CHECK (duration_seconds >= 0)
+);
+
+CREATE INDEX analytics_sessions_user_last_seen_idx
+  ON public.analytics_sessions (user_id, last_seen_at DESC);
+
+ALTER TABLE public.analytics_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY analytics_sessions_insert_own
+  ON public.analytics_sessions FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY analytics_sessions_update_own
+  ON public.analytics_sessions FOR UPDATE TO authenticated
+  USING (user_id = auth.uid() OR private.is_admin())
+  WITH CHECK (user_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY analytics_sessions_select_own_or_admin
+  ON public.analytics_sessions FOR SELECT TO authenticated
+  USING (user_id = auth.uid() OR private.is_admin());
+
+-- ---------------------------------------------------------------------------
+-- usage_events — medição de tokens/custo OpenAI por usuário e categoria
+-- ---------------------------------------------------------------------------
+CREATE TABLE public.usage_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
+  category text NOT NULL,
+  provider text NOT NULL DEFAULT 'openai',
+  model text,
+  operation text,
+  prompt_tokens integer NOT NULL DEFAULT 0,
+  completion_tokens integer NOT NULL DEFAULT 0,
+  total_tokens integer NOT NULL DEFAULT 0,
+  estimated_usd numeric(12, 6) NOT NULL DEFAULT 0,
+  estimated_brl numeric(12, 6) NOT NULL DEFAULT 0,
+  meta jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT usage_events_category_check CHECK (
+    category IN (
+      'avatar_pixar',
+      'story_text',
+      'story_image',
+      'story_quiz',
+      'story_clarify',
+      'other'
+    )
+  ),
+  CONSTRAINT usage_events_tokens_nonneg CHECK (
+    prompt_tokens >= 0
+    AND completion_tokens >= 0
+    AND total_tokens >= 0
+  ),
+  CONSTRAINT usage_events_cost_nonneg CHECK (
+    estimated_usd >= 0 AND estimated_brl >= 0
+  )
+);
+
+CREATE INDEX usage_events_user_created_idx
+  ON public.usage_events (user_id, created_at DESC);
+
+CREATE INDEX usage_events_category_created_idx
+  ON public.usage_events (category, created_at DESC);
+
+ALTER TABLE public.usage_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY usage_events_select_own_or_admin
+  ON public.usage_events FOR SELECT TO authenticated
+  USING (user_id = auth.uid() OR private.is_admin());
+
+CREATE POLICY usage_events_insert_own_or_admin
+  ON public.usage_events FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() OR private.is_admin());
+
+GRANT SELECT, INSERT ON public.usage_events TO authenticated;

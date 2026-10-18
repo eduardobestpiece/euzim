@@ -1,21 +1,27 @@
 # Estúdio Mágico — plano MVP (resumo)
 
 ## Fases
-1. **Infra** — Next.js, Shadcn, schema SQL ✅ (aplicar no SQL Editor se ainda missing)
-2. **Auth + onboarding** ✅
-3. **Dashboards** — tracker 15, personagens upsell, Kids + PIN ✅
-4. **Gerador** — Nova História mock 4 páginas ✅
+1. **Infra** — Next.js, Shadcn, schema SQL ✅ (`zlzgkivktvnyvehjwcjw`)
+2. **Auth + onboarding avatar** ✅ — wizard obrigatório: PIN → filho (12 fotos) → melhor amigo (12 fotos) → preview LoRA → painel
+3. **Dashboards** — tracker, personagens upsell, Kids + PIN ✅
+4. **Gerador** — Nova História (OpenAI texto + Unsplash) ✅
 5. **Kids reader + Quiz Therapy** ✅
-6. **Share público** — `/story/[shareToken]` + CTA ✅
-7. Stripe / LoRA real / IA (futuro)
+6. **Share público + persistência real** ✅
+7. **Stripe** — código pronto; aguarda `sk_test_/pk_/whsec_` (chave `mk_` = ID, não secret)
+8. **Admin PLG** ✅ — KPIs, tabela contas, drawer (plano/dias/recovery/reset full|reuse), heartbeat
+9. LoRA real / pipeline de treino (futuro)
+
+## Feeling
+Login → onboarding de avatar **antes** de qualquer “criar história”. Parent home destaca o avatar da criança.
 
 ## Porta
-`5050` — usar Try Live na VM cloud
+`5050` — Try Live na VM cloud
 
 ## Supabase
-- Projeto: `zlzgkivktvnyvehjwcjw`
+- Projeto: `zlzgkivktvnyvehjwcjw` (nunca Best Piece)
 - Keys em `.env.local` (não commitadas)
-- Fallback mock enquanto tabelas não existirem
+- Storage bucket `avatars`
+- Smoke: `node scripts/smoke-persist.mjs` · `node scripts/seed-users.mjs`
 
 ## GitHub
-https://github.com/euzimgeral/euzim
+https://github.com/euzimgeral/euzim — branch `cursor/estudio-magico-onboarding-avatar-d189`

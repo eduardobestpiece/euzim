@@ -101,7 +101,7 @@ export function QuizTherapy({
           Quiz Therapy
         </CardTitle>
         <CardDescription>
-          Três perguntinhas sobre a história — no seu tempo.
+          Perguntas sobre a história e a lição vivida — no seu tempo.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

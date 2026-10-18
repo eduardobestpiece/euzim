@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import Link from "next/link";
 import { BookOpen, Gamepad2, Star } from "lucide-react";
+import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { PinGuardButton } from "@/components/kids/pin-guard";
 import { getCurrentUser } from "@/lib/auth/get-user";
@@ -7,7 +10,8 @@ import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { listStoriesForParent } from "@/lib/stories/load-story";
 
-export default async function KidsPage() {
+async function KidsPageInner() {
+  await connection();
   const user = await getCurrentUser();
   if (!user) return null;
 
@@ -95,5 +99,13 @@ export default async function KidsPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+export default function KidsPage() {
+  return (
+    <Suspense fallback={<AppPageFallback label="Carregando área kids…" />}>
+      <KidsPageInner />
+    </Suspense>
   );
 }

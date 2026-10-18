@@ -1,67 +1,65 @@
-import Link from "next/link";
-import { BookOpen, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Suspense } from "react";
+import { connection } from "next/server";
+import { BrandLogo } from "@/components/brand/brand-logo";
+import { LandingHome } from "@/components/marketing/landing-home";
+import { HasAccountGate } from "@/components/referral/has-account-gate";
+import { getCurrentUser } from "@/lib/auth/get-user";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { redirect } from "next/navigation";
 
-export default function Home() {
-  const mockMode = !isSupabaseConfigured();
-
+function HomeFallback() {
   return (
-    <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_oklch(0.92_0.04_85)_0%,_transparent_55%),radial-gradient(ellipse_at_bottom_right,_oklch(0.9_0.06_200)_0%,_transparent_45%)]"
-      />
-      <header className="relative z-10 flex items-center justify-between px-6 py-5 md:px-10">
-        <div className="flex items-center gap-2 text-sm font-medium tracking-wide text-foreground/70">
-          <Sparkles className="size-4 text-amber-600" aria-hidden />
-          Estúdio Mágico · porta 5050
-        </div>
-        <div className="flex gap-2">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Entrar</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/signup">Criar conta</Link>
-          </Button>
-        </div>
+    <div className="landing-root relative flex min-h-full flex-1 flex-col">
+      <header className="relative z-10 flex items-center justify-between px-5 py-4 sm:px-8 md:px-12">
+        <BrandLogo size="header" priority />
       </header>
-
-      <main className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-8 px-6 pb-20 pt-8 md:px-10">
-        <div className="space-y-4">
-          <p className="font-heading text-5xl font-semibold tracking-tight text-foreground md:text-6xl">
-            Estúdio Mágico
-          </p>
-          <h1 className="max-w-xl text-xl leading-relaxed text-foreground/80 md:text-2xl">
-            Histórias infantis personalizadas com o avatar da sua criança.
-          </h1>
-          <p className="max-w-lg text-base leading-relaxed text-muted-foreground">
-            Fase 2: Auth, onboarding (PIN, perfil e fotos LoRA simuladas) e
-            rotas protegidas em /app/parent, /app/kids e /app/admin.
-          </p>
-          {mockMode ? (
-            <p className="text-sm text-amber-800">
-              Supabase em modo mock — preencha `.env.local` com o projeto
-              zlzgkivktvnyvehjwcjw quando for usar Auth real.
-            </p>
-          ) : null}
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <Button asChild size="lg" className="gap-2">
-            <Link href="/signup">
-              <BookOpen className="size-4" aria-hidden />
-              Começar
-            </Link>
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Schema em{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-              supabase/schema.sql
-            </code>
-          </p>
-        </div>
+      <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pb-16 text-sm text-muted-foreground">
+        Carregando…
       </main>
     </div>
+  );
+}
+
+async function HomeInner({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string; channel?: string }>;
+}) {
+  // cacheComponents: connection() + Suspense permite searchParams/cookies em runtime
+  await connection();
+  const params = await searchParams;
+  const mockMode = !isSupabaseConfigured();
+  const hasRef = Boolean(params.ref && params.ref.trim());
+  const user = await getCurrentUser();
+
+  if (hasRef && user) {
+    redirect(user.onboardingCompleted ? "/app/parent" : "/onboarding");
+  }
+
+  if (hasRef && !user) {
+    return (
+      <div className="landing-root relative flex min-h-full flex-1 flex-col">
+        <header className="relative z-10 flex items-center justify-between px-5 py-4 sm:px-8 md:px-12">
+          <BrandLogo size="header" priority />
+        </header>
+        <main className="relative z-10 mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-5 pb-16">
+          <HasAccountGate nextPath="/onboarding" />
+        </main>
+      </div>
+    );
+  }
+
+  return <LandingHome mockMode={mockMode} />;
+}
+
+export default function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ ref?: string; channel?: string }>;
+}) {
+  return (
+    <Suspense fallback={<HomeFallback />}>
+      <HomeInner searchParams={searchParams} />
+    </Suspense>
   );
 }

@@ -42,7 +42,9 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
       fullName: user.user_metadata?.full_name ?? null,
       onboardingCompleted: Boolean(
         onboarding?.completed ||
-          (onboarding?.securityPin && onboarding?.child && onboarding.photos.length),
+          (onboarding?.securityPin &&
+            onboarding?.child &&
+            (onboarding.childPhotos?.length || onboarding.photos?.length)),
       ),
       isMock: false,
     };

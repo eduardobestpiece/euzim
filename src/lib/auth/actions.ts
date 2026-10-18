@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
@@ -11,7 +12,10 @@ import {
   writeMockOnboarding,
   writeMockSession,
 } from "@/lib/auth/mock-session";
-import type { OnboardingPhotoDraft, OnboardingState } from "@/lib/auth/types";
+import type { OnboardingPhotoDraft } from "@/lib/auth/types";
+import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
+import { applyReferralAttribution } from "@/lib/referral/attribution";
+import { ensureReferralCode } from "@/lib/referral/codes";
 
 export type AuthActionResult = {
   error?: string;
@@ -45,24 +49,62 @@ export async function signUpAction(
     await writeMockOnboarding({
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     });
-    redirect("/onboarding");
+    const nextMock = String(formData.get("next") ?? "").trim();
+    redirect(nextMock.startsWith("/") ? nextMock : "/onboarding");
   }
 
+  const admin = createAdminClient();
   const supabase = await createClient();
-  if (!supabase) return { error: "Supabase indisponível." };
+  if (!admin || !supabase) return { error: "Supabase indisponível." };
 
-  const { error } = await supabase.auth.signUp({
+  // Cria conta já confirmada (sem e-mail de verificação) e abre sessão
+  // imediatamente — cadastro → onboard fluído, sem login extra.
+  const { data: created, error: createError } =
+    await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName || undefined },
+    });
+
+  if (createError) {
+    const msg = createError.message.toLowerCase();
+    if (
+      msg.includes("already") ||
+      msg.includes("registered") ||
+      msg.includes("exists")
+    ) {
+      return {
+        error: "Este e-mail já tem conta. Entre com sua senha.",
+      };
+    }
+    return { error: createError.message };
+  }
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
     email,
     password,
-    options: { data: { full_name: fullName || undefined } },
   });
+  if (signInError) {
+    return {
+      error:
+        "Conta criada, mas não foi possível iniciar a sessão. Tente entrar.",
+    };
+  }
 
-  if (error) return { error: error.message };
+  const newUserId = created.user?.id;
+  if (newUserId) {
+    await ensureReferralCode(newUserId);
+    await applyReferralAttribution(newUserId);
+  }
 
-  redirect("/onboarding");
+  const next = String(formData.get("next") ?? "").trim();
+  redirect(next.startsWith("/") ? next : "/onboarding");
 }
 
 export async function signInAction(
@@ -104,13 +146,23 @@ export async function signInAction(
   } = await supabase.auth.getUser();
 
   if (user) {
+    await ensureReferralCode(user.id);
+    await applyReferralAttribution(user.id);
+
     const { data: profile } = await supabase
       .from("users")
-      .select("onboarding_completed")
+      .select("onboarding_completed, role")
       .eq("id", user.id)
       .maybeSingle();
 
-    redirect(profile?.onboarding_completed ? "/app/parent" : "/onboarding");
+    const next = String(formData.get("next") ?? "").trim();
+    if (next.startsWith("/")) {
+      redirect(next);
+    }
+    if (!profile?.onboarding_completed) {
+      redirect("/onboarding");
+    }
+    redirect(profile?.role === "admin" ? "/app/admin" : "/app/parent");
   }
 
   redirect("/app/parent");
@@ -148,7 +200,9 @@ export async function saveSecurityPinAction(
     const current = (await readMockOnboarding()) ?? {
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     };
     await writeMockOnboarding({ ...current, securityPin: pin });
@@ -190,12 +244,18 @@ export async function saveChildProfileAction(
     const current = (await readMockOnboarding()) ?? {
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     };
     await writeMockOnboarding({
       ...current,
-      child: { displayName, birthDate },
+      child: {
+        displayName,
+        birthDate: birthDate || "2018-01-01",
+        gender: "other",
+      },
     });
     return { success: true };
   }
@@ -232,17 +292,24 @@ export async function savePhotosMockAction(
     const current = (await readMockOnboarding()) ?? {
       securityPin: "",
       child: null,
-      photos: [],
+      childPhotos: [],
+      friend: null,
+      friendPhotos: [],
       completed: false,
     };
     // Não persistir data URLs em cookies (limite de tamanho) — só metadados.
-    const lightPhotos = photos.map(({ id, name, storagePath }) => ({
+    const lightPhotos = photos.map(({ id, name, storagePath, slotId }) => ({
       id,
+      slotId: slotId || id,
       name,
       storagePath,
       previewUrl: "",
     }));
-    await writeMockOnboarding({ ...current, photos: lightPhotos });
+    await writeMockOnboarding({
+      ...current,
+      childPhotos: lightPhotos,
+      photos: lightPhotos,
+    });
     return { success: true };
   }
 
@@ -280,41 +347,9 @@ export async function savePhotosMockAction(
   return { success: true };
 }
 
+/** @deprecated Use finishAvatarOnboardingAction — mantido para compat. */
 export async function completeOnboardingAction(): Promise<AuthActionResult> {
-  if (!isSupabaseConfigured()) {
-    const session = await readMockSession();
-    if (!session) return { error: "Sessão expirada." };
-
-    const onboarding = await readMockOnboarding();
-    if (!onboarding?.securityPin) {
-      return { error: "Defina o PIN de segurança." };
-    }
-    if (!onboarding.child?.displayName) {
-      return { error: "Complete o perfil da criança." };
-    }
-    if (!onboarding.photos.length) {
-      return { error: "Adicione fotos para o avatar." };
-    }
-
-    const next: OnboardingState = { ...onboarding, completed: true };
-    await writeMockOnboarding(next);
-    await writeMockSession({ ...session, onboardingCompleted: true });
-    redirect("/app/parent");
-  }
-
-  const supabase = await createClient();
-  if (!supabase) return { error: "Supabase indisponível." };
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const { error } = await supabase
-    .from("users")
-    .update({ onboarding_completed: true })
-    .eq("id", user.id);
-
-  if (error) return { error: error.message };
-  redirect("/app/parent");
+  const result = await finishAvatarOnboardingAction();
+  if (result.error) return { error: result.error };
+  return { success: true };
 }

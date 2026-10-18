@@ -1,6 +1,15 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readMockStories } from "@/lib/stories/mock-store";
+import {
+  isMissingStoryColumnError,
+} from "@/lib/stories/persist-helpers";
+import {
+  buildQuizFromPages,
+  normalizeQuizQuestions,
+  type QuizQuestion,
+} from "@/lib/stories/quiz";
+// Nota: lista resiliente a schema sem `visibility` (SQL social pendente no Euzim).
 
 export type StoryDetail = {
   id: string;
@@ -8,7 +17,32 @@ export type StoryDetail = {
   coverImageUrl: string | null;
   pages: { pageIndex: number; text: string; imageUrl: string; altText: string }[];
   source: "supabase" | "mock";
+  shareToken?: string | null;
+  questions: QuizQuestion[];
 };
+
+type StoryListRow = {
+  id: string;
+  title: string;
+  cover_image_url: string | null;
+  created_at: string;
+  visibility?: string | null;
+  is_public?: boolean | null;
+  status?: string | null;
+};
+
+function mapVisibility(
+  row: StoryListRow,
+): "private" | "friends" | "public" {
+  if (
+    row.visibility === "private" ||
+    row.visibility === "friends" ||
+    row.visibility === "public"
+  ) {
+    return row.visibility;
+  }
+  return row.is_public ? "public" : "private";
+}
 
 export async function loadStoryForParent(
   storyId: string,
@@ -22,7 +56,9 @@ export async function loadStoryForParent(
     try {
       const { data: story, error } = await db
         .from("stories")
-        .select("id, title, cover_image_url, text_content, parent_id")
+        .select(
+          "id, title, cover_image_url, text_content, questions_data, parent_id, share_token",
+        )
         .eq("id", storyId)
         .maybeSingle();
 
@@ -36,11 +72,17 @@ export async function loadStoryForParent(
         const textPages =
           (
             story.text_content as {
-              pages?: { index: number; text: string }[];
+              pages?: { index: number; text: string; title?: string }[];
             } | null
           )?.pages ?? [];
 
-        const pages = [0, 1, 2, 3].map((pageIndex) => {
+        const pageCount = Math.max(
+          textPages.length,
+          images?.length ?? 0,
+          1,
+        );
+
+        const pages = Array.from({ length: pageCount }, (_, pageIndex) => {
           const text =
             textPages.find((p) => p.index === pageIndex)?.text ??
             textPages[pageIndex]?.text ??
@@ -54,12 +96,20 @@ export async function loadStoryForParent(
           };
         });
 
+        const saved = normalizeQuizQuestions(story.questions_data);
+        const questions =
+          saved.length > 0
+            ? saved
+            : buildQuizFromPages(story.title, pages);
+
         return {
           id: story.id,
           title: story.title,
           coverImageUrl: story.cover_image_url,
           pages,
           source: "supabase",
+          shareToken: story.share_token,
+          questions,
         };
       }
     } catch {
@@ -71,21 +121,37 @@ export async function loadStoryForParent(
   const mock = mocks.find((s) => s.id === storyId && s.parentId === parentId);
   if (!mock) return null;
 
+  const saved = normalizeQuizQuestions(mock.questionsData);
+  const questions =
+    saved.length > 0
+      ? saved
+      : buildQuizFromPages(mock.title, mock.pages);
+
   return {
     id: mock.id,
     title: mock.title,
     coverImageUrl: mock.coverImageUrl,
     pages: mock.pages,
     source: "mock",
+    shareToken: mock.id,
+    questions,
   };
 }
 
+/**
+ * Lista histórias do responsável.
+ * Select resiliente: se `visibility` ainda não existir no projeto Euzim
+ * (SQL social pendente), refaz sem a coluna em vez de cair no mock vazio.
+ */
 export async function listStoriesForParent(parentId: string): Promise<
   {
     id: string;
     title: string;
     coverImageUrl?: string | null;
+    /** Última página (retrato wallpaper 1024×1536), se existir. */
+    wallpaperImageUrl?: string | null;
     createdAt?: string;
+    visibility?: "private" | "friends" | "public";
   }[]
 > {
   const admin = createAdminClient();
@@ -94,33 +160,96 @@ export async function listStoriesForParent(parentId: string): Promise<
 
   if (db) {
     try {
-      const { data, error } = await db
+      const fullSelect =
+        "id, title, cover_image_url, created_at, visibility, is_public, status";
+      const baseSelect = "id, title, cover_image_url, created_at, status";
+
+      type ListQueryResult = {
+        data: StoryListRow[] | null;
+        error: { code?: string; message?: string; details?: string } | null;
+      };
+
+      let result: ListQueryResult = await db
         .from("stories")
-        .select("id, title, cover_image_url, created_at")
+        .select(fullSelect)
         .eq("parent_id", parentId)
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(40);
 
-      if (!error && data) {
-        return data.map((s) => ({
+      if (result.error && isMissingStoryColumnError(result.error)) {
+        result = await db
+          .from("stories")
+          .select(baseSelect)
+          .eq("parent_id", parentId)
+          .order("created_at", { ascending: false })
+          .limit(40);
+      }
+
+      // Último recurso: só colunas do schema base (pré-is_public social)
+      if (result.error && isMissingStoryColumnError(result.error)) {
+        result = await db
+          .from("stories")
+          .select("id, title, cover_image_url, created_at")
+          .eq("parent_id", parentId)
+          .order("created_at", { ascending: false })
+          .limit(40);
+      }
+
+      if (!result.error && result.data) {
+        const data = result.data;
+        // Mostra prontas e em progresso; oculta só draft vazio sem título útil
+        const visible = data.filter((s) => {
+          if (!s.status) return true;
+          return s.status !== "failed" && s.status !== "archived";
+        });
+
+        const ids = visible.map((s) => s.id);
+        const wallpaperByStory = new Map<string, string>();
+        if (ids.length > 0) {
+          const { data: images } = await db
+            .from("story_images")
+            .select("story_id, page_index, image_url")
+            .in("story_id", ids)
+            .order("page_index", { ascending: false });
+          for (const row of images ?? []) {
+            if (!row.image_url || wallpaperByStory.has(row.story_id)) continue;
+            wallpaperByStory.set(row.story_id, row.image_url);
+          }
+        }
+        return visible.map((s) => ({
           id: s.id,
           title: s.title,
           coverImageUrl: s.cover_image_url,
+          wallpaperImageUrl: wallpaperByStory.get(s.id) ?? s.cover_image_url,
           createdAt: s.created_at,
+          visibility: mapVisibility(s),
         }));
       }
-    } catch {
-      // mock
+
+      if (result.error) {
+        console.error(
+          "[listStoriesForParent] supabase error",
+          result.error.code,
+          result.error.message,
+        );
+      }
+    } catch (err) {
+      console.error("[listStoriesForParent] unexpected", err);
     }
   }
 
   const mocks = await readMockStories();
   return mocks
     .filter((s) => s.parentId === parentId)
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      coverImageUrl: s.coverImageUrl,
-      createdAt: s.createdAt,
-    }));
+    .map((s) => {
+      const last = [...s.pages].sort((a, b) => b.pageIndex - a.pageIndex)[0];
+      return {
+        id: s.id,
+        title: s.title,
+        coverImageUrl: s.coverImageUrl,
+        wallpaperImageUrl: last?.imageUrl || s.coverImageUrl,
+        createdAt: s.createdAt,
+        visibility: "private" as const,
+      };
+    });
 }

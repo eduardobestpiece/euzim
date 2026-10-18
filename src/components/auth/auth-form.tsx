@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import {
   signInAction,
   signUpAction,
@@ -26,30 +27,43 @@ const initial: AuthActionResult = {};
 export function AuthForm({
   mode,
   mockMode,
+  nextPath,
 }: {
   mode: Mode;
   mockMode: boolean;
+  /** Após auth, redireciona para este path (ex. convite / onboarding). */
+  nextPath?: string | null;
 }) {
   const action = mode === "login" ? signInAction : signUpAction;
   const [state, formAction, pending] = useActionState(action, initial);
+  const safeNext =
+    nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")
+      ? nextPath
+      : null;
+  const altHref = (base: string) =>
+    safeNext ? `${base}?next=${encodeURIComponent(safeNext)}` : base;
 
   return (
     <Card className="w-full max-w-md border-border/60 shadow-none">
-      <CardHeader>
-        <CardTitle className="font-heading text-2xl">
-          {mode === "login" ? "Entrar" : "Criar conta"}
-        </CardTitle>
-        <CardDescription>
-          {mode === "login"
-            ? "Acesse o Estúdio Mágico com seu e-mail."
-            : "Comece a personalizar histórias para sua criança."}
-        </CardDescription>
+      <CardHeader className="space-y-4">
+        <BrandLogo size="auth" href="/" priority className="mx-auto sm:mx-0" />
+        <div className="space-y-1.5">
+          <CardTitle className="font-heading text-2xl">
+            {mode === "login" ? "Entrar" : "Criar conta"}
+          </CardTitle>
+          <CardDescription>
+            {mode === "login"
+              ? "Acesse o Euzim com seu e-mail."
+              : "Comece a personalizar histórias para sua criança."}
+          </CardDescription>
+        </div>
       </CardHeader>
       <form action={formAction}>
+        {safeNext ? <input type="hidden" name="next" value={safeNext} /> : null}
         <CardContent className="space-y-4">
           {mockMode ? (
             <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Modo mock ativo — variáveis Supabase não configuradas. Sessão
+              Modo demo ativo — conta em nuvem não configurada. Sessão
               fica em cookies locais.
             </p>
           ) : null}
@@ -106,14 +120,20 @@ export function AuthForm({
             {mode === "login" ? (
               <>
                 Não tem conta?{" "}
-                <Link href="/signup" className="text-foreground underline">
+                <Link
+                  href={altHref("/signup")}
+                  className="text-foreground underline"
+                >
                   Cadastre-se
                 </Link>
               </>
             ) : (
               <>
                 Já tem conta?{" "}
-                <Link href="/login" className="text-foreground underline">
+                <Link
+                  href={altHref("/login")}
+                  className="text-foreground underline"
+                >
                   Entrar
                 </Link>
               </>

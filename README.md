@@ -1,10 +1,16 @@
-# Estúdio Mágico
+# Euzim
 
-SaaS B2C para pais gerarem histórias infantis personalizadas com IA (avatar LoRA da criança).
+SaaS B2C para pais gerarem histórias infantis personalizadas com IA (avatar Pixar da criança).
 
-Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supabase.
+Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supabase, Stripe.
 
 **Porta do app: `5050`.** A porta `8080` é reservada para BP Sales — não use neste Project.
+
+Stamp da plataforma: `v35` (`src/lib/platform-build.ts`). Brand assets em `public/brand/`.
+
+Área Social: `/app/social` (feed 3:1, amizades, curtidas). Convite de perfil: `/invite/[token]`.
+Nova História: botão **Criar história com amigos** (elenco próprio + amigo aceito, máx. 5).
+Antes de usar Social em produção, aplique `supabase/migrations/20261017_area_social.sql` no projeto `zlzgkivktvnyvehjwcjw`.
 
 ## Pré-requisitos
 
@@ -16,9 +22,13 @@ Stack: Next.js (App Router), TypeScript, Tailwind CSS, Shadcn UI, Lucide, Supaba
 ```bash
 npm install
 cp .env.local.example .env.local
-# Preencha NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY
-# Se deixar placeholders, o app usa modo mock (Auth + onboarding locais)
+# Preencha Supabase + OPENAI_API_KEY
+# Stripe LIVE: STRIPE_SECRET_KEY + NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY em .env.local
+# Price IDs: src/lib/billing/stripe-price-ids.ts
+# Webhook (opcional p/ sync assíncrono): STRIPE_WEBHOOK_SECRET (whsec_) no Dashboard
+#   endpoint → {APP_URL}/api/stripe/webhook (eventos checkout.session.completed)
 ```
+
 
 ## Desenvolvimento (porta 5050)
 
@@ -28,46 +38,36 @@ npm run dev
 
 Abra [http://127.0.0.1:5050](http://127.0.0.1:5050).
 
-Script: `next dev -H 0.0.0.0 -p 5050`.
+## Melhorias 7 etapas (v19)
 
-## Schema Supabase
+1. Limpeza UX/admin, CTA primeira história, form tema minimalista
+2. Quiz reflexivo com shuffle de opções (3–5)
+3. Scene Continuity Bible + prop locks nas imagens
+4. Metadados de personagens + modal de preço (6+ = R$ 9,90)
+5. Wizard: tema → elenco/tipo/linguagem/tamanho → clarify → generate
+6. `story_jobs` em background + notificação in-app/browser
+7. Planos Stripe R$ 24,90/4 · R$ 49,90/10 · R$ 7,90 extra (Checkout gated sem secret)
 
-O SQL da Fase 1 está em [`supabase/schema.sql`](./supabase/schema.sql).
+SQL: `supabase/migrations/20261017_melhorias_7_etapas.sql`
 
-**Não aplica automaticamente.** Revise e execute manualmente no SQL Editor do Supabase após aprovação.
+### Stripe
 
-Tabelas: `users`, `children`, `characters`, `story_templates`, `stories`, `story_images`, `games`, `subscription_limits` — com FKs e RLS.
+Checkout exige `STRIPE_SECRET_KEY` (`sk_live_` / `sk_test_`) + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+`STRIPE_WEBHOOK_SECRET` (`whsec_`) é opcional — sem ele, o fulfillment roda na página de sucesso do Checkout.
+Products/Prices:
 
-## Auth e onboarding (Fase 2)
+```bash
+node scripts/create-stripe-products.mjs
+```
 
-- `/login` e `/signup` — Auth via `@supabase/ssr` (ou mock local)
-- `/onboarding` — PIN de segurança, 1ª criança, upload de fotos (simulação LoRA)
-- Áreas protegidas: `/app/parent`, `/app/kids`, `/app/admin`
+## Scripts úteis
 
-## Scripts
-
-| Comando         | Descrição                         |
-|-----------------|-----------------------------------|
-| `npm run dev`   | Dev server em `0.0.0.0:5050`      |
-| `npm run build` | Build de produção                 |
-| `npm run start` | Serve build em `0.0.0.0:5050`     |
-| `npm run lint`  | ESLint                            |
-
-## Fases
-
-- **Fase 1** — infraestrutura (app + schema) ✅
-- **Fase 2** — Auth + onboarding + rotas protegidas ✅
-- **Fase 3** — Painel Pais (tracker 15), Personagens upsell, Kids + PIN Guard ✅
-- **Fase 4** — Motor gerador mock (Nova História, 4 páginas + Unsplash) ✅
-- Fases 5+ — quiz, share, Stripe
-
-## Schema remoto
-
-Aplique `supabase/schema.sql` no SQL Editor do projeto `zlzgkivktvnyvehjwcjw`.
-A secret key autentica a API REST, mas **não** executa DDL. Ver `scripts/apply-schema.mjs`.
+| Comando | Descrição |
+|---------|-----------|
+| `npm run dev` | Dev server `0.0.0.0:5050` |
+| `node scripts/cleanup-fake-users.mjs` | Mantém só contato@ + eduardocosta@ |
+| `node scripts/create-stripe-products.mjs` | Cria Products/Prices (precisa sk_) |
 
 ## GitHub
 
 https://github.com/euzimgeral/euzim
-
-> Nota: o PAT atual só tem Contents write em `euzim`. O repo `estudio-magico` foi criado na conta, mas o token fine-grained não consegue push nele até incluir o repositório nas permissões.

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/get-user";
-import { saveQuizProgress } from "@/lib/stories/game-store";
+import { saveQuizProgress } from "@/lib/stories/games-store";
 import type { QuizQuestion } from "@/lib/stories/quiz";
 
 export type SaveQuizResult = {
