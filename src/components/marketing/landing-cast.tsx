@@ -1,28 +1,56 @@
 import Image from "next/image";
+import type { ReactNode } from "react";
 
-const ITEMS = [
+const ITEMS: {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+  label: string;
+  copy: ReactNode;
+}[] = [
   {
     src: "/brand/euzim-cast-family.png",
     alt: "Família saltando de um livro mágico",
     width: 1123,
     height: 844,
-    text: "Construa histórias envolvendo toda a família, gerando maior proximidade",
+    label: "Família",
+    copy: (
+      <>
+        Construa histórias envolvendo toda a{" "}
+        <span className="landing-cast-accent">família</span> gerando maior
+        proximidade
+      </>
+    ),
   },
   {
     src: "/brand/euzim-cast-friends.png",
     alt: "Várias crianças saltando de um livro mágico",
     width: 1130,
     height: 784,
-    text: "Construa histórias em colaboração com amigos na plataforma",
+    label: "Amigos",
+    copy: (
+      <>
+        Construa histórias em colaboração com{" "}
+        <span className="landing-cast-accent">amigos</span> na plataforma
+      </>
+    ),
   },
   {
     src: "/brand/euzim-cast-pets-toys.png",
     alt: "Pets e brinquedos saltando de um livro mágico",
     width: 1144,
     height: 824,
-    text: "Construa histórias interagindo com os pets e brinquedos favoritos da criança",
+    label: "Pets e brinquedos",
+    copy: (
+      <>
+        Construa histórias interagindo com os{" "}
+        <span className="landing-cast-accent">pets e brinquedos</span> favoritos
+        da criança
+      </>
+    ),
   },
-] as const;
+];
 
 export function LandingCast() {
   return (
@@ -47,6 +75,7 @@ export function LandingCast() {
         <ul className="landing-cast-grid">
           {ITEMS.map((item) => (
             <li key={item.src} className="landing-cast-item">
+              <p className="landing-cast-label font-story-display">{item.label}</p>
               <div className="landing-cast-visual">
                 <Image
                   src={item.src}
@@ -57,9 +86,7 @@ export function LandingCast() {
                   sizes="(max-width: 900px) 88vw, 30vw"
                 />
               </div>
-              <p className="landing-cast-copy font-story-body">
-                {item.text}
-              </p>
+              <p className="landing-cast-copy font-story-body">{item.copy}</p>
             </li>
           ))}
         </ul>

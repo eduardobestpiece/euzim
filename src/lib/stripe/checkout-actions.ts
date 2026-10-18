@@ -350,6 +350,42 @@ export async function startCustomAvatarsCheckoutAction(
   }
 }
 
+/** Abre o Stripe Customer Portal (cancelar / gerenciar assinatura). */
+export async function startBillingPortalAction(): Promise<CheckoutActionResult> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Faça login para gerenciar a assinatura." };
+
+  const gated = gateSecret();
+  if (gated) return gated;
+
+  const stripe = getStripe();
+  if (!stripe) return { error: "Cliente Stripe indisponível." };
+
+  const { customerId, error: customerError } = await ensureStripeCustomer({
+    userId: user.id,
+    email: user.email,
+    fullName: user.fullName,
+  });
+  if (!customerId) {
+    return { error: customerError || "Customer Stripe não encontrado." };
+  }
+
+  const origin = await appOrigin();
+
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${origin}/app/parent/settings`,
+    });
+    if (!session.url) return { error: "Portal Stripe sem URL." };
+    return { url: session.url };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Falha ao abrir o portal Stripe.";
+    return { error: message };
+  }
+}
+
 export async function mockActivateSubscriptionAction(
   planId: string = FAMILY_SUBSCRIPTION.planId,
 ): Promise<CheckoutActionResult> {

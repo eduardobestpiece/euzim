@@ -7,6 +7,9 @@ import { LandingCast } from "@/components/marketing/landing-cast";
 import { LandingAntiWoke } from "@/components/marketing/landing-anti-woke";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import { LandingOffer } from "@/components/marketing/landing-offer";
+import { LandingFaq } from "@/components/marketing/landing-faq";
+import { LandingFinalCta } from "@/components/marketing/landing-final-cta";
+import { LandingFooter } from "@/components/marketing/landing-footer";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -164,13 +167,19 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
 
       <LandingStoryBook />
 
-      <LandingCast />
-
-      <LandingAntiWoke />
-
       <LandingRoadmap />
 
       <LandingOffer />
+
+      <LandingAntiWoke />
+
+      <LandingCast />
+
+      <LandingFaq />
+
+      <LandingFinalCta />
+
+      <LandingFooter />
     </div>
   );
 }

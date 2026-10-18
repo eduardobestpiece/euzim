@@ -20,6 +20,7 @@ import {
 import { formatBrl } from "@/lib/billing/character-packs";
 import {
   mockActivateSubscriptionAction,
+  startBillingPortalAction,
   startExtraStoryCheckoutAction,
   startPlanCheckoutAction,
 } from "@/lib/stripe/checkout-actions";
@@ -83,6 +84,22 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
       }
       setInfo("Assinatura ativada em modo simulado (Stripe secret ainda ausente).");
       window.location.reload();
+    });
+  }
+
+  function openPortal() {
+    setError(null);
+    setInfo(null);
+    startTransition(async () => {
+      const result = await startBillingPortalAction();
+      if (result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      if (result.error) setError(result.error);
+      if (result.missingKeys?.length) {
+        setInfo(`Keys faltando: ${result.missingKeys.join(" · ")}`);
+      }
     });
   }
 
@@ -185,6 +202,29 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
           </Button>
         </CardFooter>
       </Card>
+
+      {active ? (
+        <Card className="shadow-none border-destructive/20">
+          <CardHeader>
+            <CardTitle className="text-base">Cancelar plano</CardTitle>
+            <CardDescription>
+              Abre o portal Stripe para cancelar ou gerenciar a cobrança. Você
+              mantém o acesso até o fim do período já pago.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-destructive/40 text-destructive hover:bg-destructive/5"
+              disabled={pending}
+              onClick={openPortal}
+            >
+              {pending ? "Abrindo…" : "Cancelar plano"}
+            </Button>
+          </CardFooter>
+        </Card>
+      ) : null}
 
       <p className="text-xs text-muted-foreground">
         Status: {billing.subscriptionStatus || "none"}
