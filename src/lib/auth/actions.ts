@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
@@ -57,18 +58,46 @@ export async function signUpAction(
     redirect(nextMock.startsWith("/") ? nextMock : "/onboarding");
   }
 
+  const admin = createAdminClient();
   const supabase = await createClient();
-  if (!supabase) return { error: "Supabase indisponível." };
+  if (!admin || !supabase) return { error: "Supabase indisponível." };
 
-  const { data: signUpData, error } = await supabase.auth.signUp({
+  // Cria conta já confirmada (sem e-mail de verificação) e abre sessão
+  // imediatamente — cadastro → onboard fluído, sem login extra.
+  const { data: created, error: createError } =
+    await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName || undefined },
+    });
+
+  if (createError) {
+    const msg = createError.message.toLowerCase();
+    if (
+      msg.includes("already") ||
+      msg.includes("registered") ||
+      msg.includes("exists")
+    ) {
+      return {
+        error: "Este e-mail já tem conta. Entre com sua senha.",
+      };
+    }
+    return { error: createError.message };
+  }
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
     email,
     password,
-    options: { data: { full_name: fullName || undefined } },
   });
+  if (signInError) {
+    return {
+      error:
+        "Conta criada, mas não foi possível iniciar a sessão. Tente entrar.",
+    };
+  }
 
-  if (error) return { error: error.message };
-
-  const newUserId = signUpData.user?.id;
+  const newUserId = created.user?.id;
   if (newUserId) {
     await ensureReferralCode(newUserId);
     await applyReferralAttribution(newUserId);
