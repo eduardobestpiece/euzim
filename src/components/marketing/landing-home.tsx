@@ -3,6 +3,8 @@ import Link from "next/link";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { InlineBrand } from "@/components/brand/inline-brand";
 import { LandingStoryBook } from "@/components/marketing/landing-story-book";
+import { LandingCast } from "@/components/marketing/landing-cast";
+import { LandingAntiWoke } from "@/components/marketing/landing-anti-woke";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import { LandingOffer } from "@/components/marketing/landing-offer";
 import {
@@ -161,6 +163,10 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
       </section>
 
       <LandingStoryBook />
+
+      <LandingCast />
+
+      <LandingAntiWoke />
 
       <LandingRoadmap />
 

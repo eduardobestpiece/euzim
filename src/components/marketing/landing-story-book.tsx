@@ -76,7 +76,7 @@ export function LandingStoryBook({
             Uma história feita na <InlineBrand />
           </h2>
           <p className="font-story-body mt-3 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
-            Leia livremente — passe as páginas como em um livro de verdade.
+            Leia livremente, passe as páginas como em um livro de verdade.
           </p>
         </div>
 
@@ -87,25 +87,25 @@ export function LandingStoryBook({
         >
           <div className="landing-book-stage">
             <div className="landing-book-spine" aria-hidden />
-            <PageTurnStage turn={turn}>
-              <div className="landing-book-spread">
-                <figure className="landing-book-image">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={page.imageUrl}
-                    alt={page.altText}
-                    className="h-full w-full object-cover"
-                    draggable={false}
-                  />
-                  {index === 0 ? (
-                    <figcaption className="landing-book-title-overlay">
-                      <span className="font-story-display text-lg uppercase leading-tight sm:text-xl md:text-2xl">
-                        {title}
-                      </span>
-                    </figcaption>
-                  ) : null}
-                </figure>
+            <div className="landing-book-spread">
+              <figure className="landing-book-image">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={page.imageUrl}
+                  alt={page.altText}
+                  className="h-full w-full object-cover"
+                  draggable={false}
+                />
+                {index === 0 ? (
+                  <figcaption className="landing-book-title-overlay">
+                    <span className="font-story-display text-lg uppercase leading-tight sm:text-xl md:text-2xl">
+                      {title}
+                    </span>
+                  </figcaption>
+                ) : null}
+              </figure>
 
+              <PageTurnStage turn={turn} leaf="text" className="landing-book-text-turn">
                 <div className="landing-book-text">
                   <p className="landing-book-page-label font-story-body">
                     {page.title || `Página ${index + 1}`}
@@ -116,8 +116,8 @@ export function LandingStoryBook({
                     </p>
                   </div>
                 </div>
-              </div>
-            </PageTurnStage>
+              </PageTurnStage>
+            </div>
           </div>
 
           <div className="landing-book-controls">

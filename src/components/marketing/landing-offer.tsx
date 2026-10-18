@@ -12,6 +12,8 @@ const PLANS = [
   {
     plan: STARTER_SUBSCRIPTION,
     badge: "Para Aventureiros",
+    favorite: false,
+    cta: "Quero começar a Criar",
     highlights: [
       {
         icon: Users,
@@ -34,10 +36,12 @@ const PLANS = [
   {
     plan: FAMILY_SUBSCRIPTION,
     badge: "Para Realizadores",
+    favorite: true,
+    cta: "Quero Criar Novos Hábitos",
     highlights: [
       {
         icon: Users,
-        text: `${FAMILY_SUBSCRIPTION.includedCharacters} avatares para a família`,
+        text: `${FAMILY_SUBSCRIPTION.includedCharacters} avatares (avatares)`,
       },
       {
         icon: BookOpen,
@@ -49,7 +53,7 @@ const PLANS = [
       },
       {
         icon: ShieldCheck,
-        text: "Ritmo ideal para criar toda semana",
+        text: "Histórias novas a cada 3 dias",
       },
     ],
   },
@@ -76,11 +80,19 @@ export function LandingOffer() {
         </div>
 
         <div className="landing-offer-grid">
-          {PLANS.map(({ plan, badge, highlights }) => (
+          {PLANS.map(({ plan, badge, favorite, cta, highlights }) => (
             <article
               key={plan.planId}
-              className={cn("landing-offer-card", `is-${plan.planId}`)}
+              className={cn(
+                "landing-offer-card",
+                `is-${plan.planId}`,
+                favorite && "is-favorite",
+              )}
             >
+              {favorite ? (
+                <span className="landing-offer-favorite">Favorito</span>
+              ) : null}
+
               <p className="landing-offer-kicker">{badge}</p>
 
               <div className="landing-offer-price-row">
@@ -115,7 +127,7 @@ export function LandingOffer() {
                   )}
                 >
                   <Check className="size-4" aria-hidden />
-                  Quero {badge}
+                  {cta}
                 </Link>
               </Button>
             </article>
