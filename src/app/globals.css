@@ -1330,29 +1330,70 @@ h2 .inline-brand,
   }
 }
 
-/* ─── Landing offer (planos) ─── */
+/* ─── Landing offer (planos) — side-by-side premium ─── */
 .landing-offer {
   background:
-    radial-gradient(70% 55% at 0% 10%, color-mix(in oklab, var(--euzim-violet) 14%, white) 0%, transparent 55%),
-    radial-gradient(65% 50% at 100% 0%, color-mix(in oklab, var(--euzim-mint) 16%, white) 0%, transparent 50%),
-    linear-gradient(180deg, #fff8ef 0%, #ffffff 45%, #f4f7fb 100%);
+    radial-gradient(55% 45% at 8% 12%, rgba(167, 139, 250, 0.22) 0%, transparent 60%),
+    radial-gradient(50% 40% at 92% 8%, rgba(125, 211, 192, 0.2) 0%, transparent 55%),
+    radial-gradient(60% 50% at 50% 100%, rgba(251, 191, 36, 0.12) 0%, transparent 55%),
+    linear-gradient(180deg, #fff8ef 0%, #f7f4ff 42%, #eef7f4 100%);
+}
+
+.landing-offer-glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 8% 10% auto;
+  height: 14rem;
+  background: radial-gradient(closest-side, rgba(124, 58, 237, 0.12), transparent 70%);
+  filter: blur(8px);
 }
 
 .landing-offer-eyebrow {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  background: rgba(124, 58, 237, 0.1);
+  color: #5b21b6;
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.landing-offer-title {
+  margin: 0.9rem 0 0;
+  font-family: var(--font-lilita), "Lilita One", sans-serif;
+  font-size: clamp(1.65rem, 3.4vw, 2.2rem);
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--euzim-ink);
+}
+
+.landing-offer-lede {
+  margin: 1rem auto 0;
+  max-width: 36rem;
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: var(--euzim-ink-soft);
 }
 
 .landing-offer-grid {
   display: grid;
   gap: 1.25rem;
   grid-template-columns: 1fr;
+  align-items: stretch;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 800px) {
   .landing-offer-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1.5rem;
-    align-items: stretch;
   }
 }
 
@@ -1360,118 +1401,236 @@ h2 .inline-brand,
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 1.05rem;
   min-height: 100%;
-  border-radius: 1.5rem;
-  padding: 1.35rem 1.3rem 1.4rem;
-  background: #fffdf8;
-  border: 1px solid color-mix(in oklab, var(--euzim-violet) 12%, #e8e4ef);
+  border-radius: 1.75rem;
+  padding: 1.45rem 1.35rem 1.45rem;
+  background: rgba(255, 253, 248, 0.92);
+  border: 1.5px solid rgba(109, 40, 217, 0.12);
   box-shadow:
-    0 18px 40px rgba(48, 28, 80, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    0 24px 50px rgba(48, 28, 80, 0.1),
+    0 2px 0 rgba(255, 255, 255, 0.9) inset;
+  backdrop-filter: blur(8px);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 280ms ease;
 }
 
-.landing-offer-card.is-featured {
-  border-color: color-mix(in oklab, var(--euzim-violet) 42%, #e8e4ef);
+.landing-offer-card.is-starter {
   background:
-    linear-gradient(165deg, color-mix(in oklab, var(--euzim-violet-soft) 70%, #fffdf8) 0%, #fffdf8 48%, #fff8ef 100%);
-  box-shadow:
-    0 22px 48px color-mix(in oklab, var(--euzim-violet) 22%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  transform: translateY(0);
+    linear-gradient(165deg, #fffdf8 0%, #f8f5ff 55%, #fff8ef 100%);
 }
 
-@media (min-width: 768px) {
+.landing-offer-card.is-family,
+.landing-offer-card.is-featured {
+  border-color: rgba(109, 40, 217, 0.38);
+  background:
+    linear-gradient(165deg, #f3e8ff 0%, #fffdf8 42%, #fff7ed 100%);
+  box-shadow:
+    0 28px 60px rgba(91, 33, 182, 0.18),
+    0 0 0 1px rgba(124, 58, 237, 0.12),
+    0 2px 0 rgba(255, 255, 255, 0.95) inset;
+}
+
+@media (min-width: 800px) {
   .landing-offer-card.is-featured {
-    transform: translateY(-0.35rem);
+    transform: translateY(-0.55rem) scale(1.02);
+  }
+
+  .landing-offer-card.is-featured:hover {
+    transform: translateY(-0.7rem) scale(1.025);
   }
 }
 
 .landing-offer-badge {
   position: absolute;
-  top: 0.95rem;
-  right: 0.95rem;
+  top: -0.7rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
   border-radius: 999px;
-  padding: 0.28rem 0.7rem;
-  background: linear-gradient(135deg, var(--euzim-violet), var(--euzim-violet-deep));
+  padding: 0.35rem 0.9rem;
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
   color: #fff;
   font-family: var(--font-nunito), Nunito, sans-serif;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.landing-offer-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  width: fit-content;
-  border-radius: 999px;
-  padding: 0.22rem 0.6rem;
-  background: var(--euzim-violet-soft);
-  color: var(--euzim-violet-deep);
-  font-family: var(--font-nunito), Nunito, sans-serif;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  box-shadow: 0 10px 22px rgba(91, 33, 182, 0.35);
+  white-space: nowrap;
+}
+
+.landing-offer-card-top {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding-top: 0.35rem;
+}
+
+.landing-offer-kicker {
+  margin: 0;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  background: rgba(124, 58, 237, 0.1);
+  color: #5b21b6;
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.landing-offer-card.is-featured .landing-offer-kicker {
+  background: rgba(91, 33, 182, 0.14);
+}
+
+.landing-offer-name {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-lilita), "Lilita One", sans-serif;
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--euzim-ink);
+}
+
+.landing-offer-desc {
+  margin: 0;
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--euzim-ink-soft);
+}
+
+.landing-offer-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  border-radius: 1.15rem;
+  padding: 0.85rem 1rem;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(109, 40, 217, 0.1);
+}
+
+.landing-offer-card.is-featured .landing-offer-metric {
+  background: rgba(124, 58, 237, 0.08);
+  border-color: rgba(109, 40, 217, 0.18);
+}
+
+.landing-offer-metric strong {
+  font-family: var(--font-lilita), "Lilita One", sans-serif;
+  font-size: 2.55rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #5b21b6;
+}
+
+.landing-offer-metric span {
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--euzim-ink-soft);
+}
+
+.landing-offer-price-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
 .landing-offer-price {
   display: flex;
   align-items: baseline;
-  gap: 0.35rem;
-  margin: 0.15rem 0 0;
+  gap: 0.2rem;
+  margin: 0;
   color: var(--euzim-ink);
 }
 
-.landing-offer-price span {
-  font-size: 2rem;
+.landing-offer-currency {
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 1.05rem;
   font-weight: 800;
-  letter-spacing: -0.02em;
+  color: var(--euzim-ink-soft);
+}
+
+.landing-offer-amount {
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 2.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   line-height: 1;
 }
 
-.landing-offer-price small {
+.landing-offer-period {
+  font-family: var(--font-nunito), Nunito, sans-serif;
   font-size: 0.95rem;
-  font-weight: 650;
+  font-weight: 700;
+  color: var(--euzim-ink-soft);
+}
+
+.landing-offer-price-note {
+  margin: 0;
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 0.78rem;
   color: var(--euzim-ink-soft);
 }
 
 .landing-offer-list {
   list-style: none;
-  margin: 0.25rem 0 0.35rem;
+  margin: 0.1rem 0 0.2rem;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.65rem;
 }
 
 .landing-offer-list li {
   display: flex;
   align-items: flex-start;
-  gap: 0.55rem;
+  gap: 0.65rem;
   font-family: var(--font-nunito), Nunito, sans-serif;
-  font-size: 0.92rem;
-  font-weight: 600;
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.35;
   color: var(--euzim-ink);
 }
 
-.landing-offer-list li svg {
-  margin-top: 0.15rem;
-  color: var(--euzim-violet);
+.landing-offer-check {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  color: #5b21b6;
+}
+
+.landing-offer-card.is-featured .landing-offer-check {
+  background: rgba(91, 33, 182, 0.16);
+  color: #4c1d95;
 }
 
 .landing-offer-cta-secondary {
-  background: color-mix(in oklab, var(--euzim-violet) 12%, white) !important;
-  color: var(--euzim-violet-deep) !important;
-  box-shadow: none !important;
+  background: #fff !important;
+  color: #5b21b6 !important;
+  border: 1.5px solid rgba(109, 40, 217, 0.28) !important;
+  box-shadow: 0 8px 18px rgba(48, 28, 80, 0.06) !important;
 }
 
 .landing-offer-cta-secondary:hover {
-  background: color-mix(in oklab, var(--euzim-violet) 18%, white) !important;
+  background: rgba(243, 232, 255, 0.9) !important;
+}
+
+.landing-offer-trust {
+  margin: 1.5rem auto 0;
+  max-width: 34rem;
+  text-align: center;
+  font-family: var(--font-nunito), Nunito, sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--euzim-ink-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {
