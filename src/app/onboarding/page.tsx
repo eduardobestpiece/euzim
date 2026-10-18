@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { SessionHeartbeat } from "@/components/app/session-heartbeat";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/lib/auth/actions";
@@ -94,20 +95,26 @@ async function OnboardingPageInner({
     <main className="relative flex min-h-full flex-1 flex-col bg-[radial-gradient(ellipse_at_top,_oklch(0.94_0.04_85),_transparent_55%),radial-gradient(ellipse_at_bottom,_oklch(0.93_0.03_200),_transparent_50%)]">
       <SessionHeartbeat />
       <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="min-w-0 space-y-0.5">
-          <p className="truncate text-xs text-muted-foreground sm:text-sm">
+        <BrandLogo size="header" href="/" priority />
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <p className="min-w-0 max-w-[9rem] truncate text-xs text-muted-foreground sm:max-w-[14rem] sm:text-sm md:max-w-[18rem]">
             {user.email}
           </p>
-          <p className="font-mono text-[10px] font-semibold text-emerald-800">
-            build {ONBOARDING_BUILD} · PIN por último
-          </p>
+          <form action={signOutAction}>
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+            >
+              <LogOut className="size-3.5" />
+              Sair
+            </Button>
+          </form>
+          <span className="shrink-0 font-mono text-[10px] font-semibold text-muted-foreground sm:text-xs">
+            {ONBOARDING_BUILD}
+          </span>
         </div>
-        <form action={signOutAction}>
-          <Button type="submit" variant="outline" size="sm" className="gap-1.5">
-            <LogOut className="size-3.5" />
-            Sair
-          </Button>
-        </form>
       </header>
       <div className="flex flex-1 justify-center px-4 pb-10 pt-2 sm:pb-14 sm:pt-4">
         <OnboardingWizard

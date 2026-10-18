@@ -17,7 +17,6 @@ import {
   ToyBrick,
   UserRound,
 } from "lucide-react";
-import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +49,6 @@ import {
   ageYearsFromBirthDate,
   type ChildGender,
 } from "@/lib/onboarding/child-profile";
-import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { MagicalLoading } from "@/components/ui/magical-loading";
 import type { OnboardingState } from "@/lib/auth/types";
@@ -68,7 +66,6 @@ import { startPlanCheckoutAction } from "@/lib/stripe/checkout-actions";
 const PREFERRED_PLAN_KEY = "euzim_preferred_plan";
 
 type Step =
-  | "welcome"
   | "child"
   | "child-photos"
   | "friend"
@@ -78,9 +75,8 @@ type Step =
   | "preview"
   | "pin";
 
-/** PIN por último — só então onboarding_completed. */
+/** PIN por último — só então onboarding_completed. Começa em Avatar do filho. */
 const STEPS: { id: Step; label: string }[] = [
-  { id: "welcome", label: "Olá" },
   { id: "child", label: "Filho" },
   { id: "child-photos", label: "Fotos" },
   { id: "friend", label: "Amigo" },
@@ -111,6 +107,8 @@ function resolveInitialStep(
   // Stripe success: fotos intactas → gera avatar
   if (resumeAfterPay) return "generating";
   const saved = initialState?.wizardStep;
+  // "welcome" legado → começa em Avatar do filho
+  if (saved === "welcome") return "child";
   if (saved && STEP_IDS.has(saved as Step) && saved !== "generating") {
     return saved as Step;
   }
@@ -133,7 +131,7 @@ function resolveInitialStep(
   }
   if (initialState?.child?.displayName) return "child-photos";
   if (isReuse && initialState?.child?.displayName) return "child";
-  return "welcome";
+  return "child";
 }
 
 export function OnboardingWizard({
@@ -563,24 +561,11 @@ export function OnboardingWizard({
   return (
     <div className="mx-auto w-full max-w-lg space-y-6 pb-10">
       <header className="space-y-2 text-center sm:text-left">
-        <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-          <div className="inline-flex items-center rounded-full bg-amber-500/10 px-2.5 py-1">
-            <BrandLogo size="compact" href={null} />
-          </div>
-          <span className="rounded-full bg-emerald-600/15 px-2.5 py-1 font-mono text-[10px] font-semibold text-emerald-900">
-            {ONBOARDING_BUILD}
-          </span>
-        </div>
         <h1 className="font-heading text-3xl font-semibold tracking-tight">
           {isReuse
             ? "Revisar experiência do avatar"
-            : "Crie o avatar da sua criança"}
+            : "Vamos começar criando o Avatar da sua Criança"}
         </h1>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          {isReuse
-            ? "Seus materiais foram mantidos. Confira fotos e preview — o PIN fecha o fluxo e libera o painel."
-            : "Primeiro o avatar e o melhor amigo; o PIN dos pais fica por último, antes do painel."}
-        </p>
         {mockMode ? (
           <p className="text-xs text-amber-800">
             Modo local — uploads podem ficar só no dispositivo se o Storage
@@ -591,47 +576,24 @@ export function OnboardingWizard({
 
       <ol className="flex gap-1 overflow-x-auto pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         {STEPS.map((s, i) => (
-          <li
-            key={s.id}
-            className={`shrink-0 rounded-md px-2 py-1.5 ${
-              i === stepIndex
-                ? "bg-foreground text-background"
-                : i < stepIndex
-                  ? "bg-emerald-600/15 text-emerald-800"
-                  : "bg-muted/60"
-            }`}
-          >
-            {s.label}
+          <li key={s.id} className="shrink-0">
+            <button
+              type="button"
+              onClick={() => go(s.id)}
+              aria-current={i === stepIndex ? "step" : undefined}
+              className={`rounded-md px-2 py-1.5 transition-colors ${
+                i === stepIndex
+                  ? "bg-foreground text-background"
+                  : i < stepIndex
+                    ? "bg-emerald-600/15 text-emerald-800 hover:bg-emerald-600/25"
+                    : "bg-muted/60 hover:bg-muted"
+              }`}
+            >
+              {s.label}
+            </button>
           </li>
         ))}
       </ol>
-
-      {step === "welcome" ? (
-        <Card className="shadow-none">
-          <CardHeader>
-            <CardTitle>{isReuse ? "Bem-vindo de volta" : "Bem-vindo"}</CardTitle>
-            <CardDescription>
-              {isReuse
-                ? "Vamos revisar o avatar e o melhor amigo já criados. O PIN fica por último."
-                : "Avatar da criança → melhor amigo → preview → PIN dos pais. Só então liberamos o painel."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button className="w-full" size="lg" onClick={() => go("child")}>
-              {isReuse ? "Revisar" : "Começar"}
-            </Button>
-            {isReuse && childAvatarUrl && friendAvatarUrl ? (
-              <Button
-                className="w-full"
-                variant="outline"
-                onClick={() => go("preview")}
-              >
-                Ir ao preview salvo
-              </Button>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
 
       {step === "child" ? (
         <Card className="shadow-none">
@@ -763,13 +725,6 @@ export function OnboardingWizard({
                 <p className="text-sm text-destructive">{error}</p>
               ) : null}
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => go("welcome")}
-                >
-                  Voltar
-                </Button>
                 <Button type="submit" disabled={pending} className="flex-1">
                   {pending ? "Salvando…" : "Ir para as fotos"}
                 </Button>
