@@ -379,9 +379,7 @@
 }
 
 .landing-purpose {
-  background:
-    radial-gradient(70% 50% at 50% 0%, rgba(245, 197, 24, 0.1) 0%, transparent 55%),
-    var(--landing-band-paper);
+  background: transparent;
 }
 
 .landing-purpose-item {
@@ -424,8 +422,7 @@ h2 .inline-brand,
 /* ─── Landing story book (painel tipo livro) ─── */
 .landing-story {
   background:
-    radial-gradient(90% 60% at 50% 0%, color-mix(in oklab, var(--euzim-star) 12%, white) 0%, transparent 55%),
-    var(--landing-band-cream);
+    radial-gradient(90% 55% at 50% 0%, color-mix(in oklab, var(--euzim-star) 10%, transparent) 0%, transparent 60%);
 }
 
 .landing-book {
@@ -575,12 +572,19 @@ h2 .inline-brand,
 /* ─── Virada de página real (landing + leitor) ─── */
 .story-page-turn-stage {
   position: relative;
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
   perspective: 1600px;
   perspective-origin: 50% 50%;
 }
 
 .story-page-turn-sheet {
   position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   transform-style: preserve-3d;
   will-change: transform;
 }
@@ -588,6 +592,10 @@ h2 .inline-brand,
 .story-page-turn-face {
   position: relative;
   z-index: 1;
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   backface-visibility: hidden;
 }
 
@@ -712,9 +720,8 @@ h2 .inline-brand,
 /* ─── Landing roadmap (6 passos) ─── */
 .landing-roadmap {
   background:
-    radial-gradient(80% 50% at 10% 0%, color-mix(in oklab, var(--euzim-mint) 16%, white) 0%, transparent 55%),
-    radial-gradient(70% 45% at 100% 20%, color-mix(in oklab, var(--euzim-violet) 12%, white) 0%, transparent 50%),
-    var(--landing-band-mint);
+    radial-gradient(80% 50% at 10% 0%, color-mix(in oklab, var(--euzim-mint) 14%, transparent) 0%, transparent 58%),
+    radial-gradient(70% 45% at 100% 20%, color-mix(in oklab, var(--euzim-violet) 10%, transparent) 0%, transparent 55%);
 }
 
 .landing-roadmap-list {
@@ -1402,10 +1409,9 @@ h2 .inline-brand,
 /* ─── Landing offer (planos) — side-by-side premium ─── */
 .landing-offer {
   background:
-    radial-gradient(55% 45% at 8% 12%, rgba(167, 139, 250, 0.22) 0%, transparent 60%),
-    radial-gradient(50% 40% at 92% 8%, rgba(125, 211, 192, 0.2) 0%, transparent 55%),
-    radial-gradient(60% 50% at 50% 100%, rgba(251, 191, 36, 0.12) 0%, transparent 55%),
-    var(--landing-band-offer);
+    radial-gradient(55% 45% at 8% 12%, rgba(167, 139, 250, 0.16) 0%, transparent 60%),
+    radial-gradient(50% 40% at 92% 8%, rgba(125, 211, 192, 0.14) 0%, transparent 55%),
+    radial-gradient(60% 50% at 50% 100%, rgba(251, 191, 36, 0.1) 0%, transparent 55%);
 }
 
 .landing-offer-glow {
@@ -1561,9 +1567,8 @@ h2 .inline-brand,
 /* ─── Cast (amigos e familiares) ─── */
 .landing-cast {
   background:
-    radial-gradient(70% 50% at 12% 0%, color-mix(in oklab, var(--euzim-mint) 18%, white) 0%, transparent 55%),
-    radial-gradient(60% 45% at 90% 10%, color-mix(in oklab, var(--euzim-violet) 12%, white) 0%, transparent 50%),
-    var(--landing-band-mint);
+    radial-gradient(70% 50% at 12% 0%, color-mix(in oklab, var(--euzim-mint) 12%, transparent) 0%, transparent 58%),
+    radial-gradient(60% 45% at 90% 10%, color-mix(in oklab, var(--euzim-violet) 10%, transparent) 0%, transparent 55%);
 }
 
 .landing-cast-grid {
@@ -1635,8 +1640,7 @@ h2 .inline-brand,
 /* ─── IA anti-woke ─── */
 .landing-anti-woke {
   background:
-    radial-gradient(55% 50% at 50% 0%, rgba(124, 58, 237, 0.14) 0%, transparent 60%),
-    var(--landing-band-lavender);
+    radial-gradient(55% 50% at 50% 0%, rgba(124, 58, 237, 0.12) 0%, transparent 62%);
 }
 
 .landing-anti-woke-eyebrow,
@@ -1678,9 +1682,8 @@ h2 .inline-brand,
 /* ─── FAQ (accordion divertido) ─── */
 .landing-faq {
   background:
-    radial-gradient(55% 40% at 90% 8%, rgba(251, 191, 36, 0.16) 0%, transparent 55%),
-    radial-gradient(50% 45% at 8% 20%, rgba(91, 163, 217, 0.14) 0%, transparent 55%),
-    var(--landing-band-cream);
+    radial-gradient(55% 40% at 90% 8%, rgba(251, 191, 36, 0.12) 0%, transparent 58%),
+    radial-gradient(50% 45% at 8% 20%, rgba(91, 163, 217, 0.1) 0%, transparent 55%);
 }
 
 .landing-faq-glow {
@@ -1837,8 +1840,7 @@ h2 .inline-brand,
 /* ─── Final CTA ─── */
 .landing-final-cta {
   background:
-    radial-gradient(55% 50% at 50% 0%, rgba(124, 58, 237, 0.16) 0%, transparent 60%),
-    var(--landing-band-lavender);
+    radial-gradient(55% 50% at 50% 0%, rgba(124, 58, 237, 0.12) 0%, transparent 62%);
 }
 
 .landing-final-cta-card {
@@ -1856,75 +1858,9 @@ h2 .inline-brand,
   }
 }
 
-/* ─── Wave bridges (fluídas, sem corte) ─── */
-.landing-wave {
-  position: relative;
-  z-index: 12;
-  margin-top: -1px;
-  margin-bottom: -1px;
-  line-height: 0;
-  overflow: hidden;
-  /* fundo = cor da seção de cima */
-  background: var(--landing-band-paper);
-}
-
-.landing-wave-svg {
-  display: block;
-  width: 100%;
-  height: 3.75rem;
-}
-
-@media (min-width: 768px) {
-  .landing-wave-svg {
-    height: 5rem;
-  }
-}
-
-.landing-wave-fill {
-  fill: var(--landing-band-cream);
-}
-
-.landing-wave.from-paper {
-  background: var(--landing-band-paper);
-}
-.landing-wave.from-cream {
-  background: var(--landing-band-cream);
-}
-.landing-wave.from-mint {
-  background: var(--landing-band-mint);
-}
-.landing-wave.from-lavender {
-  background: var(--landing-band-lavender);
-}
-.landing-wave.from-peach {
-  background: var(--landing-band-peach);
-}
-.landing-wave.from-offer {
-  background: var(--landing-band-offer);
-}
-
-.landing-wave.to-paper .landing-wave-fill {
-  fill: var(--landing-band-paper);
-}
-.landing-wave.to-cream .landing-wave-fill {
-  fill: var(--landing-band-cream);
-}
-.landing-wave.to-mint .landing-wave-fill {
-  fill: var(--landing-band-mint);
-}
-.landing-wave.to-lavender .landing-wave-fill {
-  fill: var(--landing-band-lavender);
-}
-.landing-wave.to-peach .landing-wave-fill {
-  fill: var(--landing-band-peach);
-}
-.landing-wave.to-offer .landing-wave-fill {
-  fill: var(--landing-band-offer);
-}
-
 /* ─── Footer ─── */
 .landing-footer {
-  background: var(--landing-band-paper);
+  background: transparent;
 }
 
 .landing-offer-list li {

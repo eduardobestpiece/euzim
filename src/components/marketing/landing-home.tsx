@@ -10,7 +10,6 @@ import { LandingOffer } from "@/components/marketing/landing-offer";
 import { LandingFaq } from "@/components/marketing/landing-faq";
 import { LandingFinalCta } from "@/components/marketing/landing-final-cta";
 import { LandingFooter } from "@/components/marketing/landing-footer";
-import { LandingWave } from "@/components/marketing/landing-wave";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -167,28 +166,20 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
         </div>
       </section>
 
-      <LandingWave from="paper" to="cream" />
       <LandingStoryBook />
 
-      <LandingWave from="cream" to="mint" />
       <LandingRoadmap />
 
-      <LandingWave from="mint" to="offer" />
       <LandingOffer />
 
-      <LandingWave from="offer" to="lavender" />
       <LandingAntiWoke />
 
-      <LandingWave from="lavender" to="mint" />
       <LandingCast />
 
-      <LandingWave from="mint" to="cream" />
       <LandingFaq />
 
-      <LandingWave from="cream" to="lavender" />
       <LandingFinalCta />
 
-      <LandingWave from="lavender" to="paper" />
       <LandingFooter />
     </div>
   );

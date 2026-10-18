@@ -157,10 +157,10 @@ export function StoryFlipbook({
         {/* Topo: logo + botão de saída na mesma linha */}
         <div className="flex shrink-0 items-center justify-between gap-3 px-3 pb-2 pt-3 md:px-5">
           <BrandLogo
-            variant="onDark"
+            variant="color"
             size="compact"
             href={null}
-            className="drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]"
+            className="drop-shadow-[0_1px_8px_rgba(255,255,255,0.55)]"
           />
           <div className="flex flex-wrap items-center justify-end gap-2">
             {backHref ? (
@@ -239,7 +239,8 @@ export function StoryFlipbook({
 
             <div
               ref={textScrollRef}
-              className="min-h-0 w-full flex-1 overflow-y-auto overscroll-contain px-3 pb-4 md:px-5"
+              className="min-h-0 w-full flex-1 touch-pan-y overflow-y-auto overscroll-contain px-3 pb-4 md:px-5"
+              style={{ WebkitOverflowScrolling: "touch" }}
             >
               <div
                 key={`text-${index}`}
