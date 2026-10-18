@@ -68,7 +68,7 @@ export function LandingCast() {
             Crie histórias com amigos e familiares
           </h2>
           <p className="font-story-body mt-3 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
-            Crie histórias com até 5 personagens (avatares) diferentes
+            Crie histórias com até 5 personagens (avatares) diferentes.
           </p>
         </div>
 

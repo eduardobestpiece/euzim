@@ -76,7 +76,7 @@ export function LandingStoryBook({
             Uma história feita na <InlineBrand />
           </h2>
           <p className="font-story-body mt-3 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
-            Leia livremente, passe as páginas como em um livro de verdade.
+            Leia livremente e passe as páginas como em um livro de verdade.
           </p>
         </div>
 

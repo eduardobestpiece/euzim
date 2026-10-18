@@ -13,7 +13,7 @@ const PLANS = [
     plan: STARTER_SUBSCRIPTION,
     badge: "Para Aventureiros",
     favorite: false,
-    cta: "Quero começar a Criar",
+    cta: "Quero começar a criar",
     highlights: [
       {
         icon: Users,
@@ -37,11 +37,11 @@ const PLANS = [
     plan: FAMILY_SUBSCRIPTION,
     badge: "Para Realizadores",
     favorite: true,
-    cta: "Quero Criar Novos Hábitos",
+    cta: "Quero criar novos hábitos",
     highlights: [
       {
         icon: Users,
-        text: `${FAMILY_SUBSCRIPTION.includedCharacters} avatares (avatares)`,
+        text: `${FAMILY_SUBSCRIPTION.includedCharacters} avatares`,
       },
       {
         icon: BookOpen,
@@ -74,8 +74,8 @@ export function LandingOffer() {
             Sua criança merece ser protagonista
           </h2>
           <p className="landing-offer-lede">
-            Comece agora a criar as histórias que irão mudar os hábitos da sua
-            criança em poucos passos
+            Comece agora a criar as histórias que vão mudar os hábitos da sua
+            criança em poucos passos.
           </p>
         </div>
 

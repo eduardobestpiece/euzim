@@ -9,17 +9,18 @@ export function LandingFinalCta() {
       className="landing-final-cta relative z-10 px-5 py-16 sm:px-8 sm:py-20 md:px-12 md:py-24"
     >
       <div className="landing-final-cta-card mx-auto max-w-3xl text-center">
+        <p className="landing-final-cta-eyebrow">Sem risco</p>
         <h2
           id="final-cta-heading"
-          className="font-story-display text-2xl uppercase text-[var(--euzim-ink)] sm:text-3xl md:text-[2.2rem]"
+          className="font-story-display mt-3 text-2xl uppercase text-[var(--euzim-ink)] sm:text-3xl md:text-[2.2rem]"
         >
           Experimente por 30 dias
         </h2>
         <p className="font-story-body mx-auto mt-4 max-w-2xl text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.05rem]">
-          Agora que você sabe que pode cancelar a qualquer momento, faça a sua
-          assinatura pelos primeiros 30 dias e veja a alegria que sua criança
-          terá ao mostrar as 4 primeiras histórias que mostrarão como vencer
-          medos, realizar conquistas e ter hábitos de crescimento
+          Agora que você sabe que pode cancelar a qualquer momento, faça a
+          assinatura pelos primeiros 30 dias e veja a alegria da sua criança ao
+          mostrar as 4 primeiras histórias: vencer medos, celebrar conquistas e
+          cultivar hábitos de crescimento.
         </p>
         <div className="mt-8 flex justify-center">
           <Button

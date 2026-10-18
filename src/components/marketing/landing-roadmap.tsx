@@ -428,7 +428,7 @@ const STEPS: {
 }[] = [
   {
     n: 1,
-    title: "Faça o seu cadastro na euzim",
+    title: "Faça o seu cadastro na Euzim",
     Icon: UserPlus,
     visual: "signup",
   },
@@ -446,7 +446,7 @@ const STEPS: {
   },
   {
     n: 4,
-    title: "Agora com avatar gerado, dê um tema para a sua história",
+    title: "Com o avatar gerado, dê um tema para a sua história",
     Icon: Wand2,
     visual: "theme",
   },
@@ -471,7 +471,7 @@ function StepVisual({ kind }: { kind: (typeof STEPS)[number]["visual"] }) {
     case "serena":
       return <PhotoGrid photos={SERENA_PHOTOS} label="Fotos da Serena" />;
     case "bingo":
-      return <PhotoGrid photos={BINGO_PHOTOS} label="Fotos da Bingo" />;
+      return <PhotoGrid photos={BINGO_PHOTOS} label="Fotos do Bingo" />;
     case "theme":
       return <ThemeTypingMock />;
     case "ai":
@@ -497,8 +497,8 @@ export function LandingRoadmap() {
             É assim que você cria a história da sua criança na <InlineBrand />
           </h2>
           <p className="font-story-body mt-4 text-base leading-relaxed text-[var(--euzim-ink-soft)] sm:text-[1.08rem]">
-            Em apenas 6 passos rápidos você gera a primeira história que a sua
-            criança irá protagonizar
+            Em apenas 6 passos rápidos, você gera a primeira história que a sua
+            criança vai protagonizar.
           </p>
         </div>
 

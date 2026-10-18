@@ -10,6 +10,7 @@ import { LandingOffer } from "@/components/marketing/landing-offer";
 import { LandingFaq } from "@/components/marketing/landing-faq";
 import { LandingFinalCta } from "@/components/marketing/landing-final-cta";
 import { LandingFooter } from "@/components/marketing/landing-footer";
+import { LandingWave } from "@/components/marketing/landing-wave";
 import {
   IconBuildValues,
   IconGoodHabits,
@@ -38,12 +39,12 @@ const PURPOSES: {
   },
   {
     title: "Criar bons hábitos",
-    body: "Troque a ansiedade dos jogos e dos vídeos curtos pela leitura que treina foco, calma e imaginação - um hábito que cresce com ela.",
+    body: "Troque a ansiedade dos jogos e dos vídeos curtos pela leitura que treina foco, calma e imaginação, um hábito que cresce com ela.",
     Icon: IconGoodHabits,
   },
   {
     title: "Construir valores",
-    body: "Aventuras leves que ensinam caminhos da família: respeito, generosidade, coragem. Sem sermão, só história boa de viver juntos.",
+    body: "Aventuras leves que ensinam os caminhos da família: respeito, generosidade e coragem. Sem sermão, só história boa de viver juntos.",
     Icon: IconBuildValues,
   },
 ];
@@ -96,7 +97,8 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
                 </p>
                 <p className="landing-hero-reassure">
                   E não se preocupe: você não precisa criar nenhuma história.{" "}
-                  <mark className="landing-mark">nós fazemos tudo por você</mark>.
+                  <mark className="landing-mark">nós fazemos tudo por você</mark>
+                  .
                 </p>
               </div>
 
@@ -108,17 +110,17 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
                 >
                   <Link href="/signup">
                     <span className="landing-cta-star" aria-hidden />
-                    Começar a Criar Histórias · {priceLabel}
+                    Começar a criar histórias · {priceLabel}
                   </Link>
                 </Button>
                 <p className="landing-trust font-story-body text-[0.78rem] tracking-wide text-[var(--euzim-ink-soft)] sm:text-[0.82rem]">
-                  Compra Segura - Stripe - Acesso Imediato
+                  Compra segura · Stripe · Acesso imediato
                 </p>
               </div>
 
               {mockMode ? (
                 <p className="font-story-body text-sm text-amber-800/90">
-                  Modo demo - configure `.env.local` para login real.
+                  Modo demo: configure `.env.local` para login real.
                 </p>
               ) : null}
             </div>
@@ -165,20 +167,28 @@ export function LandingHome({ mockMode = false }: { mockMode?: boolean }) {
         </div>
       </section>
 
+      <LandingWave variant="white" />
       <LandingStoryBook />
 
+      <LandingWave variant="mint" />
       <LandingRoadmap />
 
+      <LandingWave variant="peach" />
       <LandingOffer />
 
+      <LandingWave variant="lavender" />
       <LandingAntiWoke />
 
+      <LandingWave variant="mint" />
       <LandingCast />
 
+      <LandingWave variant="cream" />
       <LandingFaq />
 
+      <LandingWave variant="lavender" />
       <LandingFinalCta />
 
+      <LandingWave variant="white" />
       <LandingFooter />
     </div>
   );
