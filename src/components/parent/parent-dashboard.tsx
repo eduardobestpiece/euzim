@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+import { Share2, Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { StoryUsageTracker } from "@/components/parent/story-usage-tracker";
@@ -29,6 +29,42 @@ type StoryListItem = {
   createdAt?: string;
   visibility?: StoryVisibility;
 };
+
+function ParentShareMenu() {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <Button
+        type="button"
+        size="lg"
+        variant="outline"
+        className="size-11 shrink-0 p-0"
+        aria-label="Compartilhar"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Share2 className="size-4" />
+      </Button>
+      {open ? (
+        <div className="absolute right-0 z-20 mt-2 w-56 space-y-2 rounded-xl border border-border/70 bg-background p-3 shadow-lg sm:left-0 sm:right-auto">
+          <ShareProfileButton />
+          <ShareAppButton compact />
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function ParentDashboard({
   usage,
@@ -85,33 +121,19 @@ export function ParentDashboard({
             </div>
           </div>
           <div className="flex-1 space-y-2 text-center sm:pb-1 sm:text-left">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Avatar pronto
-            </p>
             <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
               {heroName}
             </h1>
             <p className="max-w-md text-sm text-muted-foreground sm:text-base">
-              {isFirstStory
-                ? "O personagem mágico está pronto. Crie a primeira aventura com o avatar da sua criança."
-                : "Escolha um tema e crie mais uma aventura com o elenco da família."}
+              Tudo pronto para criar histórias
             </p>
-            <div className="flex flex-wrap justify-center gap-2 pt-1 sm:justify-start">
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1 sm:justify-start">
               <Button asChild size="lg">
                 <a href="#criar-historia">
                   {isFirstStory ? "Criar primeira história" : "Criar história"}
                 </a>
               </Button>
-              <Button asChild variant="outline">
-                <Link href="/app/kids">Abrir Kids</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/app/social">Social</Link>
-              </Button>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2 pt-2 sm:justify-start">
-              <ShareProfileButton />
-              <ShareAppButton />
+              <ParentShareMenu />
             </div>
           </div>
         </div>
@@ -143,64 +165,63 @@ export function ParentDashboard({
               Ainda não há histórias. Crie a primeira na aba Nova História.
             </p>
           ) : (
-            <ul className="grid gap-3 sm:grid-cols-2">
+            <ul className="grid gap-3">
               {stories.map((story) => {
                 const wallpaperUrl =
                   story.wallpaperImageUrl || story.coverImageUrl || "";
+                const dateLabel = story.createdAt
+                  ? story.createdAt.slice(0, 10).split("-").reverse().join("/")
+                  : null;
                 return (
                   <li
                     key={story.id}
                     className="rounded-xl border border-border/70 p-3 transition hover:border-foreground/40"
                   >
                     <div className="flex gap-3">
-                      <Link
-                        href={`/app/parent/stories/${story.id}`}
-                        className="flex min-w-0 flex-1 gap-3"
-                      >
-                        {story.coverImageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={story.coverImageUrl}
-                            alt=""
-                            className="size-16 shrink-0 rounded-md object-cover"
-                          />
-                        ) : (
-                          <div className="size-16 shrink-0 rounded-md bg-muted" />
-                        )}
+                      {story.coverImageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={story.coverImageUrl}
+                          alt=""
+                          className="size-20 shrink-0 rounded-md object-cover sm:size-24"
+                        />
+                      ) : (
+                        <div className="size-20 shrink-0 rounded-md bg-muted sm:size-24" />
+                      )}
+                      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate font-medium">{story.title}</p>
-                          {story.createdAt ? (
+                          {dateLabel ? (
                             <p className="text-xs text-muted-foreground">
-                              {story.createdAt
-                                .slice(0, 10)
-                                .split("-")
-                                .reverse()
-                                .join("/")}
+                              {dateLabel}
                             </p>
                           ) : null}
                         </div>
-                      </Link>
-                    </div>
-                    <div className="mt-3 space-y-2">
-                      <VisibilityToggle
-                        storyId={story.id}
-                        initial={story.visibility ?? "private"}
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/app/parent/stories/${story.id}`}>
-                            Ler
-                          </Link>
-                        </Button>
-                        {wallpaperUrl ? (
-                          <WallpaperDialog
-                            imageUrl={wallpaperUrl}
-                            title={story.title}
-                            triggerLabel="Wallpaper"
-                            size="sm"
-                            variant="secondary"
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/app/parent/stories/${story.id}`}>
+                              Ler
+                            </Link>
+                          </Button>
+                          {wallpaperUrl ? (
+                            <WallpaperDialog
+                              imageUrl={wallpaperUrl}
+                              title={story.title}
+                              triggerLabel="Wallpaper"
+                              size="sm"
+                              variant="secondary"
+                            />
+                          ) : (
+                            <Button size="sm" variant="secondary" disabled>
+                              Wallpaper
+                            </Button>
+                          )}
+                          <VisibilityToggle
+                            storyId={story.id}
+                            initial={story.visibility ?? "private"}
+                            iconOnly
                           />
-                        ) : null}
+                        </div>
                       </div>
                     </div>
                   </li>

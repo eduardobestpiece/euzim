@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { loadPrimaryAuthors } from "@/lib/social/primary-author";
 import { ensureReferralCode } from "@/lib/referral/codes";
+import { friendlySocialDbError } from "@/lib/social/db-errors";
 import type {
   FriendProfile,
   FriendshipStatus,
@@ -21,14 +22,15 @@ async function existingFriendship(
   a: string,
   b: string,
 ) {
-  const { data } = await db
+  const { data, error } = await db
     .from("friendships")
     .select("id, requester_id, addressee_id, status")
     .or(
       `and(requester_id.eq.${a},addressee_id.eq.${b}),and(requester_id.eq.${b},addressee_id.eq.${a})`,
     )
     .maybeSingle();
-  return data;
+  if (error) return { error };
+  return { data };
 }
 
 export async function requestFriendshipAction(
@@ -41,7 +43,11 @@ export async function requestFriendshipAction(
   const db = await dbClient();
   if (!db) return { error: "Banco indisponível." };
 
-  const existing = await existingFriendship(db, user.id, addresseeId);
+  const existingResult = await existingFriendship(db, user.id, addresseeId);
+  if ("error" in existingResult && existingResult.error) {
+    return { error: friendlySocialDbError(existingResult.error.message) };
+  }
+  const existing = existingResult.data;
   if (existing?.status === "accepted") {
     return { error: "Vocês já são amigos." };
   }
@@ -58,14 +64,14 @@ export async function requestFriendshipAction(
         addressee_id: addresseeId,
       })
       .eq("id", existing.id);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlySocialDbError(error.message) };
   } else {
     const { error } = await db.from("friendships").insert({
       requester_id: user.id,
       addressee_id: addresseeId,
       status: "pending",
     });
-    if (error) return { error: error.message };
+    if (error) return { error: friendlySocialDbError(error.message) };
   }
 
   revalidatePath("/app/social");
@@ -102,7 +108,7 @@ export async function respondFriendshipAction(
     .update({ status: decision })
     .eq("id", friendshipId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: friendlySocialDbError(error.message) };
   revalidatePath("/app/social");
   revalidatePath("/invite");
   return { success: true };
@@ -124,7 +130,8 @@ async function profileFromUserRow(
   }
   const authors = await loadPrimaryAuthors(db, [found.id]);
   const author = authors.get(found.id) ?? { name: "Amigo", avatarUrl: null };
-  const friendship = await existingFriendship(db, viewerId, found.id);
+  const friendshipResult = await existingFriendship(db, viewerId, found.id);
+  const friendship = "data" in friendshipResult ? friendshipResult.data : null;
   return {
     userId: found.id,
     email: found.email ?? "",
@@ -264,7 +271,7 @@ export async function createFriendInviteAction(): Promise<{
     .single();
 
   if (error || !data?.token) {
-    return { error: error?.message ?? "Falha ao criar convite." };
+    return { error: friendlySocialDbError(error?.message ?? "Falha ao criar convite.") };
   }
 
   // Anexa ref do convidante (último clique no destino)
@@ -338,7 +345,7 @@ export async function respondFriendInviteAction(
     .eq("token", token)
     .maybeSingle();
 
-  if (loadError) return { error: loadError.message };
+  if (loadError) return { error: friendlySocialDbError(loadError.message) };
   if (!invite) return { error: "Convite não encontrado." };
   if (invite.status !== "pending") {
     return { error: "Este convite já foi usado." };
@@ -366,20 +373,24 @@ export async function respondFriendInviteAction(
     return { success: true };
   }
 
-  const existing = await existingFriendship(db, user.id, invite.inviter_id);
+  const existingResult = await existingFriendship(db, user.id, invite.inviter_id);
+  if ("error" in existingResult && existingResult.error) {
+    return { error: friendlySocialDbError(existingResult.error.message) };
+  }
+  const existing = existingResult.data;
   if (!existing) {
     const { error: friendError } = await db.from("friendships").insert({
       requester_id: invite.inviter_id,
       addressee_id: user.id,
       status: "accepted",
     });
-    if (friendError) return { error: friendError.message };
+    if (friendError) return { error: friendlySocialDbError(friendError.message) };
   } else if (existing.status !== "accepted") {
     const { error: friendError } = await db
       .from("friendships")
       .update({ status: "accepted" })
       .eq("id", existing.id);
-    if (friendError) return { error: friendError.message };
+    if (friendError) return { error: friendlySocialDbError(friendError.message) };
   }
 
   const { error } = await db

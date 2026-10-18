@@ -22,11 +22,11 @@ export function ShareAppButton({
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (initialCode && initialUrl) {
-      setCode(initialCode);
-      setUrl(initialUrl);
-      return;
-    }
+    if (compact) return;
+    if (initialCode) setCode(initialCode);
+    if (initialUrl) setUrl(initialUrl);
+    if (initialCode && initialUrl) return;
+
     let cancelled = false;
     startTransition(async () => {
       const result = await getMyReferralShareUrlAction();
@@ -47,8 +47,7 @@ export function ShareAppButton({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [compact, initialCode, initialUrl]);
 
   function resolveAbsolute(raw: string): string {
     if (raw.startsWith("http")) return raw;

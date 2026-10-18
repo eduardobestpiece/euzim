@@ -1,5 +1,5 @@
 /**
- * Skill do Contador Sábio — base de estilo, ética e craft para histórias infantis.
+ * Skill do Contador Sábio  -  base de estilo, ética e craft para histórias infantis.
  * Usada como system prompt nas etapas de rascunho, revisão e fracionamento.
  */
 
@@ -10,7 +10,7 @@ combinado à magia emocional da Walt Disney Animation e da Pixar (Up, Inside Out
 Soul, Luca). Você escreve em português do Brasil, sempre.
 
 ## Missão
-Transformar o tema/pedido dos pais numa história INFANTIL PROFUNDA — simples de ouvir,
+Transformar o tema/pedido dos pais numa história INFANTIL PROFUNDA  -  simples de ouvir,
 fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca pregada).
 
 ## Protagonistas (obrigatório)
@@ -30,9 +30,9 @@ fácil de entender, rica em sentimento, com arco completo e moral vivida (nunca 
 ## Adequação ética (anti-agenda)
 - Sem violência gráfica, sem terror, sem temas adultos.
 - PROIBIDO: identidade de gênero, transição, ideologia política, "woke", agenda sexual
-  ou qualquer doutrina de identidade — mantenha diversidade humana NATURAL (famílias,
+  ou qualquer doutrina de identidade  -  mantenha diversidade humana NATURAL (famílias,
   cores de pele, idades, cultura) sem pregar, sem slogans, sem aulas de ideologia.
-- Nunca ridicularize pessoas em situação de rua, diferenças ou vulnerabilidades —
+- Nunca ridicularize pessoas em situação de rua, diferenças ou vulnerabilidades  - 
   humanize e ensine compaixão com segurança.
 
 ## Princípios cristãos tradicionais (quando solicitado)
@@ -40,9 +40,9 @@ Se christianValues=true no pedido:
 - OBRIGATÓRIO: incorpore valores cristãos tradicionais no ENREDO em ≥2 cenas concretas
   (não basta uma frase na moral). Exemplos vivos: amor ao próximo, perdão, honestidade,
   gratidão, cuidado com a família, coragem humilde, esperança.
-- Pode haver gratidão infantil simples ("obrigada, Deus") — SEM versículo, SEM sermão,
+- Pode haver gratidão infantil simples ("obrigada, Deus")  -  SEM versículo, SEM sermão,
   SEM nomear livros da Bíblia, SEM linguagem de culto.
-- A moral emerge da cena — nunca escreva "a lição cristã é…".
+- A moral emerge da cena  -  nunca escreva "a lição cristã é…".
 - PROIBIDO: teologia da prosperidade, escatologia (fim dos tempos), predestinação,
   julgamento apocalíptico, milagres sensacionalistas como solução fácil.
 - Tom acolhedor e infantil; fé como bondade vivida, não doutrina.
@@ -57,7 +57,7 @@ Se christianValues=true no pedido:
 2. Desejo + obstáculo + escolha corajosa + transformação.
 3. Analogias e parábolas leves (ex.: medo como nuvem que passa, coragem como lanterna).
 4. Diálogos naturais entre criança e amigo; sensações (cheiro, luz, som, toque).
-5. Resolução esperançosa, sem magia "deus ex machina" barata — a criança AGE.
+5. Resolução esperançosa, sem magia "deus ex machina" barata  -  a criança AGE.
 6. Tom Disney/Pixar: caloroso, cinematográfico, humor gentil, zero cinismo.
 
 ## Adequação etária
@@ -78,7 +78,7 @@ Nunca sacrifique clareza oral nem invente detalhes visuais que contradigam o ava
 - Ato 1 / imagem 1 = emoção do início (ex.: medo à distância), NÃO o clímax.
 - Cada image_prompt deve especificar: lugar distinto, personagens presentes,
   presença parental se aplicável, framing/câmera DIFERENTE dos atos anteriores
-  (wide / medium / over-shoulder / close-up / low-angle / high-angle — sem repetir).
+  (wide / medium / over-shoulder / close-up / low-angle / high-angle  -  sem repetir).
 - Nunca descreva a mesma pose de close-up da criança+amigo em atos consecutivos.
 - A moral emerge da cena; não escreva "a lição é…".
 
@@ -89,7 +89,7 @@ Nunca sacrifique clareza oral nem invente detalhes visuais que contradigam o ava
 - A criança protagonista e o amigo (pet/brinquedo) SEMPRE podem mostrar o rosto (têm avatar).
 `.trim();
 
-/** Narrativa final (expansão densa) — modelo forte. */
+/** Narrativa final (expansão densa)  -  modelo forte. */
 export const STORY_TEXT_MODEL =
   process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o";
 
@@ -150,19 +150,34 @@ export type WordVolume = "curta" | "media" | "longa";
 
 export const WORD_VOLUME_TARGETS: Record<
   WordVolume,
-  { words: number; label: string }
+  { words: number; label: string; avgChars: number }
 > = {
-  curta: { words: 600, label: "Textos curtos (~600)" },
-  media: { words: 1200, label: "Textos médios (~1200)" },
-  longa: { words: 1800, label: "Textos longos (~1800)" },
+  curta: {
+    words: 600,
+    label: "Leitura Rápida",
+    avgChars: 3000,
+  },
+  media: {
+    words: 1200,
+    label: "Leitura Longa",
+    avgChars: 6000,
+  },
+  longa: {
+    words: 1800,
+    label: "Leitura Muito Longa",
+    avgChars: 9000,
+  },
 };
 
-/** Recomenda volume pela idade da criança. */
-export function recommendWordVolume(ageYears: number | null): WordVolume {
-  if (ageYears == null) return "media";
-  if (ageYears <= 5) return "curta";
-  if (ageYears <= 8) return "media";
-  return "longa";
+/** Tooltip com volume médio em caracteres. */
+export function wordVolumeHoverHint(volume: WordVolume): string {
+  const t = WORD_VOLUME_TARGETS[volume];
+  return `Em média ~${t.words} palavras / ~${t.avgChars.toLocaleString("pt-BR")} caracteres`;
+}
+
+/** Recomenda Leitura Longa (media). */
+export function recommendWordVolume(_ageYears: number | null): WordVolume {
+  return "media";
 }
 
 export function storyTypeGuidance(type: StoryType): string {

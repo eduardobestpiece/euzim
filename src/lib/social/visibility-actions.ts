@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { friendlySocialDbError } from "@/lib/social/db-errors";
 import type { StoryVisibility } from "@/lib/social/types";
 
 export async function updateStoryVisibilityAction(
@@ -30,7 +31,7 @@ export async function updateStoryVisibilityAction(
     .eq("id", storyId)
     .maybeSingle();
 
-  if (loadError) return { error: loadError.message };
+  if (loadError) return { error: friendlySocialDbError(loadError.message) };
   if (!story || story.parent_id !== user.id) {
     return { error: "História não encontrada." };
   }
@@ -44,7 +45,7 @@ export async function updateStoryVisibilityAction(
     .eq("id", storyId)
     .eq("parent_id", user.id);
 
-  if (error) return { error: error.message };
+  if (error) return { error: friendlySocialDbError(error.message) };
 
   revalidatePath("/app/parent");
   revalidatePath(`/app/parent/stories/${storyId}`);

@@ -18,6 +18,7 @@ import {
   STORY_TYPE_LABELS,
   STORY_TYPES,
   WORD_VOLUME_TARGETS,
+  wordVolumeHoverHint,
   recommendWordVolume,
   type LanguageLevel,
   type StoryType,
@@ -690,6 +691,7 @@ export function NewStoryForm({
                   <button
                     key={v}
                     type="button"
+                    title={wordVolumeHoverHint(v)}
                     onClick={() => setWordVolume(v)}
                     className={`rounded-full border px-3 py-1.5 text-xs transition ${
                       wordVolume === v
