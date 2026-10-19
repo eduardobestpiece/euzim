@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Baloo_2, Geist, Geist_Mono, Lilita_One, Nunito } from "next/font/google";
+import { TrackingShell } from "@/components/tracking/tracking-shell";
 import "./globals.css";
 
 const fontSans = Geist({
@@ -73,6 +74,7 @@ export default function RootLayout({
         className="flex min-h-full flex-col font-story-body antialiased"
         suppressHydrationWarning
       >
+        <TrackingShell />
         {children}
       </body>
     </html>

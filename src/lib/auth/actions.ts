@@ -16,6 +16,7 @@ import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
 import { applyReferralAttribution } from "@/lib/referral/attribution";
 import { ensureReferralCode } from "@/lib/referral/codes";
+import { fireTrackingEvent } from "@/lib/tracking/dispatch";
 
 export type AuthActionResult = {
   error?: string;
@@ -33,14 +34,21 @@ export async function signUpAction(
   const email = normalizeEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("fullName") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const phoneDigits = phoneRaw.replace(/\D/g, "");
+  const phone =
+    phoneDigits && phoneDigits.length >= 8 && phoneDigits.length <= 20
+      ? phoneDigits
+      : null;
 
   if (!email || !password || password.length < 6) {
     return { error: "Informe e-mail e senha (mín. 6 caracteres)." };
   }
 
   if (!isSupabaseConfigured()) {
+    const mockId = createMockUserId();
     await writeMockSession({
-      id: createMockUserId(),
+      id: mockId,
       email,
       role: "parent",
       fullName: fullName || undefined,
@@ -53,6 +61,10 @@ export async function signUpAction(
       friend: null,
       friendPhotos: [],
       completed: false,
+    });
+    fireTrackingEvent({
+      event: "Lead",
+      user: { email, fullName, phone, userId: mockId },
     });
     const nextMock = String(formData.get("next") ?? "").trim();
     redirect(nextMock.startsWith("/") ? nextMock : "/onboarding");
@@ -69,7 +81,10 @@ export async function signUpAction(
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName || undefined },
+      user_metadata: {
+        full_name: fullName || undefined,
+        phone: phone || undefined,
+      },
     });
 
   if (createError) {
@@ -99,8 +114,26 @@ export async function signUpAction(
 
   const newUserId = created.user?.id;
   if (newUserId) {
+    if (phone || fullName) {
+      await admin
+        .from("users")
+        .update({
+          ...(fullName ? { full_name: fullName, display_name: fullName } : {}),
+          ...(phone ? { phone } : {}),
+        })
+        .eq("id", newUserId);
+    }
     await ensureReferralCode(newUserId);
     await applyReferralAttribution(newUserId);
+    fireTrackingEvent({
+      event: "Lead",
+      user: {
+        email,
+        fullName,
+        phone,
+        userId: newUserId,
+      },
+    });
   }
 
   const next = String(formData.get("next") ?? "").trim();

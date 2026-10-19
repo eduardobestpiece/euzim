@@ -24,6 +24,7 @@ import {
   startExtraStoryCheckoutAction,
   startPlanCheckoutAction,
 } from "@/lib/stripe/checkout-actions";
+import { goToCheckout } from "@/lib/stripe/go-checkout";
 
 export type BillingSnapshot = {
   subscriptionStatus?: string | null;
@@ -49,10 +50,7 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     setInfo(null);
     startTransition(async () => {
       const result = await startPlanCheckoutAction(planId);
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
+      if (goToCheckout(result)) return;
       if (result.error) setError(result.error);
       if (result.missingKeys?.length) {
         setInfo(`Keys faltando: ${result.missingKeys.join(" · ")}`);
@@ -65,10 +63,7 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     setInfo(null);
     startTransition(async () => {
       const result = await startExtraStoryCheckoutAction();
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
+      if (goToCheckout(result)) return;
       if (result.error) setError(result.error);
     });
   }

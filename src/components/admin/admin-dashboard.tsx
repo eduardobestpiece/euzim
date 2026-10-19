@@ -32,9 +32,12 @@ import {
   updateSubscriptionAction,
   type AdminStoryCostRow,
 } from "@/lib/admin/actions";
+import type { PixelsAdminBundle } from "@/lib/admin/pixels-actions";
+import { AdminPixelsPanel } from "@/components/admin/admin-pixels-panel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleString("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
@@ -67,10 +70,12 @@ export function AdminDashboard({
   kpis,
   accounts,
   loadError,
+  pixelsBundle,
 }: {
   kpis: AdminKpis;
   accounts: AdminAccountRow[];
   loadError?: string;
+  pixelsBundle: PixelsAdminBundle;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -181,7 +186,7 @@ export function AdminDashboard({
             Admin PLG
           </h1>
           <p className="text-sm text-muted-foreground">
-            Contas, engajamento, custos OpenAI e ações operacionais.
+            Contas, engajamento, custos OpenAI, pixels e ações operacionais.
           </p>
         </div>
         <Button asChild variant="outline" size="sm">
@@ -192,6 +197,17 @@ export function AdminDashboard({
         </Button>
       </div>
 
+      <Tabs defaultValue="users" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="users">Usuários</TabsTrigger>
+          <TabsTrigger value="pixels">Pixels</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="pixels" className="space-y-6">
+          <AdminPixelsPanel initial={pixelsBundle} />
+        </TabsContent>
+
+        <TabsContent value="users" className="space-y-6">
       {loadError ? (
         <p className="text-sm text-destructive">{loadError}</p>
       ) : null}
@@ -677,6 +693,8 @@ export function AdminDashboard({
           ) : null}
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

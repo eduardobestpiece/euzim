@@ -13,6 +13,7 @@ import {
   normalizeSecurityPin,
 } from "@/lib/onboarding/pin-format";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
+import { fireTrackingEvent } from "@/lib/tracking/dispatch";
 
 export const maxDuration = 60;
 
@@ -69,6 +70,14 @@ export async function POST(request: Request) {
     } catch {
       /* cookie opcional */
     }
+    fireTrackingEvent({
+      event: "CompleteRegistration",
+      user: {
+        userId: user.id,
+        email: user.email,
+        fullName: user.fullName,
+      },
+    });
     return NextResponse.json({ success: true, redirectTo: "/app/parent" });
   }
 
@@ -172,6 +181,34 @@ export async function POST(request: Request) {
     });
   } catch {
     /* cookie opcional */
+  }
+
+  let phone: string | null = null;
+  try {
+    const { data: profile } = await db
+      .from("users")
+      .select("phone, full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    phone = profile?.phone ?? null;
+    fireTrackingEvent({
+      event: "CompleteRegistration",
+      user: {
+        userId: user.id,
+        email: user.email,
+        fullName: profile?.full_name || user.fullName,
+        phone,
+      },
+    });
+  } catch {
+    fireTrackingEvent({
+      event: "CompleteRegistration",
+      user: {
+        userId: user.id,
+        email: user.email,
+        fullName: user.fullName,
+      },
+    });
   }
 
   return NextResponse.json({ success: true, redirectTo: "/app/parent" });

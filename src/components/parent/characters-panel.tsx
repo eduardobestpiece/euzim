@@ -37,6 +37,7 @@ import {
   startCharacterPackCheckoutAction,
   startCustomAvatarsCheckoutAction,
 } from "@/lib/stripe/checkout-actions";
+import { goToCheckout } from "@/lib/stripe/go-checkout";
 import type { BillingSnapshot } from "@/components/parent/subscription-panel";
 
 export type { CharacterManageRow };
@@ -224,10 +225,7 @@ export function CharactersPanel({
           return;
         }
         const result = await startCharacterPackCheckoutAction(pack.id);
-        if (result.url) {
-          window.location.href = result.url;
-          return;
-        }
+        if (goToCheckout(result)) return;
         if (result.error) setError(result.error);
         if (!billing.stripeReady) {
           setMessage(
@@ -237,10 +235,7 @@ export function CharactersPanel({
         return;
       }
       const result = await startCustomAvatarsCheckoutAction(avatarCount);
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
+      if (goToCheckout(result)) return;
       if (result.error) setError(result.error);
       if (!billing.stripeReady) {
         setMessage(

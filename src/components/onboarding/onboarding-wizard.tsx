@@ -62,6 +62,7 @@ import {
 } from "@/lib/billing/selected-plan";
 import { formatBrl } from "@/lib/billing/character-packs";
 import { startPlanCheckoutAction } from "@/lib/stripe/checkout-actions";
+import { goToCheckout } from "@/lib/stripe/go-checkout";
 
 const PREFERRED_PLAN_KEY = "euzim_preferred_plan";
 
@@ -611,11 +612,8 @@ export function OnboardingWizard({
         autoCheckoutRef.current = false;
         return;
       }
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
-      setError("Checkout sem URL.");
+      if (goToCheckout(result)) return;
+      setError("Checkout sem sessão Stripe.");
       autoCheckoutRef.current = false;
     });
   }
