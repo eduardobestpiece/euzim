@@ -10,6 +10,7 @@ export type AiActivity =
   | "story_quiz"
   | "story_clarify"
   | "story_continuity"
+  | "story_page_director"
   | "avatar_pixar"
   | "story_image"
   | "avatar_preview"
@@ -50,6 +51,11 @@ const DEFAULTS: Record<AiActivity, AiModelSpec> = {
     model: "google/gemini-2.5-flash",
     rationale: "Bíblia de continuidade de cenas",
   },
+  story_page_director: {
+    model: "google/gemini-2.5-flash",
+    rationale:
+      "Diretor de página: prompt cinematográfico Gemini por bloco (barato)",
+  },
   avatar_pixar: {
     model: "openai/gpt-image-2",
     rationale: "Fidelidade Pixar com referências (Image API)",
@@ -75,6 +81,12 @@ function envOverride(activity: AiActivity): string | undefined {
         process.env.OPENROUTER_STORY_MODEL?.trim() ||
         process.env.AI_STORY_MODEL?.trim() ||
         process.env.OPENAI_STORY_MODEL?.trim()
+      );
+    case "story_page_director":
+      return (
+        process.env.OPENROUTER_STORY_PAGE_DIRECTOR_MODEL?.trim() ||
+        process.env.OPENROUTER_STORY_AUX_MODEL?.trim() ||
+        process.env.AI_STORY_AUX_MODEL?.trim()
       );
     case "story_aux":
     case "story_quiz":

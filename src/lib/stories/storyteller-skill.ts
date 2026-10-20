@@ -107,10 +107,12 @@ Nunca sacrifique clareza oral nem invente detalhes visuais que contradigam o ava
 
 ## Amigo pet/brinquedo (fidelidade ao avatar — prioridade máxima)
 - O companheiro cadastrado (nome + avatar Pixar) é a ÚNICA aparência permitida.
-- Descreva e ilustre EXATAMENTE a espécie/cores/forma do avatar — nunca troque por
-  coelho, urso ou pelúcia genérica "parecida".
-- PROIBIDO no texto chamar o companheiro de "coelhinho", "coelho", "ursinho" se o
-  avatar for outra espécie (ex.: Bingo = cachorrinho/pelúcia conforme avatar).
+- SPECIES LOCK: traits/avatar vencem a prosa. Se traits dizem dog/cão e o rascunho
+  escrever "macaco" ou "coelho", IGNORE a prosa e use a espécie dos traits.
+- Descreva e ilustre EXATAMENTE a espécie/cores/forma do avatar — nunca invente
+  coelho, urso, macaco ou pelúcia genérica "parecida".
+- PROIBIDO no texto chamar o companheiro de "coelhinho", "coelho", "ursinho", "macaco"
+  se o avatar for outra espécie (ex.: Bingo = cachorrinho conforme traits).
 - Prefira o nome próprio ("Bingo") + 1 traço visual do avatar.
 - Se o avatar do usuário parece um personagem conhecido (ex.: chama-se Bingo),
   AINDA ASSIM use o avatar dele: é a referência oficial desta história.

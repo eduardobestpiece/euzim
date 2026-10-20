@@ -59,6 +59,113 @@ function summarizeTraits(traits: unknown, description?: string | null): string {
   return parts.filter(Boolean).join(" — ").slice(0, 240);
 }
 
+/** Extrai espécie canônica dos traits/description (ex.: species:dog → dog). */
+export function extractCompanionSpecies(
+  traitsOrSummary?: unknown,
+  description?: string | null,
+): string | null {
+  const blob = [
+    typeof traitsOrSummary === "string"
+      ? traitsOrSummary
+      : Array.isArray(traitsOrSummary)
+        ? traitsOrSummary.map(String).join(" ")
+        : traitsOrSummary && typeof traitsOrSummary === "object"
+          ? JSON.stringify(traitsOrSummary)
+          : "",
+    description ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const tagged = blob.match(/species[_:\s-]*([a-záéíóúãõâêôç\s-]{2,40})/i);
+  if (tagged?.[1]) {
+    const s = tagged[1].replace(/[,;|].*$/, "").trim();
+    if (s.length >= 2) return s.slice(0, 40);
+  }
+
+  const map: Array<[RegExp, string]> = [
+    [/\b(dog|cão|cao|cachorr[oa]|puppy|heeler)\b/, "dog"],
+    [/\b(cat|gat[oa]|kitten)\b/, "cat"],
+    [/\b(rabbit|coelh[oa]|bunny)\b/, "rabbit"],
+    [/\b(bear|urs[oa])\b/, "bear"],
+    [/\b(monkey|macaco|macaca)\b/, "monkey"],
+    [/\b(bird|pássaro|passaro)\b/, "bird"],
+    [/\b(dinosaur|dinossauro)\b/, "dinosaur"],
+  ];
+  for (const [re, label] of map) {
+    if (re.test(blob)) return label;
+  }
+  return null;
+}
+
+export function companionSpeciesLabel(cast: StoryCast): string | null {
+  const fromLock = extractCompanionSpecies(cast.companionVisualLock);
+  if (fromLock) return fromLock;
+  return null;
+}
+
+/** Linha curta para prompts: SPECIES LOCK vence prosa. */
+export function speciesLockPromptLine(cast: StoryCast): string {
+  const species = companionSpeciesLabel(cast);
+  if (!species) {
+    return `SPECIES LOCK: "${cast.friendName}" appearance follows avatar traits/refs ONLY — never invent a different animal species in text or image.`;
+  }
+  return `SPECIES LOCK (AUTHORITATIVE): "${cast.friendName}" IS a ${species} (from avatar traits). PROHIBITED: calling or drawing them as rabbit/monkey/bear/other species. Traits beat prose.`;
+}
+
+/**
+ * Se o texto inventou espécie errada (coelho/macaco…), normaliza menções
+ * para o nome + espécie dos traits.
+ */
+export function enforceCompanionSpeciesInText(
+  text: string,
+  cast: StoryCast,
+): string {
+  const species = companionSpeciesLabel(cast);
+  if (!species || !text.trim()) return text;
+  const name = cast.friendName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wrongAlt =
+    "coelhinho|coelhinha|coelho|coelha|bunny|rabbit|ursinho|ursinha|macaco|macaca|monkey";
+  const speciesPt =
+    species === "dog"
+      ? cast.friendGender === "female"
+        ? "cachorrinha"
+        : "cachorrinho"
+      : species;
+
+  let out = text;
+  // "coelhinho de pelúcia Bingo" → "Bingo"
+  out = out.replace(
+    new RegExp(`\\b(?:${wrongAlt})(?:\\s+de\\s+pel[uú]cia)?\\s+${name}\\b`, "gi"),
+    cast.friendName,
+  );
+  // "Bingo, o coelhinho" → "Bingo"
+  out = out.replace(
+    new RegExp(
+      `\\b${name}\\s*,?\\s*(?:o|a|seu|sua)?\\s*(?:${wrongAlt})\\b`,
+      "gi",
+    ),
+    cast.friendName,
+  );
+
+  // Em frases que citam o companion, troca espécie inventada pela dos traits
+  const sentences = out.split(/(?<=[.!?…])\s+/);
+  out = sentences
+    .map((s) => {
+      if (!new RegExp(name, "i").test(s)) return s;
+      if (!new RegExp(`\\b(?:${wrongAlt})\\b`, "i").test(s)) return s;
+      return s
+        .replace(new RegExp(`\\b(?:${wrongAlt})\\b`, "gi"), speciesPt)
+        .replace(
+          new RegExp(`${speciesPt}\\s+de\\s+pel[uú]cia\\s+${name}`, "gi"),
+          cast.friendName,
+        );
+    })
+    .join(" ");
+
+  return out;
+}
+
 /** Texto de trava para prompts: avatar > espécie inventada. */
 export function buildCompanionVisualLock(input: {
   friendName: string;
@@ -73,16 +180,20 @@ export function buildCompanionVisualLock(input: {
       : input.friendGender === "male"
         ? "masculino (ele/o)"
         : "gênero conforme o nome";
+  const species = extractCompanionSpecies(input.traitsSummary);
   return [
     `COMPANION LOCK OBRIGATÓRIO: "${input.friendName}" é o avatar cadastrado na plataforma`,
     `(tipo ${input.friendKind}, ${genderPt}).`,
+    species
+      ? `SPECIES LOCK: "${input.friendName}" = ${species} (traits vencem qualquer prosa que diga outro animal).`
+      : "",
     input.hasAvatar
       ? "Há referência visual Pixar — a aparência (espécie, cores, formato, rosto) DEVE seguir ESSA referência."
       : "Sem sheet: ainda assim NÃO invente outra espécie.",
     input.traitsSummary
       ? `Traços cadastrados: ${input.traitsSummary}.`
       : "",
-    `PROIBIDO substituir "${input.friendName}" por coelho/urso/pelúcia genérica ou outro animal que não seja o avatar.`,
+    `PROIBIDO substituir "${input.friendName}" por coelho/urso/macaco/pelúcia genérica ou outro animal que não seja o avatar.`,
     `Se o avatar lembra um personagem conhecido, AINDA ASSIM use o avatar do usuário (é a referência oficial desta história) — não troque por um bicho inventado "para evitar IP".`,
   ]
     .filter(Boolean)

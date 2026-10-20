@@ -29,6 +29,8 @@ import {
 import { meteredChatCompletion } from "@/lib/usage/openai-meter";
 import { loadFeedbackLessons } from "@/lib/stories/page-feedback";
 import { realignChaptersToPageText } from "@/lib/stories/align-page-prompts";
+import { directPageImagePrompts } from "@/lib/stories/page-director";
+import { enforceCompanionSpeciesInText } from "@/lib/stories/story-cast";
 
 export type StoryEngine =
   | "openai-storyteller-v1"
@@ -222,7 +224,7 @@ function friendGenderBrief(cast: StoryCast): string {
     return [
       `Co-protagonista: ${name} (${kind}, GÊNERO MASCULINO).`,
       `Concordância OBRIGATÓRIA: "o ${name}", "ele".`,
-      `NÃO invente espécie diferente do avatar.`,
+      `NÃO invente espécie diferente do avatar. Traits/SPECIES LOCK vencem a prosa.`,
       lock,
     ]
       .filter(Boolean)
@@ -664,8 +666,59 @@ export type GeneratePipelineResult = {
 };
 
 /**
+ * Align + Continuity Bible + diretor de página (também no path de template).
+ */
+async function polishChaptersForImages(input: {
+  cast: StoryCast;
+  title: string;
+  chapters: StoryChapter[];
+  opts?: PipelineOptions;
+  settingPreference?: string;
+}): Promise<StoryChapter[]> {
+  let chapters = input.chapters.map((c) => ({
+    ...c,
+    text: enforceCompanionSpeciesInText(c.text, input.cast),
+  }));
+
+  try {
+    chapters = await realignChaptersToPageText({
+      userId: input.opts?.userId,
+      cast: input.cast,
+      chapters,
+    });
+  } catch {
+    /* mantém */
+  }
+
+  const bible = await buildSceneContinuityBible({
+    userId: input.opts?.userId,
+    cast: input.cast,
+    title: input.title,
+    chapters,
+    settingPreference: input.settingPreference ?? input.opts?.settingPreference,
+  });
+  chapters = applyBibleToChapters(chapters, bible);
+
+  try {
+    chapters = await directPageImagePrompts({
+      userId: input.opts?.userId,
+      cast: input.cast,
+      title: input.title,
+      chapters,
+    });
+  } catch {
+    /* mantém bible prompts */
+  }
+
+  return chapters.map((c) => ({
+    ...c,
+    text: enforceCompanionSpeciesInText(c.text, input.cast),
+  }));
+}
+
+/**
  * Pipeline custo-otimizado:
- * template hit → personaliza; senão outline(mini) → expand(forte) → review(mini) → split(mini).
+ * template hit → personaliza + align/bible/diretor; senão outline → expand → review → split → polish.
  */
 export async function generateStoryPipeline(input: {
   cast: StoryCast;
@@ -684,7 +737,7 @@ export async function generateStoryPipeline(input: {
   const childName = opts?.protagonistName?.trim() || cast.childName;
   const friendName = cast.friendName;
 
-  // 1) Cache de template
+  // 1) Cache de template — NÃO pula align + bible + diretor
   const matched = await findMatchingTemplate({
     theme,
     userId: opts?.userId,
@@ -696,7 +749,7 @@ export async function generateStoryPipeline(input: {
       friendName,
       matched.title,
     );
-    const chapters: StoryChapter[] = personalized.pages.map((p) => ({
+    let chapters: StoryChapter[] = personalized.pages.map((p) => ({
       index: p.index,
       title: p.title,
       text: p.text,
@@ -705,16 +758,23 @@ export async function generateStoryPipeline(input: {
         `Walt Disney / Pixar 3D still of ${childName} and ${friendName}, beat ${p.index + 1}, unique framing, no text`,
     }));
     if (chapters.length >= MIN_STORY_PAGES) {
+      chapters = await polishChaptersForImages({
+        cast,
+        title: personalized.title,
+        chapters: chapters.slice(0, MAX_STORY_PAGES),
+        opts,
+        settingPreference: opts?.settingPreference,
+      });
       return packResult(
         {
           title: personalized.title,
           moral: personalized.moral,
           fullText: personalized.fullText,
-          reviewNotes: `template cache hit (score ${matched.score.toFixed(2)})`,
+          reviewNotes: `template cache hit (score ${matched.score.toFixed(2)}) + align/bible/director`,
           templateId: matched.id,
           fromTemplate: true,
         },
-        chapters.slice(0, MAX_STORY_PAGES),
+        chapters,
         "openai-storyteller-template",
       );
     }
@@ -781,26 +841,13 @@ export async function generateStoryPipeline(input: {
       });
     })();
 
-  // Check barato: reescreve prompts que não batem com o texto do ato
-  try {
-    finalChapters = await realignChaptersToPageText({
-      userId: opts?.userId,
-      cast,
-      chapters: finalChapters,
-    });
-  } catch {
-    /* mantém capítulos do split */
-  }
-
-  // Scene Continuity Bible → injeta props/expressões nos image_prompts
-  const bible = await buildSceneContinuityBible({
-    userId: opts?.userId,
+  finalChapters = await polishChaptersForImages({
     cast,
     title: reviewed.title,
     chapters: finalChapters,
+    opts,
     settingPreference: opts?.settingPreference,
   });
-  finalChapters = applyBibleToChapters(finalChapters, bible);
 
   // 3) Salvar template anonimizado (inédito)
   let templateId: string | null = null;

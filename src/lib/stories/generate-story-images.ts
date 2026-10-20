@@ -31,6 +31,7 @@ import {
 } from "@/lib/stories/page-feedback";
 import { ensureCompanionVisualTraits } from "@/lib/stories/companion-traits";
 import { visionCheckStoryPage } from "@/lib/stories/vision-page-check";
+import { speciesLockPromptLine } from "@/lib/stories/story-cast";
 
 const IMAGE_MODEL = modelForActivity("story_image");
 /** Qualidade intermediária = custo↓ sem matar fidelidade dos avatares. */
@@ -39,7 +40,8 @@ const IMAGE_QUALITY =
   (process.env.OPENAI_IMAGE_QUALITY?.trim() as "low" | "medium" | "high") ||
   "low";
 const REF_EDGE = 768;
-const MAX_UNIQUENESS_RETRIES = 5;
+/** Cap de custo: no máximo 2 retries de unicidade (+ 1 last resort). */
+const MAX_UNIQUENESS_RETRIES = 2;
 
 function apiKeyPresent(): boolean {
   return Boolean(
@@ -244,6 +246,7 @@ function scenePrompt(
     `Do not invent avatar face/hair details that contradict the reference sheets.`,
     `ANTI-CLONE RULE (CRITICAL): any OTHER child/NPC in the frame MUST look clearly different from "${cast.childName}" — different hair color OR length/style, different clothes colors, different face shape. NEVER twin/clone the protagonist.`,
     `If NPC NOTES / LOCKED NPC APPEARANCE is in the prompt, obey it exactly across this beat.`,
+    speciesLockPromptLine(cast),
     cast.companionVisualLock ||
       `COMPANION FIDELITY: "${cast.friendName}" must match the companion avatar reference (species, colors, shape) EXACTLY — never replace with a generic rabbit/bear/plush.`,
     `ENVIRONMENT SCALE: keep the same location scale as the story beat (e.g. a normal sandbox sandcastle stays child-sized — do not magically enlarge into a monumental fortress unless the text says so).`,
@@ -275,7 +278,8 @@ export function promptUsedTag(promptHash: string, prompt: string): string {
 
 /**
  * Gera 1 imagem Pixar por página (qualidade intermediária).
- * Sem cache entre páginas da mesma história; dHash estrito + vision QA.
+ * Sem cache entre páginas; dHash + máx. 2 retries. Vision QA NÃO roda aqui
+ * (só em regenerate / Não gostei — ver regenerateStoryPageImage).
  */
 export async function generateStoryPageImages(input: {
   userId: string;
@@ -308,12 +312,12 @@ export async function generateStoryPageImages(input: {
         let jpeg: Buffer | null = null;
         let chosenHash = "";
         let usedPrompt = "";
-        let visionFix = "";
+        let uniqFix = "";
 
-        for (let attempt = 0; attempt <= MAX_UNIQUENESS_RETRIES + 1; attempt++) {
+        for (let attempt = 0; attempt <= MAX_UNIQUENESS_RETRIES; attempt++) {
           const extras = {
             ...promptExtras,
-            dislikeFix: visionFix || undefined,
+            dislikeFix: uniqFix || undefined,
           };
           const prompt = scenePrompt(
             input.cast,
@@ -338,7 +342,7 @@ export async function generateStoryPageImages(input: {
             console.warn(
               `[story-images] near-duplicate rejected page=${i} attempt=${attempt}`,
             );
-            visionFix =
+            uniqFix =
               "FORCE UNIQUE FRAME: previous attempt looked like an earlier page — change camera, pose, foreground props, and composition completely.";
             continue;
           }
@@ -351,35 +355,9 @@ export async function generateStoryPageImages(input: {
             attempt: attempt + 100 + i * 10,
           });
           if (usedUrls.has(tempUrl)) {
-            visionFix =
+            uniqFix =
               "Previous upload URL already used in this story — regenerate a brand-new unique still.";
             continue;
-          }
-
-          // Vision QA (texto + anatomia + companion) — 1 chance de rejeitar
-          if (attempt < MAX_UNIQUENESS_RETRIES) {
-            try {
-              const check = await visionCheckStoryPage({
-                userId: input.userId,
-                pageText: page.text || "",
-                imageUrl: tempUrl,
-                companionName: input.cast.friendName,
-                companionLock: input.cast.companionVisualLock,
-              });
-              if (!check.ok) {
-                console.warn(
-                  `[story-images] vision reject page=${i} attempt=${attempt} issues=${check.issues.join(";")}`,
-                );
-                visionFix = [
-                  "VISION REJECT — redraw this page correctly:",
-                  check.fixHint || check.issues.join("; "),
-                  "Match page text location/people/action; keep school outfit continuity; exactly 2 arms/2 hands per able-bodied child; companion = avatar species.",
-                ].join(" ");
-                continue;
-              }
-            } catch {
-              /* aceita se vision falhar */
-            }
           }
 
           jpeg = candidate;
@@ -396,7 +374,7 @@ export async function generateStoryPageImages(input: {
             i,
             input.pages.length,
             framingNotes,
-            MAX_UNIQUENESS_RETRIES + 4,
+            MAX_UNIQUENESS_RETRIES + 2,
             {
               ...promptExtras,
               dislikeFix:
