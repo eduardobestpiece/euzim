@@ -49,7 +49,8 @@ export async function POST(request: Request) {
 
   const jobId = enqueued.jobId;
 
-  // Worker no mesmo processo (sobrevive ao fechar a aba do client).
+  // Um único disparo: `after` no mesmo processo. O fetch paralelo a /jobs/run
+  // gerava double-run (2 pipelines / 2 stories no mesmo jobId).
   after(async () => {
     try {
       await processStoryJob(jobId);
@@ -57,15 +58,6 @@ export async function POST(request: Request) {
       console.error("[story_jobs] process failed", jobId, err);
     }
   });
-
-  // Também dispara route auxiliar (redundância se after falhar em runtime).
-  const origin =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://127.0.0.1:5050";
-  void fetch(`${origin}/api/stories/jobs/run`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jobId }),
-  }).catch(() => undefined);
 
   return NextResponse.json({
     success: true,
