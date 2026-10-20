@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import {
   Copy,
-  KeyRound,
   RotateCcw,
   Search,
   StickyNote,
@@ -33,9 +31,7 @@ import {
   type AdminStoryCostRow,
 } from "@/lib/admin/actions";
 import type { PixelsAdminBundle } from "@/lib/admin/pixels-actions";
-import type { StripeAdminStatus } from "@/lib/admin/stripe-sync-actions";
 import { AdminPixelsPanel } from "@/components/admin/admin-pixels-panel";
-import { AdminStripeBadge } from "@/components/admin/admin-stripe-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function fmtDate(iso: string | null): string {
@@ -73,13 +69,11 @@ export function AdminDashboard({
   accounts,
   loadError,
   pixelsBundle,
-  stripeStatus,
 }: {
   kpis: AdminKpis;
   accounts: AdminAccountRow[];
   loadError?: string;
   pixelsBundle: PixelsAdminBundle;
-  stripeStatus: StripeAdminStatus;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -184,26 +178,6 @@ export function AdminDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            Admin PLG
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Contas, engajamento, custos de IA (OpenRouter), pixels e ações operacionais.
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
-          <AdminStripeBadge initial={stripeStatus} />
-          <Button asChild variant="outline" size="sm">
-            <Link href="/app/admin/settings" className="gap-1.5">
-              <KeyRound className="size-3.5" />
-              Perfil
-            </Link>
-          </Button>
-        </div>
-      </div>
-
       <Tabs defaultValue="users" className="space-y-6">
         <TabsList>
           <TabsTrigger value="users">Usuários</TabsTrigger>
