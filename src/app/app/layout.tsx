@@ -4,13 +4,15 @@ import { redirect } from "next/navigation";
 import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { SessionHeartbeat } from "@/components/app/session-heartbeat";
 import { getCurrentUser } from "@/lib/auth/get-user";
+import { needsOnboarding } from "@/lib/auth/routing";
 
 /** Auth + connection() must run inside Suspense under cacheComponents. */
 async function AppAreaGate({ children }: { children: React.ReactNode }) {
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
-  if (!user.onboardingCompleted) redirect("/onboarding");
+  // Admin nunca onboarda; só parent incompleto vai para /onboarding.
+  if (needsOnboarding(user)) redirect("/onboarding");
   return (
     <>
       <SessionHeartbeat />

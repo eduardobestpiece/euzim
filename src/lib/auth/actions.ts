@@ -13,7 +13,9 @@ import {
   writeMockSession,
 } from "@/lib/auth/mock-session";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
+import { resolvePostAuthPath } from "@/lib/auth/routing";
 import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
+import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { applyReferralAttribution } from "@/lib/referral/attribution";
 import { ensureReferralCode } from "@/lib/referral/codes";
 import { fireTrackingEvent } from "@/lib/tracking/dispatch";
@@ -210,17 +212,29 @@ export async function signInAction(
     const existing = await readMockSession();
     if (existing && existing.email === email) {
       redirect(
-        existing.onboardingCompleted ? "/app/parent" : "/onboarding",
+        resolvePostAuthPath(
+          {
+            role: existing.role === "admin" ? "admin" : "parent",
+            onboardingCompleted: Boolean(existing.onboardingCompleted),
+          },
+          String(formData.get("next") ?? ""),
+        ),
       );
     }
 
+    const role = email.includes("admin") ? "admin" : "parent";
     await writeMockSession({
       id: createMockUserId(),
       email,
-      role: email.includes("admin") ? "admin" : "parent",
-      onboardingCompleted: false,
+      role,
+      onboardingCompleted: role === "admin",
     });
-    redirect("/onboarding");
+    redirect(
+      resolvePostAuthPath(
+        { role, onboardingCompleted: role === "admin" },
+        String(formData.get("next") ?? ""),
+      ),
+    );
   }
 
   const supabase = await createClient();
@@ -250,8 +264,9 @@ export async function signInAction(
 
     let profile: { onboarding_completed?: boolean; role?: string } | null =
       null;
+    const db = createAdminClient() ?? supabase;
     try {
-      const profileRes = await supabase
+      const profileRes = await db
         .from("users")
         .select("onboarding_completed, role")
         .eq("id", user.id)
@@ -261,14 +276,42 @@ export async function signInAction(
       /* segue com destino padrão */
     }
 
-    const next = String(formData.get("next") ?? "").trim();
-    if (next.startsWith("/")) {
-      redirect(next);
+    const role = (profile?.role as "admin" | "parent" | undefined) ?? "parent";
+    let onboardingCompleted = Boolean(profile?.onboarding_completed);
+    if (role === "admin") onboardingCompleted = true;
+
+    if (!onboardingCompleted && role !== "admin") {
+      try {
+        const { data: children } = await db
+          .from("children")
+          .select("avatar_url")
+          .eq("parent_id", user.id)
+          .limit(8);
+        if (
+          children?.some((c) =>
+            isPixarGeneratedUrl(c.avatar_url as string | null),
+          )
+        ) {
+          onboardingCompleted = true;
+          void db
+            .from("users")
+            .update({
+              onboarding_completed: true,
+              onboarding_reset_mode: null,
+            })
+            .eq("id", user.id);
+        }
+      } catch {
+        /* ignore */
+      }
     }
-    if (!profile?.onboarding_completed) {
-      redirect("/onboarding");
-    }
-    redirect(profile?.role === "admin" ? "/app/admin" : "/app/parent");
+
+    redirect(
+      resolvePostAuthPath(
+        { role, onboardingCompleted },
+        String(formData.get("next") ?? ""),
+      ),
+    );
   }
 
   redirect("/app/parent");

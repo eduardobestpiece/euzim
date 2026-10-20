@@ -4,6 +4,7 @@ import { BrandLogo } from "@/components/brand/brand-logo";
 import { LandingHome } from "@/components/marketing/landing-home";
 import { HasAccountGate } from "@/components/referral/has-account-gate";
 import { getCurrentUser } from "@/lib/auth/get-user";
+import { resolveAppHomePath } from "@/lib/auth/routing";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { redirect } from "next/navigation";
 
@@ -33,7 +34,7 @@ async function HomeInner({
   const user = await getCurrentUser();
 
   if (hasRef && user) {
-    redirect(user.onboardingCompleted ? "/app/parent" : "/onboarding");
+    redirect(resolveAppHomePath(user));
   }
 
   if (hasRef && !user) {

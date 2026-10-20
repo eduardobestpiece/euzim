@@ -145,10 +145,13 @@ export async function proxy(request: NextRequest) {
   }
 
   if (hasUser && isAuthPage) {
+    // Hub /app resolve admin vs parent vs onboarding com getCurrentUser.
     const url = request.nextUrl.clone();
-    url.pathname = onboardingCompleted || isSupabaseConfigured()
-      ? "/app/parent"
-      : "/onboarding";
+    if (isSupabaseConfigured()) {
+      url.pathname = "/app";
+    } else {
+      url.pathname = onboardingCompleted ? "/app/parent" : "/onboarding";
+    }
     return NextResponse.redirect(url);
   }
 

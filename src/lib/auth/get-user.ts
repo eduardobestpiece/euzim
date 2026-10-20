@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
@@ -7,6 +8,48 @@ import {
   readMockSession,
 } from "@/lib/auth/mock-session";
 import type { AuthUser } from "@/lib/auth/types";
+import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
+
+async function withTimeout<T>(ms: number, work: Promise<T>): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Se a flag estiver stale, mas já há avatar Pixar — considera onboard concluído. */
+async function inferOnboardingFromAvatars(
+  userId: string,
+): Promise<boolean> {
+  const db = createAdminClient();
+  if (!db) return false;
+
+  const [childrenRes, charsRes] = await Promise.all([
+    db
+      .from("children")
+      .select("avatar_url")
+      .eq("parent_id", userId)
+      .limit(8),
+    db
+      .from("characters")
+      .select("avatar_url")
+      .eq("parent_id", userId)
+      .limit(8),
+  ]);
+
+  const urls = [
+    ...(childrenRes.data ?? []).map((r) => r.avatar_url as string | null),
+    ...(charsRes.data ?? []).map((r) => r.avatar_url as string | null),
+  ];
+  return urls.some((u) => isPixarGeneratedUrl(u));
+}
 
 async function getCurrentUserUncached(): Promise<AuthUser | null> {
   if (!isSupabaseConfigured()) {
@@ -17,8 +60,6 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   const supabase = await createClient();
   if (!supabase) return null;
 
-  // Preferir getSession (cookie). getUser() → rede Auth (~5s+) e, com AAAA
-  // lento, AuthRetryableFetchError que trava a :5050 / HMR.
   let user: {
     id: string;
     email?: string | null;
@@ -26,50 +67,89 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   } | null = null;
 
   try {
-    const sessionRace = Promise.race([
+    user = await withTimeout(
+      2000,
       supabase.auth.getSession().then((r) => r.data.session?.user ?? null),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
-    ]);
-    user = await sessionRace;
+    );
   } catch {
     user = null;
   }
 
   if (!user) {
-    // Auth real configurado, mas sessão pode ser só mock local
     const mock = await readMockSession();
     return mock ? mockSessionToUser(mock) : null;
   }
 
-  let profile: {
+  // Admin client evita RLS/timeout flaky no gate de onboarding.
+  const db = createAdminClient() ?? supabase;
+  type ProfileRow = {
     role?: string | null;
     full_name?: string | null;
     onboarding_completed?: boolean | null;
-  } | null = null;
-  let profileError: { message?: string } | null = null;
+  };
+
+  let profile: ProfileRow | null = null;
   try {
-    const profileRace = Promise.race([
-      supabase
+    const res = await withTimeout(
+      4000,
+      db
         .from("users")
         .select("role, full_name, onboarding_completed")
         .eq("id", user.id)
-        .maybeSingle(),
-      new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(
-          () => resolve({ data: null, error: { message: "profile-timeout" } }),
-          3000,
-        ),
-      ),
-    ]);
-    const res = await profileRace;
-    profile = res.data;
-    profileError = res.error;
+        .maybeSingle()
+        .then((r) => r),
+    );
+    if (res && !("error" in res && res.error && !res.data)) {
+      profile = (res as { data: ProfileRow | null }).data;
+    }
   } catch {
-    profileError = { message: "profile-failed" };
+    profile = null;
   }
 
-  if (profileError && !profile) {
-    // Schema ainda não aplicado — usa onboarding mock se existir
+  const role =
+    (profile?.role as "parent" | "admin" | undefined) ?? "parent";
+
+  // Admin: nunca exige onboarding no app.
+  if (role === "admin") {
+    return {
+      id: user.id,
+      email: user.email ?? "",
+      role: "admin",
+      fullName: profile?.full_name ?? user.user_metadata?.full_name ?? null,
+      onboardingCompleted: true,
+      isMock: false,
+    };
+  }
+
+  let onboardingCompleted = Boolean(profile?.onboarding_completed);
+
+  if (!onboardingCompleted) {
+    try {
+      const inferred = await withTimeout(
+        4000,
+        inferOnboardingFromAvatars(user.id),
+      );
+      if (inferred) {
+        onboardingCompleted = true;
+        // Cura flag stale em background (não bloqueia).
+        const admin = createAdminClient();
+        if (admin) {
+          void admin
+            .from("users")
+            .update({
+              onboarding_completed: true,
+              onboarding_reset_mode: null,
+            })
+            .eq("id", user.id);
+        }
+      }
+    } catch {
+      /* mantém false */
+    }
+  }
+
+  if (profile == null && !onboardingCompleted) {
+    // Sem perfil e sem inferência — fallback mock local
     const onboarding = await readMockOnboarding();
     return {
       id: user.id,
@@ -89,9 +169,9 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   return {
     id: user.id,
     email: user.email ?? "",
-    role: (profile?.role as "parent" | "admin" | undefined) ?? "parent",
+    role,
     fullName: profile?.full_name ?? user.user_metadata?.full_name ?? null,
-    onboardingCompleted: Boolean(profile?.onboarding_completed),
+    onboardingCompleted,
     isMock: false,
   };
 }
