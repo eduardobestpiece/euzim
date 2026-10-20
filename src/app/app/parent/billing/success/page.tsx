@@ -12,6 +12,7 @@ import {
   fulfillExtraStory,
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
+import { subscriptionPeriodEndIso } from "@/lib/stripe/subscription-period";
 import { grantReferralRewardOnFirstSubscription } from "@/lib/referral/rewards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -78,7 +79,24 @@ async function BillingSuccessPageInner({
         } else {
           const planId =
             params.plan_id || session.metadata?.plan_id || "family";
-          const result = await fulfillSubscription(userId, planId);
+          let stripeSubscriptionId: string | null = null;
+          let stripeCurrentPeriodEnd: string | null = null;
+          const subRef = session.subscription;
+          const subId =
+            typeof subRef === "string" ? subRef : subRef?.id ?? null;
+          if (subId) {
+            stripeSubscriptionId = subId;
+            try {
+              const sub = await stripe.subscriptions.retrieve(subId);
+              stripeCurrentPeriodEnd = subscriptionPeriodEndIso(sub);
+            } catch {
+              /* best-effort */
+            }
+          }
+          const result = await fulfillSubscription(userId, planId, {
+            stripeSubscriptionId,
+            stripeCurrentPeriodEnd,
+          });
           activatedPlanId = planId;
           if (result.ok) {
             await grantReferralRewardOnFirstSubscription({

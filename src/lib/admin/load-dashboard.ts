@@ -1,4 +1,11 @@
+import {
+  BASE_INCLUDED_AVATARS,
+  normalizePlanSource,
+  type PlanSource,
+} from "@/lib/billing/plan-source";
+import { resolveSubscriptionPlan } from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveRenewalIso } from "@/lib/stories/usage";
 
 export type AdminKpis = {
   totalAccounts: number;
@@ -46,6 +53,7 @@ export type AdminAccountRow = {
   role: string;
   subscriptionStatus: string | null;
   subscriptionPlanId: string | null;
+  planSource: PlanSource;
   complimentaryUntil: string | null;
   onboardingCompleted: boolean;
   onboardingResetMode: string | null;
@@ -55,6 +63,14 @@ export type AdminAccountRow = {
   childrenCount: number;
   charactersCount: number;
   storiesCount: number;
+  /** Histórias criadas no mês calendário atual. */
+  storiesUsedMonth: number;
+  storyPlanLimit: number;
+  extraStoriesAvailable: number;
+  storyLimitEffective: number;
+  avatarAllowance: number;
+  extraCharactersAvailable: number;
+  storiesRenewsAt: string;
   sessionSeconds7d: number;
   lastSignInAt: string | null;
   usageTokens: number;
@@ -92,7 +108,7 @@ export async function loadAdminDashboard(): Promise<{
   const { data: users, error: usersErr } = await admin
     .from("users")
     .select(
-      "id, email, full_name, role, subscription_status, subscription_plan_id, complimentary_until, onboarding_completed, onboarding_reset_mode, last_active_at, last_story_at, admin_notes, created_at",
+      "id, email, full_name, role, subscription_status, subscription_plan_id, plan_source, complimentary_until, onboarding_completed, onboarding_reset_mode, last_active_at, last_story_at, admin_notes, created_at, extra_stories_available, extra_characters_available, stripe_current_period_end",
     )
     .order("created_at", { ascending: false });
 
@@ -135,8 +151,10 @@ export async function loadAdminDashboard(): Promise<{
     charCount.set(c.parent_id, (charCount.get(c.parent_id) ?? 0) + 1);
   }
   const storyCount = new Map<string, number>();
+  const storyMonthCount = new Map<string, number>();
   const story7 = daysAgo(7).getTime();
   const story30 = daysAgo(30).getTime();
+  const monthStartMs = new Date(monthStartIso()).getTime();
   let stories7d = 0;
   let stories30d = 0;
   for (const s of stories ?? []) {
@@ -144,6 +162,12 @@ export async function loadAdminDashboard(): Promise<{
     const t = new Date(s.created_at).getTime();
     if (t >= story7) stories7d += 1;
     if (t >= story30) stories30d += 1;
+    if (t >= monthStartMs) {
+      storyMonthCount.set(
+        s.parent_id,
+        (storyMonthCount.get(s.parent_id) ?? 0) + 1,
+      );
+    }
   }
 
   const sessionSec = new Map<string, number>();
@@ -273,6 +297,18 @@ export async function loadAdminDashboard(): Promise<{
 
   const accounts: AdminAccountRow[] = rows.map((u) => {
     const usage = usageByUser.get(u.id);
+    const plan = resolveSubscriptionPlan(u.subscription_plan_id || "");
+    const storyPlanLimit = plan?.storiesPerMonth ?? 0;
+    const extraStories =
+      typeof u.extra_stories_available === "number"
+        ? Math.max(0, u.extra_stories_available)
+        : 0;
+    const extraAvatars =
+      typeof u.extra_characters_available === "number"
+        ? Math.max(0, u.extra_characters_available)
+        : 0;
+    const hasPlan = Boolean(u.subscription_plan_id);
+    const avatarBase = hasPlan ? BASE_INCLUDED_AVATARS : 0;
     return {
       id: u.id,
       email: u.email,
@@ -280,6 +316,7 @@ export async function loadAdminDashboard(): Promise<{
       role: u.role,
       subscriptionStatus: u.subscription_status,
       subscriptionPlanId: u.subscription_plan_id,
+      planSource: normalizePlanSource(u.plan_source),
       complimentaryUntil: u.complimentary_until,
       onboardingCompleted: Boolean(u.onboarding_completed),
       onboardingResetMode: u.onboarding_reset_mode,
@@ -289,6 +326,13 @@ export async function loadAdminDashboard(): Promise<{
       childrenCount: childCount.get(u.id) ?? 0,
       charactersCount: charCount.get(u.id) ?? 0,
       storiesCount: storyCount.get(u.id) ?? 0,
+      storiesUsedMonth: storyMonthCount.get(u.id) ?? 0,
+      storyPlanLimit,
+      extraStoriesAvailable: extraStories,
+      storyLimitEffective: storyPlanLimit + extraStories,
+      avatarAllowance: avatarBase + extraAvatars,
+      extraCharactersAvailable: extraAvatars,
+      storiesRenewsAt: resolveRenewalIso(u.stripe_current_period_end ?? null),
       sessionSeconds7d: sessionSec.get(u.id) ?? 0,
       lastSignInAt: signInMap.get(u.id) ?? null,
       usageTokens: usage?.tokens ?? 0,

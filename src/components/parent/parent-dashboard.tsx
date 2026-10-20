@@ -103,8 +103,8 @@ export function ParentDashboard({
       <StoryJobNotifier />
 
       <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-[radial-gradient(ellipse_at_top_left,_oklch(0.95_0.04_85),_transparent_55%),radial-gradient(ellipse_at_bottom_right,_oklch(0.94_0.03_210),_transparent_50%)] p-5 sm:p-7">
-        <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-end">
-          <div className="relative">
+        <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+          <div className="relative shrink-0">
             <div className="size-36 overflow-hidden rounded-3xl border-4 border-background shadow-md sm:size-44">
               {heroUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -120,7 +120,7 @@ export function ParentDashboard({
               )}
             </div>
           </div>
-          <div className="flex-1 space-y-2 text-center sm:pb-1 sm:text-left">
+          <div className="flex flex-1 flex-col justify-center space-y-2 text-center sm:text-left">
             <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
               {heroName}
             </h1>

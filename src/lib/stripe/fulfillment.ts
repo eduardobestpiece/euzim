@@ -4,6 +4,11 @@ import {
   resolveCharacterPack,
   resolveStoryPlan,
 } from "@/lib/billing/plans";
+import {
+  planSourceFromStripeMode,
+  type PlanSource,
+} from "@/lib/billing/plan-source";
+import { getStripeMode } from "@/lib/stripe/config";
 
 export type FulfillmentResult = {
   ok: boolean;
@@ -11,10 +16,18 @@ export type FulfillmentResult = {
   mock?: boolean;
 };
 
+export type FulfillSubscriptionOptions = {
+  /** Override; default deriva do modo Stripe do processo. */
+  planSource?: PlanSource;
+  stripeSubscriptionId?: string | null;
+  stripeCurrentPeriodEnd?: string | null;
+};
+
 /** Ativa assinatura (starter/family/plus) no perfil Supabase. */
 export async function fulfillSubscription(
   userId: string,
   planId: string = FAMILY_SUBSCRIPTION.planId,
+  options: FulfillSubscriptionOptions = {},
 ): Promise<FulfillmentResult> {
   const admin = createAdminClient();
   if (!admin) return { ok: false, error: "Admin Supabase indisponível." };
@@ -22,14 +35,22 @@ export async function fulfillSubscription(
   const plan = resolveStoryPlan(planId) ?? FAMILY_SUBSCRIPTION;
   const maxChildren =
     plan.planId === "starter" ? 2 : plan.planId === "plus" ? 6 : 4;
+  const planSource =
+    options.planSource ?? planSourceFromStripeMode(getStripeMode());
 
-  const { error } = await admin
-    .from("users")
-    .update({
-      subscription_status: "active",
-      subscription_plan_id: plan.planId,
-    })
-    .eq("id", userId);
+  const patch: Record<string, unknown> = {
+    subscription_status: "active",
+    subscription_plan_id: plan.planId,
+    plan_source: planSource,
+  };
+  if (options.stripeSubscriptionId != null) {
+    patch.stripe_subscription_id = options.stripeSubscriptionId || null;
+  }
+  if (options.stripeCurrentPeriodEnd != null) {
+    patch.stripe_current_period_end = options.stripeCurrentPeriodEnd || null;
+  }
+
+  const { error } = await admin.from("users").update(patch).eq("id", userId);
 
   if (error) return { ok: false, error: error.message };
 

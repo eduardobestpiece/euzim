@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin/require-admin";
+import {
+  isPlanSource,
+  type PlanSource,
+} from "@/lib/billing/plan-source";
+import { resolveSubscriptionPlan } from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type AdminActionResult = {
@@ -189,6 +194,7 @@ export async function updateSubscriptionAction(input: {
   userId: string;
   subscriptionStatus: string;
   subscriptionPlanId: string;
+  planSource?: PlanSource;
 }): Promise<AdminActionResult> {
   const ctx = await dbOrError();
   if ("error" in ctx) return { error: ctx.error };
@@ -205,19 +211,113 @@ export async function updateSubscriptionAction(input: {
     return { error: "Status de assinatura inválido." };
   }
 
+  const planId = (input.subscriptionPlanId || "").trim();
+  if (planId && !resolveSubscriptionPlan(planId)) {
+    return { error: "Plano inválido (use starter, family, plus ou vazio)." };
+  }
+
+  const planSource: PlanSource = isPlanSource(input.planSource)
+    ? input.planSource
+    : planId
+      ? "gift"
+      : "none";
+
+  const patch: Record<string, unknown> = {
+    subscription_status: input.subscriptionStatus,
+    subscription_plan_id: planId || null,
+    plan_source: planSource,
+  };
+
+  // Presente: ativo sem cobrança até o Admin alterar.
+  if (planSource === "gift" && planId) {
+    patch.subscription_status = "active";
+  }
+  if (planSource === "none" || !planId) {
+    patch.subscription_status = "none";
+    patch.subscription_plan_id = null;
+    patch.plan_source = "none";
+  }
+
+  const { error } = await ctx.admin
+    .from("users")
+    .update(patch)
+    .eq("id", input.userId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/app/admin");
+  return { success: true, message: "Tipo e plano atualizados." };
+}
+
+/** Habilita Presente (Admin): plano + plan_source=gift + active. */
+export async function enableGiftPlanAction(input: {
+  userId: string;
+  planId: string;
+}): Promise<AdminActionResult> {
+  return updateSubscriptionAction({
+    userId: input.userId,
+    subscriptionPlanId: input.planId,
+    subscriptionStatus: "active",
+    planSource: "gift",
+  });
+}
+
+export async function addExtraCreditsAction(input: {
+  userId: string;
+  stories?: number;
+  avatars?: number;
+}): Promise<AdminActionResult> {
+  const ctx = await dbOrError();
+  if ("error" in ctx) return { error: ctx.error };
+
+  const addStories = Math.floor(input.stories ?? 0);
+  const addAvatars = Math.floor(input.avatars ?? 0);
+  if (
+    (!Number.isFinite(addStories) || addStories < 0) ||
+    (!Number.isFinite(addAvatars) || addAvatars < 0)
+  ) {
+    return { error: "Quantidades inválidas." };
+  }
+  if (addStories === 0 && addAvatars === 0) {
+    return { error: "Informe +histórias e/ou +avatares (> 0)." };
+  }
+  if (addStories > 100 || addAvatars > 100) {
+    return { error: "Máximo +100 por vez." };
+  }
+
+  const { data: profile } = await ctx.admin
+    .from("users")
+    .select("extra_stories_available, extra_characters_available")
+    .eq("id", input.userId)
+    .maybeSingle();
+
+  if (!profile) return { error: "Usuário não encontrado." };
+
+  const prevStories =
+    typeof profile.extra_stories_available === "number"
+      ? profile.extra_stories_available
+      : 0;
+  const prevAvatars =
+    typeof profile.extra_characters_available === "number"
+      ? profile.extra_characters_available
+      : 0;
+
   const { error } = await ctx.admin
     .from("users")
     .update({
-      subscription_status: input.subscriptionStatus,
-      subscription_plan_id: input.subscriptionPlanId || null,
+      extra_stories_available: prevStories + addStories,
+      extra_characters_available: prevAvatars + addAvatars,
     })
     .eq("id", input.userId);
 
   if (error) return { error: error.message };
   revalidatePath("/app/admin");
-  return { success: true, message: "Plano/status atualizados." };
+  const parts: string[] = [];
+  if (addStories) parts.push(`+${addStories} história(s)`);
+  if (addAvatars) parts.push(`+${addAvatars} avatar(es)`);
+  return { success: true, message: `Créditos: ${parts.join(" · ")}.` };
 }
 
+/** @deprecated UI removida — mantido por compat. */
 export async function addComplimentaryDaysAction(input: {
   userId: string;
   days: number;

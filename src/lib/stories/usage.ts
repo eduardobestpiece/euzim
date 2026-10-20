@@ -16,7 +16,36 @@ export type StoryUsage = {
   limit: number;
   source: "mock" | "supabase" | "fallback";
   planId?: string;
+  /** Cota do plano (sem extras). */
+  planLimit?: number;
+  /** Créditos avulsos (`extra_stories_available`). */
+  extraStories?: number;
+  /** ISO da próxima renovação de cota mensal. */
+  renewsAt?: string;
 };
+
+/** Fim do mês calendário (UTC local do servidor) — alinhado ao count de usage. */
+export function calendarMonthRenewalIso(from: Date = new Date()): string {
+  const next = new Date(from.getFullYear(), from.getMonth() + 1, 1);
+  next.setHours(0, 0, 0, 0);
+  return next.toISOString();
+}
+
+/**
+ * Preferir `stripe_current_period_end` se estiver no futuro; senão mês calendário.
+ */
+export function resolveRenewalIso(
+  stripePeriodEnd?: string | null,
+  from: Date = new Date(),
+): string {
+  if (stripePeriodEnd) {
+    const t = new Date(stripePeriodEnd).getTime();
+    if (Number.isFinite(t) && t > from.getTime()) {
+      return new Date(t).toISOString();
+    }
+  }
+  return calendarMonthRenewalIso(from);
+}
 
 async function resolveMonthlyLimit(planId?: string | null): Promise<number> {
   const catalog = resolveSubscriptionPlan(planId || FAMILY_SUBSCRIPTION.planId);
@@ -65,12 +94,22 @@ export async function getStoryUsage(): Promise<StoryUsage> {
         let planId: string | null = "family";
         const { data: profile } = await db
           .from("users")
-          .select("subscription_plan_id")
+          .select(
+            "subscription_plan_id, extra_stories_available, stripe_current_period_end",
+          )
           .eq("id", user.id)
           .maybeSingle();
         planId = profile?.subscription_plan_id ?? "family";
 
-        const limit = await resolveMonthlyLimit(planId);
+        const planLimit = await resolveMonthlyLimit(planId);
+        const extraStories =
+          typeof profile?.extra_stories_available === "number"
+            ? Math.max(0, profile.extra_stories_available)
+            : 0;
+        const limit = planLimit + extraStories;
+        const renewsAt = resolveRenewalIso(
+          profile?.stripe_current_period_end ?? null,
+        );
 
         const start = new Date();
         start.setDate(1);
@@ -86,6 +125,9 @@ export async function getStoryUsage(): Promise<StoryUsage> {
           return {
             used: count,
             limit,
+            planLimit,
+            extraStories,
+            renewsAt,
             source: "supabase",
             planId: planId ?? undefined,
           };

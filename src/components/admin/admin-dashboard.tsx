@@ -1,13 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import {
-  Copy,
-  RotateCcw,
-  Search,
-  StickyNote,
-  Trash2,
-} from "lucide-react";
+import { Copy, RotateCcw, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,18 +15,23 @@ import {
 } from "@/components/ui/dialog";
 import type { AdminAccountRow, AdminKpis } from "@/lib/admin/load-dashboard";
 import {
-  addComplimentaryDaysAction,
+  addExtraCreditsAction,
   deleteAdminStoryAction,
   generateRecoveryLinkAction,
   listAdminUserStoriesAction,
   resetOnboardingAction,
-  saveAdminNotesAction,
   updateSubscriptionAction,
   type AdminStoryCostRow,
 } from "@/lib/admin/actions";
 import type { PixelsAdminBundle } from "@/lib/admin/pixels-actions";
 import { AdminPixelsPanel } from "@/components/admin/admin-pixels-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  PLAN_SOURCE_LABELS,
+  type PlanSource,
+} from "@/lib/billing/plan-source";
+import { SUBSCRIPTION_PLANS } from "@/lib/billing/plans";
+import { formatBrl } from "@/lib/billing/character-packs";
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "-";
@@ -85,10 +84,10 @@ export function AdminDashboard({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
-  const [notes, setNotes] = useState("");
-  const [planId, setPlanId] = useState("plus");
-  const [subStatus, setSubStatus] = useState("active");
-  const [days, setDays] = useState(7);
+  const [planId, setPlanId] = useState("family");
+  const [planSource, setPlanSource] = useState<PlanSource>("none");
+  const [extraStoriesAdd, setExtraStoriesAdd] = useState(1);
+  const [extraAvatarsAdd, setExtraAvatarsAdd] = useState(1);
   const [userStories, setUserStories] = useState<AdminStoryCostRow[]>([]);
   const [storiesLoading, setStoriesLoading] = useState(false);
 
@@ -120,9 +119,10 @@ export function AdminDashboard({
 
   function openDrawer(row: AdminAccountRow) {
     setSelected(row);
-    setNotes(row.adminNotes || "");
-    setPlanId(row.subscriptionPlanId || "family");
-    setSubStatus(row.subscriptionStatus || "none");
+    setPlanId(row.subscriptionPlanId || "");
+    setPlanSource(row.planSource || "none");
+    setExtraStoriesAdd(1);
+    setExtraAvatarsAdd(1);
     setMessage(null);
     setError(null);
     setRecoveryLink(null);
@@ -290,8 +290,8 @@ export function AdminDashboard({
           <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Email</th>
+              <th className="px-3 py-2">Tipo</th>
               <th className="px-3 py-2">Plano</th>
-              <th className="px-3 py-2">Comp.</th>
               <th className="px-3 py-2">Filhos</th>
               <th className="px-3 py-2">Chars</th>
               <th className="px-3 py-2">Hist.</th>
@@ -316,13 +316,18 @@ export function AdminDashboard({
                   <div className="text-xs text-muted-foreground">{row.role}</div>
                 </td>
                 <td className="px-3 py-2">
-                  {row.subscriptionPlanId || "—"}
+                  <div className="font-medium">
+                    {PLAN_SOURCE_LABELS[row.planSource] || "—"}
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {row.subscriptionStatus || "none"}
                   </div>
                 </td>
-                <td className="px-3 py-2 text-xs">
-                  {fmtDate(row.complimentaryUntil)}
+                <td className="px-3 py-2">
+                  {row.subscriptionPlanId || "—"}
+                  <div className="text-xs text-muted-foreground">
+                    {row.storiesUsedMonth}/{row.storyLimitEffective} hist.
+                  </div>
                 </td>
                 <td className="px-3 py-2">{row.childrenCount}</td>
                 <td className="px-3 py-2">{row.charactersCount}</td>
@@ -383,79 +388,146 @@ export function AdminDashboard({
           {selected ? (
             <div className="space-y-5">
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold">Plano / status</h3>
+                <h3 className="text-sm font-semibold">Tipo e plano</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label>Plan ID</Label>
-                    <Input
-                      value={planId}
-                      onChange={(e) => setPlanId(e.target.value)}
-                      placeholder="plus"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Status</Label>
+                    <Label>Tipo</Label>
                     <select
                       className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
-                      value={subStatus}
-                      onChange={(e) => setSubStatus(e.target.value)}
+                      value={planSource}
+                      onChange={(e) =>
+                        setPlanSource(e.target.value as PlanSource)
+                      }
                     >
-                      <option value="none">none</option>
-                      <option value="trialing">trialing</option>
-                      <option value="active">active</option>
-                      <option value="past_due">past_due</option>
-                      <option value="canceled">canceled</option>
-                      <option value="incomplete">incomplete</option>
+                      <option value="none">Sem plano</option>
+                      <option value="paid_live">Pago</option>
+                      <option value="paid_test">Teste</option>
+                      <option value="gift">Presente</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Plano</Label>
+                    <select
+                      className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+                      value={planId}
+                      onChange={(e) => setPlanId(e.target.value)}
+                    >
+                      <option value="">Sem plano</option>
+                      {SUBSCRIPTION_PLANS.map((p) => (
+                        <option key={p.planId} value={p.planId}>
+                          {formatBrl(p.priceBrl)} · {p.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
-                <Button
-                  size="sm"
-                  disabled={pending}
-                  onClick={() =>
-                    run(() =>
-                      updateSubscriptionAction({
-                        userId: selected.id,
-                        subscriptionPlanId: planId,
-                        subscriptionStatus: subStatus,
-                      }),
-                    )
-                  }
-                >
-                  Salvar plano
-                </Button>
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold">Dias grátis</h3>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={days}
-                    onChange={(e) => setDays(Number(e.target.value))}
-                    className="w-24"
-                  />
+                <p className="text-xs text-muted-foreground">
+                  Presente = Admin (sem cobrança). Pago/Teste = Stripe live/test.
+                </p>
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    variant="secondary"
                     disabled={pending}
                     onClick={() =>
                       run(() =>
-                        addComplimentaryDaysAction({
+                        updateSubscriptionAction({
                           userId: selected.id,
-                          days,
+                          subscriptionPlanId: planId,
+                          subscriptionStatus:
+                            planSource === "none" || !planId
+                              ? "none"
+                              : "active",
+                          planSource,
                         }),
                       )
                     }
                   >
-                    Adicionar
+                    Salvar tipo/plano
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={pending || !planId}
+                    onClick={() =>
+                      run(() =>
+                        updateSubscriptionAction({
+                          userId: selected.id,
+                          subscriptionPlanId: planId || "family",
+                          subscriptionStatus: "active",
+                          planSource: "gift",
+                        }),
+                      )
+                    }
+                  >
+                    Habilitar Presente
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Atual: {fmtDate(selected.complimentaryUntil)}
-                </p>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">Cotas</h3>
+                <ul className="space-y-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+                  <li>
+                    Avatares: direito {selected.avatarAllowance} (2 base +{" "}
+                    {selected.extraCharactersAvailable} extras) · usados{" "}
+                    {selected.charactersCount}
+                  </li>
+                  <li>
+                    Histórias: direito {selected.storyLimitEffective} (plano{" "}
+                    {selected.storyPlanLimit} + extras{" "}
+                    {selected.extraStoriesAvailable}) · usadas no mês{" "}
+                    {selected.storiesUsedMonth}
+                  </li>
+                  <li>
+                    Próxima renovação:{" "}
+                    {new Date(selected.storiesRenewsAt).toLocaleDateString(
+                      "pt-BR",
+                      { dateStyle: "medium" },
+                    )}
+                  </li>
+                </ul>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label>+ histórias</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={extraStoriesAdd}
+                      onChange={(e) =>
+                        setExtraStoriesAdd(Number(e.target.value))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>+ avatares</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={extraAvatarsAdd}
+                      onChange={(e) =>
+                        setExtraAvatarsAdd(Number(e.target.value))
+                      }
+                    />
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={pending}
+                  onClick={() =>
+                    run(() =>
+                      addExtraCreditsAction({
+                        userId: selected.id,
+                        stories: extraStoriesAdd,
+                        avatars: extraAvatarsAdd,
+                      }),
+                    )
+                  }
+                >
+                  Creditar
+                </Button>
               </section>
 
               <section className="space-y-2">
@@ -636,32 +708,6 @@ export function AdminDashboard({
                     </ul>
                   </details>
                 ) : null}
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-                  <StickyNote className="size-3.5" />
-                  Notas internas
-                </h3>
-                <textarea
-                  className="min-h-24 w-full rounded-lg border border-border bg-background p-2 text-sm"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-                <Button
-                  size="sm"
-                  disabled={pending}
-                  onClick={() =>
-                    run(() =>
-                      saveAdminNotesAction({
-                        userId: selected.id,
-                        notes,
-                      }),
-                    )
-                  }
-                >
-                  Salvar notas
-                </Button>
               </section>
 
               {error ? (
