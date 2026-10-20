@@ -18,8 +18,8 @@ import { grantReferralRewardOnFirstSubscription } from "@/lib/referral/rewards";
 import { fireTrackingEvent } from "@/lib/tracking/dispatch";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  EXTRA_STORY_PRODUCT,
   customAvatarPriceCents,
+  extraStoryForPlan,
   resolveCharacterPack,
   resolveStoryPlan,
 } from "@/lib/billing/plans";
@@ -47,9 +47,11 @@ async function trackPurchaseFromSession(session: Stripe.Checkout.Session) {
       value = value ?? plan.priceBrl;
     }
   } else if (kind === "extra_story") {
-    product = EXTRA_STORY_PRODUCT.name;
-    planId = EXTRA_STORY_PRODUCT.planId;
-    value = value ?? EXTRA_STORY_PRODUCT.priceBrl;
+    const extra = resolveStoryPlan(planId || "") ||
+      extraStoryForPlan(session.metadata?.for_plan);
+    product = extra.name;
+    planId = extra.planId;
+    value = value ?? extra.priceBrl;
   } else if (kind === "character_pack") {
     const pack = resolveCharacterPack(session.metadata?.pack_id || "");
     if (pack) {

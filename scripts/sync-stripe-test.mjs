@@ -34,44 +34,41 @@ if (!testKey.startsWith("sk_test_") && !testKey.startsWith("rk_test_")) {
 const live = new Stripe(liveKey);
 const test = new Stripe(testKey);
 
-const LIVE = {
-  starter: {
-    price: "price_1URZD42RGWYUXReL1LuaJkHI",
-    product: "prod_VSUBri2FlAVcly",
-  },
-  family: {
-    price: "price_1URZD42RGWYUXReLwWbPWFkf",
-    product: "prod_VSUBYLdM2LhWTn",
-  },
-  extra_story: {
-    price: "price_1URZD42RGWYUXReLzlaa8myj",
-    product: "prod_VSUByEpOj2mabF",
-  },
-  "pack-1": {
-    price: "price_1URZD52RGWYUXReLJBO4mGh2",
-    product: "prod_VSUBNWkjUvC2u9",
-  },
-  "pack-2": {
-    price: "price_1URZD52RGWYUXReL2BM6zjb0",
-    product: "prod_VSUBjZNwxKsFMs",
-  },
-  "pack-3": {
-    price: "price_1URZD52RGWYUXReLRDVVeoOA",
-    product: "prod_VSUBtE4tfSzI8b",
-  },
-  "pack-4": {
-    price: "price_1URZD62RGWYUXReLJy3Dl9LJ",
-    product: "prod_VSUBlwMeR8fPaM",
-  },
-  "pack-5": {
-    price: "price_1URZD62RGWYUXReLxApF8ILx",
-    product: "prod_VSUB5EMXIM0ijm",
-  },
-  avatar_unit: {
-    price: "price_1URZD62RGWYUXReLiZ2MHkJ9",
-    product: "prod_VSUBrCXBKf2ite",
-  },
-};
+/** Lê IDs live de stripe-price-ids.ts (fonte de verdade). */
+function loadLiveCatalogFromTs() {
+  const raw = readFileSync(
+    resolve(process.cwd(), "src/lib/billing/stripe-price-ids.ts"),
+    "utf8",
+  );
+  const priceBlock = raw.match(
+    /export const STRIPE_PRICE_IDS = \{([\s\S]*?)\} as const;/,
+  )?.[1];
+  const productBlock = raw.match(
+    /export const STRIPE_PRODUCT_IDS = \{([\s\S]*?)\} as const;/,
+  )?.[1];
+  if (!priceBlock || !productBlock) {
+    throw new Error("Não foi possível parsear stripe-price-ids.ts");
+  }
+  const prices = {};
+  const products = {};
+  const pairRe = /(?:"([^"]+)"|(\w+))\s*:\s*"([^"]+)"/g;
+  let m;
+  while ((m = pairRe.exec(priceBlock))) {
+    prices[m[1] || m[2]] = m[3];
+  }
+  while ((m = pairRe.exec(productBlock))) {
+    products[m[1] || m[2]] = m[3];
+  }
+  const LIVE = {};
+  for (const key of Object.keys(prices)) {
+    if (!products[key]) continue;
+    LIVE[key] = { price: prices[key], product: products[key] };
+  }
+  return LIVE;
+}
+
+const LIVE = loadLiveCatalogFromTs();
+console.log("LIVE_KEYS", Object.keys(LIVE).join(", "));
 
 const map = {
   generatedAt: new Date().toISOString(),

@@ -92,7 +92,7 @@ export function AdminDashboard({
   const [error, setError] = useState<string | null>(null);
   const [recoveryLink, setRecoveryLink] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
-  const [planId, setPlanId] = useState("family");
+  const [planId, setPlanId] = useState("plus");
   const [subStatus, setSubStatus] = useState("active");
   const [days, setDays] = useState(7);
   const [userStories, setUserStories] = useState<AdminStoryCostRow[]>([]);
@@ -416,7 +416,7 @@ export function AdminDashboard({
                     <Input
                       value={planId}
                       onChange={(e) => setPlanId(e.target.value)}
-                      placeholder="family"
+                      placeholder="plus"
                     />
                   </div>
                   <div className="space-y-1">

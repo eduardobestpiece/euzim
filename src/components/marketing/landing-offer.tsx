@@ -3,12 +3,20 @@ import { BookOpen, Check, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   FAMILY_SUBSCRIPTION,
+  PLUS_SUBSCRIPTION,
   STARTER_SUBSCRIPTION,
+  type StoryPlan,
 } from "@/lib/billing/plans";
 import { signupPathForPlan } from "@/lib/billing/selected-plan";
 import { cn } from "@/lib/utils";
 
-const PLANS = [
+const PLANS: Array<{
+  plan: StoryPlan;
+  badge: string;
+  favorite: boolean;
+  cta: string;
+  highlights: Array<{ icon: typeof Users; text: string }>;
+}> = [
   {
     plan: STARTER_SUBSCRIPTION,
     badge: "Para Aventureiros",
@@ -29,7 +37,7 @@ const PLANS = [
       },
       {
         icon: ShieldCheck,
-        text: "Uma história nova toda semana",
+        text: "Extra a R$ 11,90 se precisar de mais",
       },
     ],
   },
@@ -53,11 +61,35 @@ const PLANS = [
       },
       {
         icon: ShieldCheck,
-        text: "Histórias novas a cada 3 dias",
+        text: "Extra a R$ 9,90 se precisar de mais",
       },
     ],
   },
-] as const;
+  {
+    plan: PLUS_SUBSCRIPTION,
+    badge: "Para Exploradores Plus",
+    favorite: false,
+    cta: "Quero o máximo de histórias",
+    highlights: [
+      {
+        icon: Users,
+        text: `${PLUS_SUBSCRIPTION.includedCharacters} avatares`,
+      },
+      {
+        icon: BookOpen,
+        text: `${PLUS_SUBSCRIPTION.storiesPerMonth} histórias por mês`,
+      },
+      {
+        icon: Sparkles,
+        text: "Geração com IA inclusa",
+      },
+      {
+        icon: ShieldCheck,
+        text: "Extra a R$ 7,90 se precisar de mais",
+      },
+    ],
+  },
+];
 
 export function LandingOffer() {
   return (
@@ -68,7 +100,7 @@ export function LandingOffer() {
     >
       <div aria-hidden className="landing-offer-glow" />
 
-      <div className="relative mx-auto max-w-5xl">
+      <div className="relative mx-auto max-w-6xl">
         <div className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
           <h2 id="offer-heading" className="landing-offer-title">
             Sua criança merece ser protagonista
@@ -123,7 +155,7 @@ export function LandingOffer() {
               >
                 <Link
                   href={signupPathForPlan(
-                    plan.planId as "starter" | "family",
+                    plan.planId as "starter" | "family" | "plus",
                   )}
                 >
                   <Check className="size-4" aria-hidden />

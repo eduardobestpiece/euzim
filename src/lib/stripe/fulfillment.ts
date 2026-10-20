@@ -11,7 +11,7 @@ export type FulfillmentResult = {
   mock?: boolean;
 };
 
-/** Ativa assinatura (starter/family) no perfil Supabase. */
+/** Ativa assinatura (starter/family/plus) no perfil Supabase. */
 export async function fulfillSubscription(
   userId: string,
   planId: string = FAMILY_SUBSCRIPTION.planId,
@@ -20,6 +20,8 @@ export async function fulfillSubscription(
   if (!admin) return { ok: false, error: "Admin Supabase indisponível." };
 
   const plan = resolveStoryPlan(planId) ?? FAMILY_SUBSCRIPTION;
+  const maxChildren =
+    plan.planId === "starter" ? 2 : plan.planId === "plus" ? 6 : 4;
 
   const { error } = await admin
     .from("users")
@@ -35,7 +37,7 @@ export async function fulfillSubscription(
     {
       plan_id: plan.planId,
       plan_name: plan.name,
-      max_children: plan.planId === "starter" ? 2 : 4,
+      max_children: maxChildren,
       max_stories_per_month: plan.storiesPerMonth,
       max_characters: plan.includedCharacters,
       max_images_per_story: 8,

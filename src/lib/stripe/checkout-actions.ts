@@ -3,13 +3,14 @@
 import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import {
-  EXTRA_STORY_PRODUCT,
+  EXTRA_STORY_PLUS,
   FAMILY_SUBSCRIPTION,
-  STARTER_SUBSCRIPTION,
   customAvatarPriceCents,
+  extraStoryForPlan,
   packPriceCents,
   resolveCharacterPack,
   resolveStoryPlan,
+  resolveSubscriptionPlan,
   type StoryPlan,
 } from "@/lib/billing/plans";
 import {
@@ -26,6 +27,8 @@ import {
 import { getStripe } from "@/lib/stripe/client";
 import { ensureStripeCustomer } from "@/lib/stripe/customers";
 import { mockFulfillCheckout } from "@/lib/stripe/fulfillment";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export type CheckoutActionResult = {
   error?: string;
@@ -64,10 +67,27 @@ function gateSecret(): CheckoutActionResult | null {
 }
 
 function planPriceId(plan: StoryPlan): string | null {
+  if (plan.kind === "extra_story") {
+    const key = (plan.stripePriceKey || plan.planId) as StripePriceKey;
+    return resolveStripePriceId(key);
+  }
   if (plan.planId === "starter") return resolveStripePriceId("starter");
   if (plan.planId === "family") return resolveStripePriceId("family");
-  if (plan.planId === "extra_story") return resolveStripePriceId("extra_story");
+  if (plan.planId === "plus") return resolveStripePriceId("plus");
   return null;
+}
+
+async function readUserSubscriptionPlanId(
+  userId: string,
+): Promise<string | null> {
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return null;
+  const { data } = await db
+    .from("users")
+    .select("subscription_plan_id")
+    .eq("id", userId)
+    .maybeSingle();
+  return data?.subscription_plan_id ?? null;
 }
 
 export type SubscriptionCheckoutOptions = {
@@ -171,6 +191,9 @@ export async function startPlanCheckoutAction(
   if (plan.kind === "extra_story") {
     return startExtraStoryCheckoutAction();
   }
+  if (!resolveSubscriptionPlan(plan.planId)) {
+    return { error: "Plano de assinatura inválido." };
+  }
   return createSubscriptionCheckout(plan, options);
 }
 
@@ -178,11 +201,15 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
 
+  const activePlanId = await readUserSubscriptionPlanId(user.id);
+  const plan = extraStoryForPlan(activePlanId);
+  const priceKey = (plan.stripePriceKey || plan.planId) as StripePriceKey;
+
   const gated = gateSecret();
   if (gated) {
     return {
       ...gated,
-      error: `${gated.error} Produto: ${EXTRA_STORY_PRODUCT.name} (${formatBrl(EXTRA_STORY_PRODUCT.priceBrl)}).`,
+      error: `${gated.error} Produto: ${plan.name} (${formatBrl(plan.priceBrl)}).`,
     };
   }
 
@@ -199,8 +226,7 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
   }
 
   const origin = await appOrigin();
-  const plan = EXTRA_STORY_PRODUCT;
-  const priceId = resolveStripePriceId("extra_story");
+  const priceId = resolveStripePriceId(priceKey);
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -212,7 +238,9 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
         supabase_user_id: user.id,
         kind: "extra_story",
         plan_id: plan.planId,
+        for_plan: plan.forPlanId || activePlanId || EXTRA_STORY_PLUS.forPlanId || "plus",
         stories: "1",
+        price_brl: String(plan.priceBrl),
       },
       line_items: [{ quantity: 1, price: priceId }],
       return_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=extra_story`,

@@ -1,10 +1,11 @@
-/** Plano de assinatura escolhido na landing (oferta) ou no paywall do onboarding. */
-export type SelectedPlanId = "starter" | "family";
+export type SelectedPlanId = "starter" | "family" | "plus";
 
 export function parseSelectedPlanId(
   value: string | null | undefined,
 ): SelectedPlanId | null {
-  if (value === "starter" || value === "family") return value;
+  if (value === "starter" || value === "family" || value === "plus") {
+    return value;
+  }
   return null;
 }
 

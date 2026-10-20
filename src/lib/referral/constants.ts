@@ -43,6 +43,6 @@ export const FAMILY_GIFT_OPTIONS: GiftOption[] = [
 
 export function giftOptionsForPlan(planId: string): GiftOption[] {
   if (planId === "starter") return STARTER_GIFT_OPTIONS;
-  if (planId === "family") return FAMILY_GIFT_OPTIONS;
+  if (planId === "family" || planId === "plus") return FAMILY_GIFT_OPTIONS;
   return [];
 }

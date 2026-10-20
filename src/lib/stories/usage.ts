@@ -1,5 +1,9 @@
 import { cookies } from "next/headers";
 import { MONTHLY_STORY_LIMIT } from "@/lib/billing/character-packs";
+import {
+  FAMILY_SUBSCRIPTION,
+  resolveSubscriptionPlan,
+} from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
@@ -15,10 +19,13 @@ export type StoryUsage = {
 };
 
 async function resolveMonthlyLimit(planId?: string | null): Promise<number> {
-  const db = createAdminClient() ?? (await createClient());
-  if (!db) return MONTHLY_STORY_LIMIT;
+  const catalog = resolveSubscriptionPlan(planId || FAMILY_SUBSCRIPTION.planId);
+  const catalogLimit = catalog?.storiesPerMonth;
 
-  const id = planId || "family";
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return catalogLimit ?? MONTHLY_STORY_LIMIT;
+
+  const id = planId || FAMILY_SUBSCRIPTION.planId;
   const { data } = await db
     .from("subscription_limits")
     .select("max_stories_per_month, plan_id")
@@ -26,9 +33,18 @@ async function resolveMonthlyLimit(planId?: string | null): Promise<number> {
     .eq("is_active", true)
     .maybeSingle();
 
+  // Catálogo (2/5/10) vence linha stale no DB quando diverge.
+  if (
+    catalogLimit != null &&
+    data?.max_stories_per_month != null &&
+    data.max_stories_per_month !== catalogLimit
+  ) {
+    return catalogLimit;
+  }
   if (data?.max_stories_per_month != null) {
     return data.max_stories_per_month;
   }
+  if (catalogLimit != null) return catalogLimit;
 
   const { data: free } = await db
     .from("subscription_limits")
