@@ -33,7 +33,9 @@ import {
   type AdminStoryCostRow,
 } from "@/lib/admin/actions";
 import type { PixelsAdminBundle } from "@/lib/admin/pixels-actions";
+import type { StripeAdminStatus } from "@/lib/admin/stripe-sync-actions";
 import { AdminPixelsPanel } from "@/components/admin/admin-pixels-panel";
+import { AdminStripeBadge } from "@/components/admin/admin-stripe-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function fmtDate(iso: string | null): string {
@@ -71,11 +73,13 @@ export function AdminDashboard({
   accounts,
   loadError,
   pixelsBundle,
+  stripeStatus,
 }: {
   kpis: AdminKpis;
   accounts: AdminAccountRow[];
   loadError?: string;
   pixelsBundle: PixelsAdminBundle;
+  stripeStatus: StripeAdminStatus;
 }) {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -186,15 +190,18 @@ export function AdminDashboard({
             Admin PLG
           </h1>
           <p className="text-sm text-muted-foreground">
-            Contas, engajamento, custos OpenAI, pixels e ações operacionais.
+            Contas, engajamento, custos de IA (OpenRouter), pixels e ações operacionais.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/app/admin/settings" className="gap-1.5">
-            <KeyRound className="size-3.5" />
-            Perfil
-          </Link>
-        </Button>
+        <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-start">
+          <AdminStripeBadge initial={stripeStatus} />
+          <Button asChild variant="outline" size="sm">
+            <Link href="/app/admin/settings" className="gap-1.5">
+              <KeyRound className="size-3.5" />
+              Perfil
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="users" className="space-y-6">
@@ -231,7 +238,7 @@ export function AdminDashboard({
           className="rounded-xl border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950"
           role="status"
         >
-          Atenção: gasto OpenAI do mês já em{" "}
+          Atenção: gasto de IA do mês já em{" "}
           {fmtMoney(kpis.monthSpendUsd, "USD")} (
           {fmtMoney(kpis.monthSpendBrl, "BRL")}). Revise contas com alto uso.
         </p>
@@ -602,7 +609,7 @@ export function AdminDashboard({
               </section>
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold">Custos OpenAI</h3>
+                <h3 className="text-sm font-semibold">Custos de IA</h3>
                 <p className="text-xs text-muted-foreground">
                   Total: {fmtTokens(selected.usageTokens)} ·{" "}
                   {fmtMoney(selected.usageUsd, "USD")} ·{" "}
@@ -645,8 +652,8 @@ export function AdminDashboard({
                             {fmtDate(ev.createdAt)} · {ev.category}
                           </div>
                           <div className="text-muted-foreground">
-                            {ev.model || "—"} · {ev.operation || "—"} ·{" "}
-                            {fmtTokens(ev.totalTokens)} ·{" "}
+                            {ev.provider || "—"} · {ev.model || "—"} ·{" "}
+                            {ev.operation || "—"} · {fmtTokens(ev.totalTokens)} ·{" "}
                             {fmtMoney(ev.estimatedUsd, "USD")} ·{" "}
                             {fmtMoney(ev.estimatedBrl, "BRL")}
                           </div>

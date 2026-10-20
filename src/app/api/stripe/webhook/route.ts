@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
   getStripeWebhookSecret,
+  getStripeMode,
   isStripeSecretValid,
   isStripeWebhookConfigured,
   describeStripeKeyIssue,
+  stripeModeLabel,
 } from "@/lib/stripe/config";
 import { getStripe } from "@/lib/stripe/client";
 import {
@@ -157,9 +159,16 @@ export async function POST(request: Request) {
   if (!isStripeWebhookConfigured()) {
     return NextResponse.json(
       {
-        error: "STRIPE_WEBHOOK_SECRET ausente ou inválido (whsec_…)",
+        error:
+          getStripeMode() === "test"
+            ? "STRIPE_WEBHOOK_SECRET_TEST ausente ou inválido (whsec_…)"
+            : "STRIPE_WEBHOOK_SECRET ausente ou inválido (whsec_…)",
         ready: false,
-        hint: "Configure o endpoint /api/stripe/webhook no Dashboard Stripe e cole o signing secret.",
+        mode: getStripeMode(),
+        hint:
+          getStripeMode() === "test"
+            ? "Local: stripe listen --forward-to localhost:5050/api/stripe/webhook e cole whsec_ em STRIPE_WEBHOOK_SECRET_TEST. Ver docs/stripe-listen-local.md"
+            : "Configure o endpoint /api/stripe/webhook no Dashboard Stripe e cole o signing secret.",
       },
       { status: 503 },
     );
@@ -214,6 +223,8 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     endpoint: "/api/stripe/webhook",
+    mode: getStripeMode(),
+    label: stripeModeLabel(),
     secretConfigured: isStripeWebhookConfigured(),
     stripeSecretValid: isStripeSecretValid(),
     keyIssue: describeStripeKeyIssue(),

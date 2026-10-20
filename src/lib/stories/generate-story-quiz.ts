@@ -1,9 +1,9 @@
+import { modelForActivity } from "@/lib/ai/model-registry";
 import {
   shuffleAllQuizQuestions,
   type QuizQuestion,
 } from "@/lib/stories/quiz";
 import {
-  STORY_AUX_MODEL,
   STORYTELLER_SKILL,
 } from "@/lib/stories/storyteller-skill";
 import { meteredChatCompletion } from "@/lib/usage/openai-meter";
@@ -61,7 +61,7 @@ export async function generateStoryQuiz(input: {
     category: "story_quiz",
     operation: "generate_quiz",
     body: {
-      model: STORY_AUX_MODEL,
+      model: modelForActivity("story_quiz"),
       temperature: 0.55,
       response_format: { type: "json_object" },
       messages: [

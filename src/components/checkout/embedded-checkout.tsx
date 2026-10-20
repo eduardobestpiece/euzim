@@ -11,12 +11,24 @@ import { Button } from "@/components/ui/button";
 import { trackBrowserEvent } from "@/lib/tracking/client-browser";
 import { resolveStoryPlan } from "@/lib/billing/plans";
 
-const publishableKey =
-  process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() || "";
+/** Local/dev → pk_test; produção → pk_live (NEXT_PUBLIC_* inlined no bundle). */
+function resolveClientPublishableKey(): string {
+  const isDev = process.env.NODE_ENV === "development";
+  const testKey =
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST?.trim() || "";
+  const mainKey =
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() || "";
+  if (isDev) {
+    if (testKey) return testKey;
+    if (mainKey.startsWith("pk_test_")) return mainKey;
+    return "";
+  }
+  return mainKey;
+}
 
-const stripePromise = publishableKey
-  ? loadStripe(publishableKey)
-  : null;
+const publishableKey = resolveClientPublishableKey();
+
+const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 export function EmbeddedCheckoutClient({
   userEmail,
@@ -99,7 +111,8 @@ export function EmbeddedCheckoutClient({
   if (!publishableKey || !stripePromise) {
     return (
       <p className="text-sm text-destructive">
-        Stripe publishable key ausente. Configure NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY.
+        Stripe publishable key ausente. No local configure
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST (pk_test_…).
       </p>
     );
   }

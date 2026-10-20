@@ -26,6 +26,11 @@ export type StoryCast = {
   friendKind: "pet" | "toy";
   /** Gênero gramatical do amigo (characters.gender / onboarding). */
   friendGender: FriendGender;
+  /**
+   * Travamento visual do companheiro (espécie/cores/forma do avatar).
+   * Impede a IA de inventar outro bicho (ex.: coelho genérico no lugar da Bingo).
+   */
+  companionVisualLock: string;
   childHeroUrl: string | null;
   friendHeroUrl: string | null;
   childFaceSheetUrl: string | null;
@@ -42,6 +47,47 @@ export type StoryCast = {
   /** Conta amiga cujo elenco entrou na história (se houver). */
   friendParentId?: string | null;
 };
+
+function summarizeTraits(traits: unknown, description?: string | null): string {
+  const parts: string[] = [];
+  if (description?.trim()) parts.push(description.trim());
+  if (Array.isArray(traits)) {
+    parts.push(traits.map(String).filter(Boolean).join(", "));
+  } else if (traits && typeof traits === "object") {
+    parts.push(JSON.stringify(traits).slice(0, 160));
+  }
+  return parts.filter(Boolean).join(" — ").slice(0, 240);
+}
+
+/** Texto de trava para prompts: avatar > espécie inventada. */
+export function buildCompanionVisualLock(input: {
+  friendName: string;
+  friendKind: "pet" | "toy";
+  friendGender: FriendGender;
+  traitsSummary?: string;
+  hasAvatar: boolean;
+}): string {
+  const genderPt =
+    input.friendGender === "female"
+      ? "feminino (ela/a)"
+      : input.friendGender === "male"
+        ? "masculino (ele/o)"
+        : "gênero conforme o nome";
+  return [
+    `COMPANION LOCK OBRIGATÓRIO: "${input.friendName}" é o avatar cadastrado na plataforma`,
+    `(tipo ${input.friendKind}, ${genderPt}).`,
+    input.hasAvatar
+      ? "Há referência visual Pixar — a aparência (espécie, cores, formato, rosto) DEVE seguir ESSA referência."
+      : "Sem sheet: ainda assim NÃO invente outra espécie.",
+    input.traitsSummary
+      ? `Traços cadastrados: ${input.traitsSummary}.`
+      : "",
+    `PROIBIDO substituir "${input.friendName}" por coelho/urso/pelúcia genérica ou outro animal que não seja o avatar.`,
+    `Se o avatar lembra um personagem conhecido, AINDA ASSIM use o avatar do usuário (é a referência oficial desta história) — não troque por um bicho inventado "para evitar IP".`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
 /** Normaliza gender da tabela characters / onboarding para PT. */
 export function normalizeFriendGender(
@@ -88,16 +134,29 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
   if (!db) {
     const onboarding = await readMockOnboarding();
     if (!onboarding?.child?.displayName) return null;
+    const mockFriendName = onboarding.friend?.displayName || "Amigo";
+    const mockFriendKind =
+      onboarding.friend?.kind === "toy" ? "toy" : "pet";
+    const mockFriendGender = normalizeFriendGender(
+      (onboarding.friend as { gender?: string } | undefined)?.gender,
+    );
     return {
       childId: "mock-child",
       childName: onboarding.child.displayName,
       childAgeYears: onboarding.child.ageYears ?? null,
       childGender: onboarding.child.gender ?? null,
-      friendName: onboarding.friend?.displayName || "Amigo",
-      friendKind: onboarding.friend?.kind === "toy" ? "toy" : "pet",
-      friendGender: normalizeFriendGender(
-        (onboarding.friend as { gender?: string } | undefined)?.gender,
-      ),
+      friendName: mockFriendName,
+      friendKind: mockFriendKind,
+      friendGender: mockFriendGender,
+      companionVisualLock: buildCompanionVisualLock({
+        friendName: mockFriendName,
+        friendKind: mockFriendKind,
+        friendGender: mockFriendGender,
+        hasAvatar: Boolean(
+          isPixarGeneratedUrl(onboarding.friendAvatarUrl) ||
+            isPixarGeneratedUrl(onboarding.friendSheetUrl),
+        ),
+      }),
       childHeroUrl: isPixarGeneratedUrl(onboarding.childAvatarUrl)
         ? onboarding.childAvatarUrl!
         : null,
@@ -171,6 +230,22 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
     (friendChar as { gender?: string } | undefined)?.gender ??
       (prefs.friend as { gender?: string } | undefined)?.gender,
   );
+  const friendTraitsSummary = summarizeTraits(
+    friendChar?.traits,
+    friendChar?.description,
+  );
+  const friendHasAvatar = Boolean(
+    isPixarGeneratedUrl(prefs.pixar?.friend_hero) ||
+      isPixarGeneratedUrl(prefs.pixar?.friend_sheet) ||
+      isPixarGeneratedUrl(friendChar?.avatar_url),
+  );
+  const companionVisualLock = buildCompanionVisualLock({
+    friendName,
+    friendKind,
+    friendGender,
+    traitsSummary: friendTraitsSummary,
+    hasAvatar: friendHasAvatar,
+  });
 
   // Avatares de família (pais/irmãos): relationship/kind + traits + Pixar.
   const familyHints =
@@ -207,6 +282,7 @@ export async function loadStoryCast(parentId: string): Promise<StoryCast | null>
     friendName,
     friendKind,
     friendGender,
+    companionVisualLock,
     childHeroUrl: isPixarGeneratedUrl(prefs.pixar?.child_hero)
       ? prefs.pixar!.child_hero!
       : isPixarGeneratedUrl(child.avatar_url)

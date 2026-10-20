@@ -7,6 +7,7 @@ import { AdminDashboard } from "@/components/admin/admin-dashboard";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { loadAdminDashboard } from "@/lib/admin/load-dashboard";
 import { loadPixelsAdminAction } from "@/lib/admin/pixels-actions";
+import { getStripeAdminStatusAction } from "@/lib/admin/stripe-sync-actions";
 
 async function AdminPageInner() {
   await connection();
@@ -14,10 +15,12 @@ async function AdminPageInner() {
   if (!user) return null;
   if (user.role !== "admin") redirect("/app/parent");
 
-  const [{ kpis, accounts, error }, pixelsBundle] = await Promise.all([
-    loadAdminDashboard(),
-    loadPixelsAdminAction(),
-  ]);
+  const [{ kpis, accounts, error }, pixelsBundle, stripeStatus] =
+    await Promise.all([
+      loadAdminDashboard(),
+      loadPixelsAdminAction(),
+      getStripeAdminStatusAction(),
+    ]);
 
   return (
     <AppShell user={user} title="Admin">
@@ -26,6 +29,7 @@ async function AdminPageInner() {
         accounts={accounts}
         loadError={error}
         pixelsBundle={pixelsBundle}
+        stripeStatus={stripeStatus}
       />
     </AppShell>
   );

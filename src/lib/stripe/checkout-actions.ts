@@ -12,7 +12,10 @@ import {
   resolveStoryPlan,
   type StoryPlan,
 } from "@/lib/billing/plans";
-import { STRIPE_PRICE_IDS } from "@/lib/billing/stripe-price-ids";
+import {
+  resolveStripePriceId,
+  type StripePriceKey,
+} from "@/lib/billing/stripe-price-ids";
 import { formatBrl, priceForAvatarCount } from "@/lib/billing/character-packs";
 import {
   describeStripeKeyIssue,
@@ -61,9 +64,9 @@ function gateSecret(): CheckoutActionResult | null {
 }
 
 function planPriceId(plan: StoryPlan): string | null {
-  if (plan.planId === "starter") return STRIPE_PRICE_IDS.starter;
-  if (plan.planId === "family") return STRIPE_PRICE_IDS.family;
-  if (plan.planId === "extra_story") return STRIPE_PRICE_IDS.extra_story;
+  if (plan.planId === "starter") return resolveStripePriceId("starter");
+  if (plan.planId === "family") return resolveStripePriceId("family");
+  if (plan.planId === "extra_story") return resolveStripePriceId("extra_story");
   return null;
 }
 
@@ -197,7 +200,7 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
 
   const origin = await appOrigin();
   const plan = EXTRA_STORY_PRODUCT;
-  const priceId = STRIPE_PRICE_IDS.extra_story;
+  const priceId = resolveStripePriceId("extra_story");
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -262,8 +265,8 @@ export async function startCharacterPackCheckoutAction(
   }
 
   const origin = await appOrigin();
-  const priceKey = pack.id as keyof typeof STRIPE_PRICE_IDS;
-  const priceId = STRIPE_PRICE_IDS[priceKey];
+  const priceKey = pack.id as StripePriceKey;
+  const priceId = resolveStripePriceId(priceKey);
 
   try {
     const session = await stripe.checkout.sessions.create({
@@ -359,7 +362,7 @@ export async function startCustomAvatarsCheckoutAction(
       line_items: [
         {
           quantity: count,
-          price: STRIPE_PRICE_IDS.avatar_unit,
+          price: resolveStripePriceId("avatar_unit"),
         },
       ],
       return_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=custom_avatars&count=${count}`,

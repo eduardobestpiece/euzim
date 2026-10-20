@@ -171,22 +171,25 @@ export async function signInAction(
   const supabase = await createClient();
   if (!supabase) return { error: "Supabase indisponível." };
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data: signInData, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
   if (error) return { error: error.message };
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = signInData.user;
   if (user) {
-    await ensureReferralCode(user.id);
-    await applyReferralAttribution(user.id);
-
-    const { data: profile } = await supabase
-      .from("users")
-      .select("onboarding_completed, role")
-      .eq("id", user.id)
-      .maybeSingle();
+    // Paralelo: não serializar referral + profile
+    const [, , profileRes] = await Promise.all([
+      ensureReferralCode(user.id),
+      applyReferralAttribution(user.id),
+      supabase
+        .from("users")
+        .select("onboarding_completed, role")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]);
+    const profile = profileRes.data;
 
     const next = String(formData.get("next") ?? "").trim();
     if (next.startsWith("/")) {

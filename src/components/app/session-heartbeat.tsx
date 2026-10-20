@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
-const INTERVAL_MS = 60_000;
+const INTERVAL_MS = 90_000;
 
-/** Heartbeat ~60s → last_active_at + analytics_sessions */
+/** Heartbeat ~90s → last_active_at + analytics_sessions (sem re-disparar a cada rota). */
 export function SessionHeartbeat() {
   const pathname = usePathname();
+  const pathRef = useRef(pathname);
+  pathRef.current = pathname;
 
   useEffect(() => {
     let cancelled = false;
@@ -18,7 +20,7 @@ export function SessionHeartbeat() {
         await fetch("/api/analytics/heartbeat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ path: pathname || "/app" }),
+          body: JSON.stringify({ path: pathRef.current || "/app" }),
           credentials: "same-origin",
         });
       } catch {
@@ -32,7 +34,7 @@ export function SessionHeartbeat() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [pathname]);
+  }, []);
 
   return null;
 }

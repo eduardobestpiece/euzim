@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-10-20T00:23:33.545Z",
+  "source": "live",
+  "prices": {
+    "starter": "price_1USMwWCtctjTcM4XB9CGbtst",
+    "family": "price_1USMwYCtctjTcM4XV3VlW2bu",
+    "extra_story": "price_1USMwaCtctjTcM4XwBqkps6V",
+    "pack-1": "price_1USMwbCtctjTcM4Xka8V50N5",
+    "pack-2": "price_1USMwdCtctjTcM4Xcj7Vtoty",
+    "pack-3": "price_1USMweCtctjTcM4X1Rb8dTRe",
+    "pack-4": "price_1USMwgCtctjTcM4XdZ4sz6GH",
+    "pack-5": "price_1USMwiCtctjTcM4XXJGh3FR0",
+    "avatar_unit": "price_1USMwkCtctjTcM4XWn5kEsJt"
+  },
+  "products": {
+    "starter": "prod_VTJZz0s2EtoPwl",
+    "family": "prod_VTJZeUKeRvJwXq",
+    "extra_story": "prod_VTJZY3LlsgOer2",
+    "pack-1": "prod_VTJZ2FIvOvVQM9",
+    "pack-2": "prod_VTJZ3wPrBfcWFN",
+    "pack-3": "prod_VTJZUa5HQJOz9j",
+    "pack-4": "prod_VTJZ6Pgp7jBvs5",
+    "pack-5": "prod_VTJZsxFzoTpGbT",
+    "avatar_unit": "prod_VTJZfUoMKmChsV"
+  },
+  "liveToTestPrice": {
+    "price_1URZD42RGWYUXReL1LuaJkHI": "price_1USMwWCtctjTcM4XB9CGbtst",
+    "price_1URZD42RGWYUXReLwWbPWFkf": "price_1USMwYCtctjTcM4XV3VlW2bu",
+    "price_1URZD42RGWYUXReLzlaa8myj": "price_1USMwaCtctjTcM4XwBqkps6V",
+    "price_1URZD52RGWYUXReLJBO4mGh2": "price_1USMwbCtctjTcM4Xka8V50N5",
+    "price_1URZD52RGWYUXReL2BM6zjb0": "price_1USMwdCtctjTcM4Xcj7Vtoty",
+    "price_1URZD52RGWYUXReLRDVVeoOA": "price_1USMweCtctjTcM4X1Rb8dTRe",
+    "price_1URZD62RGWYUXReLJy3Dl9LJ": "price_1USMwgCtctjTcM4XdZ4sz6GH",
+    "price_1URZD62RGWYUXReLxApF8ILx": "price_1USMwiCtctjTcM4XXJGh3FR0",
+    "price_1URZD62RGWYUXReLiZ2MHkJ9": "price_1USMwkCtctjTcM4XWn5kEsJt"
+  },
+  "liveToTestProduct": {
+    "prod_VSUBri2FlAVcly": "prod_VTJZz0s2EtoPwl",
+    "prod_VSUBYLdM2LhWTn": "prod_VTJZeUKeRvJwXq",
+    "prod_VSUByEpOj2mabF": "prod_VTJZY3LlsgOer2",
+    "prod_VSUBNWkjUvC2u9": "prod_VTJZ2FIvOvVQM9",
+    "prod_VSUBjZNwxKsFMs": "prod_VTJZ3wPrBfcWFN",
+    "prod_VSUBtE4tfSzI8b": "prod_VTJZUa5HQJOz9j",
+    "prod_VSUBlwMeR8fPaM": "prod_VTJZ6Pgp7jBvs5",
+    "prod_VSUB5EMXIM0ijm": "prod_VTJZsxFzoTpGbT",
+    "prod_VSUBrCXBKf2ite": "prod_VTJZfUoMKmChsV"
+  }
+}

@@ -326,7 +326,7 @@ export function OnboardingWizard({
       !isPixarGeneratedUrl(gen.friendAvatarUrl)
     ) {
       setError(
-        "A IA não devolveu avatares Pixar. Confira OPENAI_API_KEY e tente Refazer.",
+        "A IA não devolveu avatares Pixar. Confira a chave de IA (OpenRouter) e tente Refazer.",
       );
       return false;
     }

@@ -2,7 +2,13 @@
  * Stripe Price/Product IDs (LIVE) — Euzim.
  * Gerado por scripts/create-stripe-products.mjs — sem secrets.
  * Nunca coloque sk_/whsec_ neste arquivo.
+ *
+ * Em modo test (local :5050), use resolveStripePriceId() que lê o mapa
+ * espelhado em stripe-price-ids.test.json.
  */
+
+import { isStripeTestMode } from "@/lib/stripe/config";
+import { readStripeTestPriceMap } from "@/lib/billing/stripe-price-map";
 
 export const STRIPE_PRICE_IDS = {
   starter: "price_1URZD42RGWYUXReL1LuaJkHI",
@@ -31,6 +37,17 @@ export const STRIPE_PRODUCT_IDS = {
 
 export type StripePriceKey = keyof typeof STRIPE_PRICE_IDS;
 
+/** IDs live (sempre). Prefira resolveStripePriceId no checkout. */
 export function stripePriceId(key: StripePriceKey): string {
+  return STRIPE_PRICE_IDS[key];
+}
+
+/** Price ID do modo atual (test map ou live). */
+export function resolveStripePriceId(key: StripePriceKey): string {
+  if (isStripeTestMode()) {
+    const map = readStripeTestPriceMap();
+    const testId = map.prices[key];
+    if (testId) return testId;
+  }
   return STRIPE_PRICE_IDS[key];
 }

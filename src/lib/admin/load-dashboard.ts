@@ -28,6 +28,7 @@ export type UsageCategoryBreakdown = {
 export type UsageEventRow = {
   id: string;
   category: string;
+  provider: string | null;
   model: string | null;
   operation: string | null;
   promptTokens: number;
@@ -119,7 +120,7 @@ export async function loadAdminDashboard(): Promise<{
     admin
       .from("usage_events")
       .select(
-        "id, user_id, category, model, operation, prompt_tokens, completion_tokens, total_tokens, estimated_usd, estimated_brl, created_at",
+        "id, user_id, category, provider, model, operation, prompt_tokens, completion_tokens, total_tokens, estimated_usd, estimated_brl, created_at",
       )
       .order("created_at", { ascending: false })
       .limit(5000),
@@ -214,6 +215,7 @@ export async function loadAdminDashboard(): Promise<{
       agg.recent.push({
         id: ev.id,
         category: cat,
+        provider: ev.provider ?? null,
         model: ev.model,
         operation: ev.operation,
         promptTokens: Number(ev.prompt_tokens) || 0,

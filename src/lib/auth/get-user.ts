@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import {
@@ -7,7 +8,7 @@ import {
 } from "@/lib/auth/mock-session";
 import type { AuthUser } from "@/lib/auth/types";
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+async function getCurrentUserUncached(): Promise<AuthUser | null> {
   if (!isSupabaseConfigured()) {
     const mock = await readMockSession();
     return mock ? mockSessionToUser(mock) : null;
@@ -59,3 +60,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     isMock: false,
   };
 }
+
+/** Deduplica getUser+profile no mesmo request (layout + page). */
+export const getCurrentUser = cache(getCurrentUserUncached);

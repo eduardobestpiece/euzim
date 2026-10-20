@@ -1,22 +1,24 @@
 /**
  * Gera folhas de personagem estilo Walt Disney / Pixar a partir das fotos
- * de referência do onboarding (OpenAI gpt-image-2 + input images).
+ * de referência do onboarding (OpenRouter → gpt-image-2 + refs).
  */
 import sharp from "sharp";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
+import { modelForActivity } from "@/lib/ai/model-registry";
+import { imageViaOpenRouter } from "@/lib/ai/openrouter-client";
 import {
   estimateImageUsd,
-  recordUsageEvent,
+  recordImageUsage,
 } from "@/lib/usage/openai-meter";
 
-const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
+const IMAGE_MODEL = modelForActivity("avatar_pixar");
 const MAX_REFS = 6;
 const REF_MAX_EDGE = 1024;
 
-export type PixarEngine = "gpt-image-2";
+export type PixarEngine = "gpt-image-2" | "openrouter-gpt-image-2";
 
 export type PixarSheetKind = "child-face" | "child-body" | "friend";
 
@@ -28,9 +30,11 @@ export type PixarGenerationResult = {
   engine: PixarEngine;
 };
 
-function apiKey(): string | null {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  return key || null;
+function apiKeyPresent(): boolean {
+  return Boolean(
+    process.env.OPENROUTER_API_KEY?.trim() ||
+      process.env.OPENAI_API_KEY?.trim(),
+  );
 }
 
 async function fetchImageBuffer(url: string): Promise<Buffer | null> {
@@ -171,60 +175,30 @@ async function callImageEdit(input: {
   userId?: string | null;
   operation?: string;
 }): Promise<Buffer> {
-  const key = apiKey();
-  if (!key) throw new Error("OPENAI_API_KEY ausente.");
+  if (!apiKeyPresent()) throw new Error("OPENROUTER_API_KEY ausente.");
 
-  const form = new FormData();
-  form.set("model", IMAGE_MODEL);
-  form.set("prompt", input.prompt);
-  form.set("size", input.size || "1024x1024");
-  form.set("quality", input.quality || "medium");
-  form.set("output_format", "jpeg");
-  // gpt-image-2 always high fidelity; gpt-image-1 accepts input_fidelity
-  if (IMAGE_MODEL.includes("gpt-image-1")) {
-    form.set("input_fidelity", "high");
-  }
-
-  input.images.forEach((buf, i) => {
-    const file = new File([new Uint8Array(buf)], `ref-${i}.jpg`, {
-      type: "image/jpeg",
-    });
-    form.append("image[]", file);
+  const result = await imageViaOpenRouter({
+    model: IMAGE_MODEL,
+    prompt: input.prompt,
+    referenceImages: input.images,
+    size: input.size || "1024x1024",
+    quality: input.quality || "medium",
   });
 
-  const res = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-    signal: AbortSignal.timeout(180_000),
-  });
-
-  const json = (await res.json()) as {
-    error?: { message?: string };
-    data?: { b64_json?: string; url?: string }[];
-  };
-
-  if (!res.ok) {
-    throw new Error(json.error?.message || `OpenAI images/edits ${res.status}`);
+  if (!result.ok || !result.buffer) {
+    throw new Error(result.error || "IA images/edits falhou.");
   }
 
-  await recordUsageEvent({
+  await recordImageUsage({
     userId: input.userId,
     category: "avatar_pixar",
     model: IMAGE_MODEL,
     operation: input.operation ?? "pixar_avatar",
     estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1),
+    nativeCostUsd: result.nativeCostUsd,
   });
 
-  const b64 = json.data?.[0]?.b64_json;
-  if (b64) return Buffer.from(b64, "base64");
-
-  const url = json.data?.[0]?.url;
-  if (url) {
-    const remote = await fetchImageBuffer(url);
-    if (remote) return remote;
-  }
-  throw new Error("Resposta da OpenAI sem imagem.");
+  return result.buffer;
 }
 
 /** Retenta com prompts alternativos quando o filtro de segurança rejeita brinquedos. */
@@ -309,8 +283,8 @@ export async function generateChildPixarAvatars(input: {
     faceUrls.length ? faceUrls : pickReferenceUrls(input.photos, "any"),
   );
 
-  if (!apiKey()) {
-    throw new Error("OPENAI_API_KEY ausente — não dá para gerar Pixar.");
+  if (!apiKeyPresent()) {
+    throw new Error("OPENROUTER_API_KEY ausente — não dá para gerar Pixar.");
   }
   if (faceRefs.length === 0) {
     throw new Error(
@@ -395,8 +369,8 @@ export async function generateFriendPixarAvatar(input: {
   const urls = pickReferenceUrls(input.photos, "any");
   const refs = await loadPreparedRefs(urls);
 
-  if (!apiKey()) {
-    throw new Error("OPENAI_API_KEY ausente — não dá para gerar Pixar.");
+  if (!apiKeyPresent()) {
+    throw new Error("OPENROUTER_API_KEY ausente — não dá para gerar Pixar.");
   }
   if (refs.length === 0) {
     throw new Error(
