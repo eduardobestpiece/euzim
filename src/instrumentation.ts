@@ -5,6 +5,8 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // DNS ipv4first vem de NODE_OPTIONS no npm run dev/start (AAAA supabase ETIMEOUT).
+
   const { isStripeTestMode } = await import("@/lib/stripe/config");
   if (!isStripeTestMode()) return;
 

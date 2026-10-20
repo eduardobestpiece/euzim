@@ -9,7 +9,10 @@ import {
   referralCookieOptions,
 } from "@/lib/referral/cookie";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { updateSupabaseSession } from "@/lib/supabase/proxy";
+import {
+  hasSupabaseAuthCookie,
+  updateSupabaseSession,
+} from "@/lib/supabase/proxy";
 
 function decodeMockSession(raw: string | undefined): {
   onboardingCompleted: boolean;
@@ -92,12 +95,19 @@ export async function proxy(request: NextRequest) {
   // APIs validam auth no handler. Evita getUser() (rede) em heartbeat/poll/tracking
   // — isso engolia a :5050 e derrubava o WebSocket do HMR.
   const isApi = pathname.startsWith("/api/");
+  const isAuthPageEarly = pathname === "/login" || pathname === "/signup";
+  // Login/signup: zero rede Auth no proxy (página precisa abrir na hora).
+  const skipSessionRefresh = isApi || isAuthPageEarly;
 
-  if (isSupabaseConfigured() && !isApi) {
+  if (isSupabaseConfigured() && !skipSessionRefresh) {
     const result = await updateSupabaseSession(request);
     response = result.response;
     hasUser = Boolean(result.user);
     // Perfil completo é validado nas páginas; no proxy só sessão.
+  } else if (isSupabaseConfigured() && isAuthPageEarly) {
+    response = NextResponse.next({ request: { headers: request.headers } });
+    // Só cookie — se já logado, redireciona sem bater no GoTrue.
+    hasUser = hasSupabaseAuthCookie(request);
   } else if (!isSupabaseConfigured()) {
     response = NextResponse.next({ request: { headers: request.headers } });
     const mock = decodeMockSession(

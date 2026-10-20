@@ -1,30 +1,40 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { TrackingProvider } from "@/components/tracking/tracking-provider";
-import { getCurrentUser } from "@/lib/auth/get-user";
 import { loadPublicTrackingConfig } from "@/lib/tracking/load-config";
+import type { PublicTrackingConfig } from "@/lib/tracking/types";
+
+const EMPTY_CONFIG: PublicTrackingConfig = {
+  metaPixelIds: [],
+  googleAds: [],
+  ga4Ids: [],
+  tags: [],
+};
+
+async function loadConfigFast(): Promise<PublicTrackingConfig> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const raced = await Promise.race([
+      loadPublicTrackingConfig(),
+      new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), 2000);
+      }),
+    ]);
+    if (raced === "timeout") return EMPTY_CONFIG;
+    return raced;
+  } catch {
+    return EMPTY_CONFIG;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 async function TrackingShellInner() {
   await connection();
-  const [config, user] = await Promise.all([
-    loadPublicTrackingConfig(),
-    getCurrentUser(),
-  ]);
-
-  const hasAnything =
-    config.metaPixelIds.length > 0 ||
-    config.ga4Ids.length > 0 ||
-    config.googleAds.length > 0 ||
-    config.tags.length > 0;
-
-  // Sempre monta o provider para capturar UTM mesmo sem pixels
-  return (
-    <TrackingProvider
-      config={hasAnything ? config : { ...config }}
-      userId={user?.id}
-      email={user?.email}
-    />
-  );
+  // Sem getCurrentUser aqui — Auth/DB no layout raiz travava /login (10–50s).
+  // userId no PageView é opcional; pixels/UTM funcionam sem ele.
+  const config = await loadConfigFast();
+  return <TrackingProvider config={config} />;
 }
 
 export function TrackingShell() {

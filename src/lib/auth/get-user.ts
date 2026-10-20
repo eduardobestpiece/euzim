@@ -17,9 +17,23 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   const supabase = await createClient();
   if (!supabase) return null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Preferir getSession (cookie). getUser() → rede Auth (~5s+) e, com AAAA
+  // lento, AuthRetryableFetchError que trava a :5050 / HMR.
+  let user: {
+    id: string;
+    email?: string | null;
+    user_metadata?: { full_name?: string };
+  } | null = null;
+
+  try {
+    const sessionRace = Promise.race([
+      supabase.auth.getSession().then((r) => r.data.session?.user ?? null),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]);
+    user = await sessionRace;
+  } catch {
+    user = null;
+  }
 
   if (!user) {
     // Auth real configurado, mas sessão pode ser só mock local
@@ -27,13 +41,34 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
     return mock ? mockSessionToUser(mock) : null;
   }
 
-  const { data: profile, error } = await supabase
-    .from("users")
-    .select("role, full_name, onboarding_completed")
-    .eq("id", user.id)
-    .maybeSingle();
+  let profile: {
+    role?: string | null;
+    full_name?: string | null;
+    onboarding_completed?: boolean | null;
+  } | null = null;
+  let profileError: { message?: string } | null = null;
+  try {
+    const profileRace = Promise.race([
+      supabase
+        .from("users")
+        .select("role, full_name, onboarding_completed")
+        .eq("id", user.id)
+        .maybeSingle(),
+      new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(
+          () => resolve({ data: null, error: { message: "profile-timeout" } }),
+          3000,
+        ),
+      ),
+    ]);
+    const res = await profileRace;
+    profile = res.data;
+    profileError = res.error;
+  } catch {
+    profileError = { message: "profile-failed" };
+  }
 
-  if (error) {
+  if (profileError && !profile) {
     // Schema ainda não aplicado — usa onboarding mock se existir
     const onboarding = await readMockOnboarding();
     return {
