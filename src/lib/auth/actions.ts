@@ -13,6 +13,10 @@ import {
   writeMockSession,
 } from "@/lib/auth/mock-session";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
+import {
+  fetchProfileViaRest,
+  hasPixarAvatarViaRest,
+} from "@/lib/auth/profile-rest";
 import { resolvePostAuthPath } from "@/lib/auth/routing";
 import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
@@ -263,17 +267,20 @@ export async function signInAction(
     ]).catch(() => {});
 
     let profile: { onboarding_completed?: boolean; role?: string } | null =
-      null;
-    const db = createAdminClient() ?? supabase;
-    try {
-      const profileRes = await db
-        .from("users")
-        .select("onboarding_completed, role")
-        .eq("id", user.id)
-        .maybeSingle();
-      profile = profileRes.data;
-    } catch {
-      /* segue com destino padrão */
+      await fetchProfileViaRest(user.id);
+
+    if (!profile) {
+      const db = createAdminClient() ?? supabase;
+      try {
+        const profileRes = await db
+          .from("users")
+          .select("onboarding_completed, role")
+          .eq("id", user.id)
+          .maybeSingle();
+        profile = profileRes.data;
+      } catch {
+        /* segue com destino padrão */
+      }
     }
 
     const role = (profile?.role as "admin" | "parent" | undefined) ?? "parent";
@@ -282,17 +289,9 @@ export async function signInAction(
 
     if (!onboardingCompleted && role !== "admin") {
       try {
-        const { data: children } = await db
-          .from("children")
-          .select("avatar_url")
-          .eq("parent_id", user.id)
-          .limit(8);
-        if (
-          children?.some((c) =>
-            isPixarGeneratedUrl(c.avatar_url as string | null),
-          )
-        ) {
+        if (await hasPixarAvatarViaRest(user.id)) {
           onboardingCompleted = true;
+          const db = createAdminClient() ?? supabase;
           void db
             .from("users")
             .update({
@@ -300,6 +299,27 @@ export async function signInAction(
               onboarding_reset_mode: null,
             })
             .eq("id", user.id);
+        } else {
+          const db = createAdminClient() ?? supabase;
+          const { data: children } = await db
+            .from("children")
+            .select("avatar_url")
+            .eq("parent_id", user.id)
+            .limit(8);
+          if (
+            children?.some((c) =>
+              isPixarGeneratedUrl(c.avatar_url as string | null),
+            )
+          ) {
+            onboardingCompleted = true;
+            void db
+              .from("users")
+              .update({
+                onboarding_completed: true,
+                onboarding_reset_mode: null,
+              })
+              .eq("id", user.id);
+          }
         }
       } catch {
         /* ignore */

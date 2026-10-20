@@ -54,8 +54,19 @@ async function OnboardingPageInner({
     const bootstrap = await loadOnboardingBootstrap(user.id);
     if (bootstrap.resetMode) resetMode = bootstrap.resetMode;
 
-    if (user.onboardingCompleted && resetMode !== "reuse") {
-      redirect(resolveAppHomePath(user));
+    // Avatar Pixar já gerado = onboarding feito (exceto reset explícito reuse/full).
+    const hasPixarReady = Boolean(
+      bootstrap.initialState?.childAvatarUrl ||
+        bootstrap.initialState?.friendAvatarUrl,
+    );
+    const inExplicitReset = resetMode === "reuse" || resetMode === "full";
+    if ((user.onboardingCompleted || hasPixarReady) && !inExplicitReset) {
+      redirect(
+        resolveAppHomePath({
+          role: user.role,
+          onboardingCompleted: true,
+        }),
+      );
     }
 
     if (bootstrap.initialState) {
@@ -87,8 +98,6 @@ async function OnboardingPageInner({
         wizardStep: fromDb.wizardStep || fromCookie?.wizardStep || null,
         completed: false,
       };
-    } else if (user.onboardingCompleted) {
-      redirect(resolveAppHomePath(user));
     }
   } else if (user.onboardingCompleted) {
     redirect(resolveAppHomePath(user));

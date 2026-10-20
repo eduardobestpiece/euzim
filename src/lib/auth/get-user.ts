@@ -7,6 +7,11 @@ import {
   readMockOnboarding,
   readMockSession,
 } from "@/lib/auth/mock-session";
+import {
+  fetchProfileViaRest,
+  hasPixarAvatarViaRest,
+  type ProfileGateRow,
+} from "@/lib/auth/profile-rest";
 import type { AuthUser } from "@/lib/auth/types";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 
@@ -25,23 +30,16 @@ async function withTimeout<T>(ms: number, work: Promise<T>): Promise<T | null> {
 }
 
 /** Se a flag estiver stale, mas já há avatar Pixar — considera onboard concluído. */
-async function inferOnboardingFromAvatars(
-  userId: string,
-): Promise<boolean> {
+async function inferOnboardingFromAvatars(userId: string): Promise<boolean> {
+  const viaRest = await hasPixarAvatarViaRest(userId);
+  if (viaRest) return true;
+
   const db = createAdminClient();
   if (!db) return false;
 
   const [childrenRes, charsRes] = await Promise.all([
-    db
-      .from("children")
-      .select("avatar_url")
-      .eq("parent_id", userId)
-      .limit(8),
-    db
-      .from("characters")
-      .select("avatar_url")
-      .eq("parent_id", userId)
-      .limit(8),
+    db.from("children").select("avatar_url").eq("parent_id", userId).limit(8),
+    db.from("characters").select("avatar_url").eq("parent_id", userId).limit(8),
   ]);
 
   const urls = [
@@ -67,8 +65,9 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   } | null = null;
 
   try {
+    // Sessão vem de cookies locais — 8s cobre DNS flaky sem mentir "sem user".
     user = await withTimeout(
-      2000,
+      8000,
       supabase.auth.getSession().then((r) => r.data.session?.user ?? null),
     );
   } catch {
@@ -80,29 +79,24 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
     return mock ? mockSessionToUser(mock) : null;
   }
 
-  // Admin client evita RLS/timeout flaky no gate de onboarding.
-  const db = createAdminClient() ?? supabase;
-  type ProfileRow = {
-    role?: string | null;
-    full_name?: string | null;
-    onboarding_completed?: boolean | null;
-  };
+  let profile: ProfileGateRow | null = await fetchProfileViaRest(user.id);
 
-  let profile: ProfileRow | null = null;
-  try {
-    const res = await withTimeout(
-      4000,
-      Promise.resolve(
+  if (!profile) {
+    // Fallback supabase-js (mais lento no Mac; timeout generoso).
+    const db = createAdminClient() ?? supabase;
+    try {
+      profile = await withTimeout(
+        15_000,
         db
           .from("users")
           .select("role, full_name, onboarding_completed")
           .eq("id", user.id)
-          .maybeSingle(),
-      ).then((r) => r.data as ProfileRow | null),
-    );
-    profile = res;
-  } catch {
-    profile = null;
+          .maybeSingle()
+          .then((r) => r.data as ProfileGateRow | null),
+      );
+    } catch {
+      profile = null;
+    }
   }
 
   const role =
@@ -124,13 +118,9 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
 
   if (!onboardingCompleted) {
     try {
-      const inferred = await withTimeout(
-        4000,
-        Promise.resolve(inferOnboardingFromAvatars(user.id)),
-      );
+      const inferred = await inferOnboardingFromAvatars(user.id);
       if (inferred) {
         onboardingCompleted = true;
-        // Cura flag stale em background (não bloqueia).
         const admin = createAdminClient();
         if (admin) {
           void admin
