@@ -92,16 +92,15 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   try {
     const res = await withTimeout(
       4000,
-      db
-        .from("users")
-        .select("role, full_name, onboarding_completed")
-        .eq("id", user.id)
-        .maybeSingle()
-        .then((r) => r),
+      Promise.resolve(
+        db
+          .from("users")
+          .select("role, full_name, onboarding_completed")
+          .eq("id", user.id)
+          .maybeSingle(),
+      ).then((r) => r.data as ProfileRow | null),
     );
-    if (res && !("error" in res && res.error && !res.data)) {
-      profile = (res as { data: ProfileRow | null }).data;
-    }
+    profile = res;
   } catch {
     profile = null;
   }
@@ -127,7 +126,7 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
     try {
       const inferred = await withTimeout(
         4000,
-        inferOnboardingFromAvatars(user.id),
+        Promise.resolve(inferOnboardingFromAvatars(user.id)),
       );
       if (inferred) {
         onboardingCompleted = true;

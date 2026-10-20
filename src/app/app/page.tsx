@@ -5,7 +5,7 @@ import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { resolveAppHomePath } from "@/lib/auth/routing";
 
-async function AppIndexInner() {
+async function AppIndexInner(): Promise<never> {
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
