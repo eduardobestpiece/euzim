@@ -32,9 +32,11 @@ export async function updateSupabaseSession(request: NextRequest) {
     },
   });
 
+  // getSession lê o JWT do cookie (rápido). getUser() bate no Auth (~5s+) e
+  // satura o proxy em HMR/login — páginas sensíveis revalidam com getUser.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
 
-  return { response, user };
+  return { response, user: session?.user ?? null };
 }

@@ -27,6 +27,57 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+/** Mensagem amigável para falhas de rede / undici "fetch failed". */
+function mapAuthNetworkError(err: unknown, fallback?: string): string {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : fallback || "Erro de autenticação.";
+  if (
+    /fetch failed|failed to fetch|networkerror|econnreset|etimedout|enotfound|socket|aborted|timeout/i.test(
+      msg,
+    )
+  ) {
+    return "Não foi possível conectar ao servidor de login (rede/Supabase). Aguarde alguns segundos e tente de novo.";
+  }
+  return msg || fallback || "Erro de autenticação.";
+}
+
+async function signInWithPasswordRetry(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  email: string,
+  password: string,
+) {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await supabase.auth.signInWithPassword({ email, password });
+      if (!result.error) return result;
+      lastError = result.error;
+      if (
+        !/fetch failed|failed to fetch|network|timeout|econnreset/i.test(
+          result.error.message,
+        )
+      ) {
+        return result;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  return {
+    data: { user: null, session: null },
+    error: {
+      message: mapAuthNetworkError(lastError, "Falha ao entrar."),
+    },
+  };
+}
+
 export async function signUpAction(
   _prev: AuthActionResult,
   formData: FormData,
@@ -101,11 +152,15 @@ export async function signUpAction(
     return { error: createError.message };
   }
 
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (signInError) {
+  try {
+    const signed = await signInWithPasswordRetry(supabase, email, password);
+    if (signed.error) {
+      return {
+        error:
+          "Conta criada, mas não foi possível iniciar a sessão. Tente entrar.",
+      };
+    }
+  } catch {
     return {
       error:
         "Conta criada, mas não foi possível iniciar a sessão. Tente entrar.",
@@ -171,25 +226,40 @@ export async function signInAction(
   const supabase = await createClient();
   if (!supabase) return { error: "Supabase indisponível." };
 
-  const { data: signInData, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) return { error: error.message };
+  let signInData: {
+    user: { id: string } | null;
+    session: unknown;
+  };
+  try {
+    const result = await signInWithPasswordRetry(supabase, email, password);
+    if (result.error) {
+      return { error: mapAuthNetworkError(result.error.message) };
+    }
+    signInData = result.data;
+  } catch (err) {
+    return { error: mapAuthNetworkError(err) };
+  }
 
   const user = signInData.user;
   if (user) {
-    // Paralelo: não serializar referral + profile
-    const [, , profileRes] = await Promise.all([
+    // Referral não bloqueia o redirect do login (evita timeout / fetch failed).
+    void Promise.all([
       ensureReferralCode(user.id),
       applyReferralAttribution(user.id),
-      supabase
+    ]).catch(() => {});
+
+    let profile: { onboarding_completed?: boolean; role?: string } | null =
+      null;
+    try {
+      const profileRes = await supabase
         .from("users")
         .select("onboarding_completed, role")
         .eq("id", user.id)
-        .maybeSingle(),
-    ]);
-    const profile = profileRes.data;
+        .maybeSingle();
+      profile = profileRes.data;
+    } catch {
+      /* segue com destino padrão */
+    }
 
     const next = String(formData.get("next") ?? "").trim();
     if (next.startsWith("/")) {

@@ -121,7 +121,9 @@ export function AuthForm({
           </div>
           {state.error ? (
             <p className="text-sm text-destructive" role="alert">
-              {state.error}
+              {/fetch failed/i.test(state.error)
+                ? "Não foi possível conectar ao servidor de login (rede/Supabase). Aguarde alguns segundos e tente de novo."
+                : state.error}
             </p>
           ) : null}
         </CardContent>
