@@ -17,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type PlanCatalogDraft = {
   planKey: PlanCatalogKey;
   name: string;
+  description: string;
   priceBrl: number;
   storiesPerMonth: number;
   avatarsIncluded: number;
@@ -34,6 +35,12 @@ function toCents(brl: number): number | null {
 function validateDraft(d: PlanCatalogDraft): string | null {
   if (!isPlanCatalogKey(d.planKey)) return "Plano inválido.";
   if (!d.name.trim()) return `Nome obrigatório (${d.planKey}).`;
+  if (!d.description.trim()) {
+    return `Descrição obrigatória (${d.planKey}).`;
+  }
+  if (d.description.trim().length > 400) {
+    return `Descrição muito longa (${d.planKey}, máx. 400).`;
+  }
   if (toCents(d.priceBrl) == null) return `Preço inválido (${d.planKey}).`;
   if (!Number.isInteger(d.storiesPerMonth) || d.storiesPerMonth < 1) {
     return `Histórias/mês inválidas (${d.planKey}).`;
@@ -116,8 +123,7 @@ export async function savePlanCatalogAction(
       extraAvatarCents: toCents(d.extraAvatarBrl)!,
       giftPointsFirst: d.giftPointsFirst,
       giftPointsRecur: d.giftPointsRecur,
-      description:
-        `${d.avatarsIncluded} avatares e ${d.storiesPerMonth} histórias por mês.`,
+      description: d.description.trim().slice(0, 400),
     };
   });
 

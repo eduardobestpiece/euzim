@@ -17,6 +17,7 @@ function draftFromRow(row: PlanCatalogRow): PlanCatalogDraft {
   return {
     planKey: row.planKey,
     name: row.name,
+    description: row.description,
     priceBrl: row.priceBrl,
     storiesPerMonth: row.storiesPerMonth,
     avatarsIncluded: row.avatarsIncluded,
@@ -101,6 +102,19 @@ export function AdminPlansPanel({
               <Input
                 value={d.name}
                 onChange={(e) => patch(d.planKey, { name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Descrição (landing)</Label>
+              <textarea
+                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={d.description}
+                maxLength={400}
+                onChange={(e) =>
+                  patch(d.planKey, { description: e.target.value })
+                }
+                placeholder="Texto destacado no card da landing"
               />
             </div>
 

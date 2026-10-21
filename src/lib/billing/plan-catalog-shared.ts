@@ -105,3 +105,13 @@ export function formatCentsBrl(cents: number): string {
     currency: "BRL",
   });
 }
+
+/** Menor preço mensal do catálogo (hero CTA / landing). */
+export function cheapestPlanFromCatalog(
+  rows: PlanCatalogRow[],
+): PlanCatalogRow {
+  if (!rows.length) return DEFAULT_PLAN_CATALOG[0]!;
+  return rows.reduce((best, row) =>
+    row.priceCents < best.priceCents ? row : best,
+  );
+}

@@ -1,11 +1,8 @@
 import Link from "next/link";
-import { BookOpen, Check, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { BookOpen, Check, FileText, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getPlanCatalog } from "@/lib/billing/plan-catalog";
-import {
-  formatCentsBrl,
-  type PlanCatalogRow,
-} from "@/lib/billing/plan-catalog-shared";
+import type { PlanCatalogRow } from "@/lib/billing/plan-catalog-shared";
 import { subscriptionPlansFromCatalog } from "@/lib/billing/plans-from-catalog";
 import type { StoryPlan } from "@/lib/billing/plans";
 import { signupPathForPlan } from "@/lib/billing/selected-plan";
@@ -46,6 +43,9 @@ function buildCards(rows: PlanCatalogRow[]) {
       const plan = plans.find((p) => p.planId === m.planId);
       const row = byKey.get(m.planId as PlanCatalogRow["planKey"]);
       if (!plan || !row) return null;
+      const description =
+        row.description.trim() ||
+        `${plan.includedCharacters} avatares e ${plan.storiesPerMonth} histórias por mês.`;
       const highlights = [
         {
           icon: Users,
@@ -66,17 +66,25 @@ function buildCards(rows: PlanCatalogRow[]) {
           text: "Geração com IA inclusa",
         },
         {
-          icon: ShieldCheck,
-          text: `Extra a ${formatCentsBrl(row.extraStoryCents)} se precisar de mais`,
+          icon: FileText,
+          text: description,
         },
       ];
-      return { plan, badge: m.badge, favorite: m.favorite, cta: m.cta, highlights };
+      return {
+        plan,
+        badge: m.badge,
+        favorite: m.favorite,
+        cta: m.cta,
+        description,
+        highlights,
+      };
     })
     .filter(Boolean) as Array<{
     plan: StoryPlan;
     badge: string;
     favorite: boolean;
     cta: string;
+    description: string;
     highlights: Array<{ icon: typeof Users; text: string }>;
   }>;
 }
