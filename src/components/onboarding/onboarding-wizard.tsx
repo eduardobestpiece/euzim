@@ -54,6 +54,7 @@ import { MagicalLoading } from "@/components/ui/magical-loading";
 import type { OnboardingState } from "@/lib/auth/types";
 import {
   SUBSCRIPTION_PLANS,
+  type StoryPlan,
 } from "@/lib/billing/plans";
 import {
   parseSelectedPlanId,
@@ -157,6 +158,7 @@ export function OnboardingWizard({
   resetMode = null,
   resumeAfterPay = false,
   preferredPlan = null,
+  catalogPlans = SUBSCRIPTION_PLANS,
 }: {
   initialState: OnboardingState | null;
   mockMode: boolean;
@@ -165,6 +167,8 @@ export function OnboardingWizard({
   resumeAfterPay?: boolean;
   /** Plano pré-escolhido na oferta da landing → checkout direto. */
   preferredPlan?: SelectedPlanId | null;
+  /** Catálogo vivo (Admin Planos); fallback = defaults sync. */
+  catalogPlans?: StoryPlan[];
 }) {
   const isReuse = resetMode === "reuse";
   const [step, setStep] = useState<Step>(() =>
@@ -1066,7 +1070,7 @@ export function OnboardingWizard({
             <CardDescription>
               {lockedPlan
                 ? `Suas fotos já estão salvas. Vamos direto para o checkout de ${
-                    SUBSCRIPTION_PLANS.find((p) => p.planId === lockedPlan)
+                    catalogPlans.find((p) => p.planId === lockedPlan)
                       ?.name ?? lockedPlan
                   }.`
                 : "Suas fotos já estão salvas. Assine para liberar a geração dos avatares Pixar."}
@@ -1083,7 +1087,7 @@ export function OnboardingWizard({
               />
             ) : (
               <div className="grid gap-3 md:grid-cols-3">
-                {SUBSCRIPTION_PLANS.map((plan) => (
+                {catalogPlans.map((plan) => (
                   <button
                     key={plan.planId}
                     type="button"

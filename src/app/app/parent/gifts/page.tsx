@@ -7,6 +7,7 @@ import { AppPageFallback } from "@/components/app/app-page-fallback";
 import { AppShell } from "@/components/app/app-shell";
 import { ChooseStoryShareDialog } from "@/components/parent/choose-story-share-dialog";
 import { PendingGiftsBanner } from "@/components/referral/pending-gifts-banner";
+import { RedeemPointsPanel } from "@/components/referral/redeem-points-panel";
 import { ShareAppButton } from "@/components/referral/share-app-button";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { ensureReferralCode } from "@/lib/referral/codes";
@@ -66,11 +67,12 @@ async function GiftsInner() {
             Ganhe avatares e histórias
           </h1>
           <p className="max-w-xl text-sm text-muted-foreground">
-            Quando alguém assina pelo seu link, você pode adicionar novos
-            avatares e novas histórias para continuar criando.
+            Quando alguém assina pelo seu link, você ganha pontos: 1 ponto = 1
+            história presente e 2 pontos = 1 avatar presente.
           </p>
         </div>
 
+        <RedeemPointsPanel />
         <PendingGiftsBanner />
 
         <section className="space-y-3 rounded-2xl border border-border/60 p-4">
@@ -122,10 +124,8 @@ async function GiftsInner() {
             <Gift className="mt-0.5 size-4 shrink-0 text-amber-700" />
             <span>
               Ao assinar pelo seu link ou por uma história compartilhada, você
-              pode ganhar de <strong className="text-foreground">1 a 3 avatares</strong>{" "}
-              ou de{" "}
-              <strong className="text-foreground">2 a 6 histórias</strong> extras
-              para continuar criando.
+              ganha pontos conforme o plano (1º mês e nas renovações). Resgate
+              como histórias (1 pt) ou avatares (2 pts).
             </span>
           </p>
         </footer>

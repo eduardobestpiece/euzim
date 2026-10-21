@@ -19,11 +19,13 @@ import {
   isStripeCheckoutReady,
   stripeMissingKeys,
 } from "@/lib/stripe/config";
+import { loadSubscriptionPlans } from "@/lib/billing/plans";
 
 async function ParentSettingsPageInner() {
   await connection();
   const user = await getCurrentUser();
   if (!user) return null;
+  const catalogPlans = await loadSubscriptionPlans();
 
   const db = createAdminClient() ?? (await createClient());
   let profile: ProfileSnapshot = {
@@ -101,7 +103,11 @@ async function ParentSettingsPageInner() {
             Voltar
           </Link>
         </Button>
-        <ProfilePanel profile={profile} billing={billing} />
+        <ProfilePanel
+          profile={profile}
+          billing={billing}
+          plans={catalogPlans}
+        />
       </div>
     </AppShell>
   );

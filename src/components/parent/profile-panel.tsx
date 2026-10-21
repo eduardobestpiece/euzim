@@ -17,6 +17,7 @@ import {
   SubscriptionPanel,
   type BillingSnapshot,
 } from "@/components/parent/subscription-panel";
+import type { StoryPlan } from "@/lib/billing/plans";
 import { updateProfileAction } from "@/lib/profile/actions";
 
 export type ProfileSnapshot = {
@@ -32,9 +33,11 @@ export type ProfileSnapshot = {
 export function ProfilePanel({
   profile,
   billing,
+  plans,
 }: {
   profile: ProfileSnapshot;
   billing: BillingSnapshot;
+  plans?: StoryPlan[];
 }) {
   const [fullName, setFullName] = useState(profile.fullName);
   const [phone, setPhone] = useState(profile.phone);
@@ -155,7 +158,7 @@ export function ProfilePanel({
         </CardContent>
       </Card>
 
-      <SubscriptionPanel billing={billing} />
+      <SubscriptionPanel billing={billing} plans={plans} />
     </div>
   );
 }

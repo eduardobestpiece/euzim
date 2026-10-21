@@ -3,6 +3,7 @@ import {
   FAMILY_SUBSCRIPTION,
   resolveCharacterPack,
   resolveStoryPlan,
+  resolveSubscriptionPlanAsync,
 } from "@/lib/billing/plans";
 import {
   planSourceFromStripeMode,
@@ -32,7 +33,10 @@ export async function fulfillSubscription(
   const admin = createAdminClient();
   if (!admin) return { ok: false, error: "Admin Supabase indisponível." };
 
-  const plan = resolveStoryPlan(planId) ?? FAMILY_SUBSCRIPTION;
+  const plan =
+    (await resolveSubscriptionPlanAsync(planId)) ??
+    resolveStoryPlan(planId) ??
+    FAMILY_SUBSCRIPTION;
   const maxChildren =
     plan.planId === "starter" ? 2 : plan.planId === "plus" ? 6 : 4;
   const planSource =

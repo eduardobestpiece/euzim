@@ -3,6 +3,7 @@ import { MONTHLY_STORY_LIMIT } from "@/lib/billing/character-packs";
 import {
   FAMILY_SUBSCRIPTION,
   resolveSubscriptionPlan,
+  resolveSubscriptionPlanAsync,
 } from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -48,7 +49,10 @@ export function resolveRenewalIso(
 }
 
 async function resolveMonthlyLimit(planId?: string | null): Promise<number> {
-  const catalog = resolveSubscriptionPlan(planId || FAMILY_SUBSCRIPTION.planId);
+  const planKey = planId || FAMILY_SUBSCRIPTION.planId;
+  const catalog =
+    (await resolveSubscriptionPlanAsync(planKey)) ||
+    resolveSubscriptionPlan(planKey);
   const catalogLimit = catalog?.storiesPerMonth;
 
   const db = createAdminClient() ?? (await createClient());
