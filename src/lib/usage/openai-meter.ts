@@ -1,3 +1,8 @@
+import {
+  chatViaOpenRouter,
+  getAiCredentials,
+  type AiProvider,
+} from "@/lib/ai/openrouter-client";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getUsageContext } from "@/lib/usage/usage-context";
 
@@ -13,13 +18,24 @@ export type ChatUsage = {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  cost?: number;
 };
 
-/** Preços aproximados USD por 1M tokens (input/output) ou por imagem. */
+/** Preços aproximados USD por 1M tokens (input/output) — fallback se OpenRouter não mandar usage.cost. */
 const CHAT_PRICES: Record<string, { inPerM: number; outPerM: number }> = {
   "gpt-4o": { inPerM: 2.5, outPerM: 10 },
   "gpt-4o-mini": { inPerM: 0.15, outPerM: 0.6 },
   "gpt-4.1": { inPerM: 2, outPerM: 8 },
+  "claude-sonnet-4.5": { inPerM: 3, outPerM: 15 },
+  "claude-sonnet-4": { inPerM: 3, outPerM: 15 },
+  "claude-haiku": { inPerM: 1, outPerM: 5 },
+  "gemini-2.5-flash": { inPerM: 0.3, outPerM: 2.5 },
+  "gemini-2.5-pro": { inPerM: 1.25, outPerM: 10 },
+  "gemini-flash": { inPerM: 0.3, outPerM: 2.5 },
+  "deepseek-v4-pro": { inPerM: 0.96, outPerM: 1.91 },
+  "deepseek-v4-flash": { inPerM: 0.09, outPerM: 0.18 },
+  "deepseek-chat": { inPerM: 0.32, outPerM: 0.89 },
+  "deepseek-v3": { inPerM: 0.28, outPerM: 0.42 },
 };
 
 /** Custo base por imagem (antes do multiplicador de quality). */
@@ -35,6 +51,12 @@ function usdBrlRate(): number {
   return Number.isFinite(n) && n > 0 ? n : 5.7;
 }
 
+function priceKeyForModel(model: string): string {
+  const lower = model.toLowerCase();
+  const keys = Object.keys(CHAT_PRICES);
+  return keys.find((k) => lower.includes(k)) ?? "gpt-4o";
+}
+
 export function estimateChatUsd(
   model: string,
   usage: ChatUsage | null | undefined,
@@ -42,7 +64,10 @@ export function estimateChatUsd(
   const prompt = usage?.prompt_tokens ?? 0;
   const completion = usage?.completion_tokens ?? 0;
   const total = usage?.total_tokens ?? prompt + completion;
-  const key = Object.keys(CHAT_PRICES).find((k) => model.includes(k)) ?? "gpt-4o";
+  if (typeof usage?.cost === "number" && Number.isFinite(usage.cost)) {
+    return { prompt, completion, total, usd: Math.max(0, usage.cost) };
+  }
+  const key = priceKeyForModel(model);
   const price = CHAT_PRICES[key];
   const usd =
     (prompt / 1_000_000) * price.inPerM +
@@ -51,9 +76,15 @@ export function estimateChatUsd(
 }
 
 export function estimateImageUsd(model: string, images = 1): number {
+  const lower = model.toLowerCase();
   const key =
-    Object.keys(IMAGE_USD).find((k) => model.includes(k)) ?? "gpt-image-2";
+    Object.keys(IMAGE_USD).find((k) => lower.includes(k)) ?? "gpt-image-2";
   return (IMAGE_USD[key] ?? 0.04) * images;
+}
+
+function resolveProvider(explicit?: AiProvider): AiProvider {
+  if (explicit) return explicit;
+  return getAiCredentials()?.provider ?? "openrouter";
 }
 
 export async function recordUsageEvent(input: {
@@ -65,6 +96,7 @@ export async function recordUsageEvent(input: {
   completionTokens?: number;
   totalTokens?: number;
   estimatedUsd?: number;
+  provider?: AiProvider;
   meta?: Record<string, unknown>;
   storyId?: string | null;
   jobId?: string | null;
@@ -76,13 +108,14 @@ export async function recordUsageEvent(input: {
   const generationKey = ctx.generationKey ?? null;
   const usd = Math.max(0, input.estimatedUsd ?? 0);
   const brl = usd * usdBrlRate();
+  const provider = resolveProvider(input.provider);
   const admin = createAdminClient();
   if (!admin) return;
   try {
     await admin.from("usage_events").insert({
       user_id: input.userId,
       category: input.category,
-      provider: "openai",
+      provider,
       model: input.model ?? null,
       operation: input.operation ?? null,
       prompt_tokens: input.promptTokens ?? 0,
@@ -97,6 +130,7 @@ export async function recordUsageEvent(input: {
       meta: {
         ...(input.meta ?? {}),
         ...(generationKey ? { generationKey } : {}),
+        provider,
       },
     });
   } catch {
@@ -217,85 +251,76 @@ export async function meteredChatCompletion(input: {
   content: string | null;
   error?: string;
 }> {
-  const key = process.env.OPENAI_API_KEY?.trim();
-  if (!key) {
+  const creds = getAiCredentials();
+  if (!creds) {
     return {
       ok: false,
       status: 0,
       json: { error: "no key" },
       content: null,
-      error: "OPENAI_API_KEY ausente",
+      error: "OPENROUTER_API_KEY ausente",
     };
   }
-  const model = String(input.body.model ?? "gpt-4o");
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(input.body),
-      signal: AbortSignal.timeout(input.timeoutMs ?? 180_000),
-    });
-    let json: Record<string, unknown> = {};
-    try {
-      json = (await res.json()) as Record<string, unknown>;
-    } catch {
-      return {
-        ok: false,
-        status: res.status,
-        json: {},
-        content: null,
-        error: `OpenAI respondeu sem JSON (${res.status})`,
-      };
-    }
-    const usage = json.usage as ChatUsage | undefined;
-    const est = estimateChatUsd(model, usage);
-    await recordUsageEvent({
-      userId: input.userId,
-      category: input.category,
-      model,
-      operation: input.operation,
-      promptTokens: est.prompt,
-      completionTokens: est.completion,
-      totalTokens: est.total,
-      estimatedUsd: est.usd,
-      storyId: input.storyId,
-      jobId: input.jobId,
-    });
-    const content =
-      (
-        json.choices as { message?: { content?: string } }[] | undefined
-      )?.[0]?.message?.content ?? null;
-    const apiErr =
-      typeof (json.error as { message?: string } | undefined)?.message ===
-      "string"
-        ? (json.error as { message: string }).message
-        : undefined;
-    if (!res.ok) {
-      console.error(
-        `[openai] ${input.operation} ${model} HTTP ${res.status}`,
-        apiErr ?? json,
-      );
-    }
-    return {
-      ok: res.ok,
-      status: res.status,
-      json,
-      content,
-      error: res.ok ? undefined : apiErr || `OpenAI HTTP ${res.status}`,
-    };
-  } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Falha de rede na OpenAI";
-    console.error(`[openai] ${input.operation} ${model} throw`, message);
-    return {
-      ok: false,
-      status: 0,
-      json: { error: message },
-      content: null,
-      error: message,
-    };
-  }
+
+  const model = String(input.body.model ?? "openai/gpt-4o");
+  const result = await chatViaOpenRouter({
+    body: input.body,
+    timeoutMs: input.timeoutMs,
+  });
+
+  const usage = result.json.usage as ChatUsage | undefined;
+  const est = estimateChatUsd(model, {
+    ...usage,
+    cost: result.nativeCostUsd ?? usage?.cost,
+  });
+
+  await recordUsageEvent({
+    userId: input.userId,
+    category: input.category,
+    model,
+    operation: input.operation,
+    promptTokens: est.prompt,
+    completionTokens: est.completion,
+    totalTokens: est.total,
+    estimatedUsd: est.usd,
+    provider: creds.provider,
+    storyId: input.storyId,
+    jobId: input.jobId,
+    meta: {
+      nativeCost: result.nativeCostUsd ?? null,
+    },
+  });
+
+  return {
+    ok: result.ok,
+    status: result.status,
+    json: result.json,
+    content: result.content,
+    error: result.error,
+  };
+}
+
+/** Registra custo de imagem (usa usage.cost do OpenRouter quando disponível). */
+export async function recordImageUsage(input: {
+  userId?: string | null;
+  category: Extract<UsageCategory, "avatar_pixar" | "story_image" | "other">;
+  model: string;
+  operation: string;
+  estimatedUsd?: number;
+  nativeCostUsd?: number;
+  meta?: Record<string, unknown>;
+}): Promise<void> {
+  const usd =
+    typeof input.nativeCostUsd === "number" &&
+    Number.isFinite(input.nativeCostUsd)
+      ? input.nativeCostUsd
+      : (input.estimatedUsd ?? estimateImageUsd(input.model, 1));
+  await recordUsageEvent({
+    userId: input.userId,
+    category: input.category,
+    model: input.model,
+    operation: input.operation,
+    estimatedUsd: usd,
+    meta: input.meta,
+  });
 }

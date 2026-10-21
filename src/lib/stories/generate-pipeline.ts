@@ -27,6 +27,10 @@ import {
   WORD_VOLUME_TARGETS,
 } from "@/lib/stories/storyteller-skill";
 import { meteredChatCompletion } from "@/lib/usage/openai-meter";
+import { loadFeedbackLessons } from "@/lib/stories/page-feedback";
+import { realignChaptersToPageText } from "@/lib/stories/align-page-prompts";
+import { directPageImagePrompts } from "@/lib/stories/page-director";
+import { enforceCompanionSpeciesInText } from "@/lib/stories/story-cast";
 
 export type StoryEngine =
   | "openai-storyteller-v1"
@@ -61,12 +65,49 @@ export type PipelineOptions = {
   clarifyAnswers?: Record<string, string>;
   castNames?: string[];
   protagonistName?: string;
+  /** Ambiente livre opcional pedido pelos pais (ex.: "parquinho de areia"). */
+  settingPreference?: string;
+  /** Regras agregadas de feedback negativo (aprendizado). */
+  feedbackStoryRules?: string;
 };
 
 type ChatJsonResult = {
   data: Record<string, unknown> | null;
   error?: string;
 };
+
+
+/** Extrai JSON de respostas que vêm com fences ```json ou texto extra (ex.: Claude). */
+function parseModelJson(raw: string): Record<string, unknown> | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    /* continue */
+  }
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    try {
+      return JSON.parse(fenced[1].trim()) as Record<string, unknown>;
+    } catch {
+      /* continue */
+    }
+  }
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(trimmed.slice(start, end + 1)) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      /* continue */
+    }
+  }
+  return null;
+}
 
 async function chatJsonOnce(input: {
   userId?: string | null;
@@ -99,17 +140,28 @@ async function chatJsonOnce(input: {
   if (!result.ok || !result.content) {
     return {
       data: null,
-      error: result.error || `OpenAI sem conteúdo (${result.status})`,
+      error: result.error || `IA sem conteúdo (${result.status})`,
     };
   }
-  try {
-    return { data: JSON.parse(result.content) as Record<string, unknown> };
-  } catch {
-    return {
-      data: null,
-      error: `JSON inválido/truncado em ${input.operation}`,
-    };
+  const finishReason = (
+    result.json.choices as { finish_reason?: string }[] | undefined
+  )?.[0]?.finish_reason;
+  const parsed = parseModelJson(result.content);
+  if (parsed) {
+    return { data: parsed };
   }
+  console.warn(
+    `[pipeline] JSON parse fail ${input.operation}`,
+    `finish=${finishReason ?? "?"} len=${result.content.length}`,
+    result.content.slice(0, 160).replace(/\s+/g, " "),
+  );
+  const truncated = finishReason === "length" || finishReason === "max_tokens";
+  return {
+    data: null,
+    error: truncated
+      ? `JSON truncado em ${input.operation} (finish=${finishReason})`
+      : `JSON inválido/truncado em ${input.operation}`,
+  };
 }
 
 /** Uma tentativa + retry em falha transitória (rede, JSON truncado, 5xx). */
@@ -127,6 +179,7 @@ async function chatJson(input: {
   const first = await chatJsonOnce(input);
   if (first.data) return first;
   const retryable =
+    !first.error?.includes("OPENROUTER_API_KEY") &&
     !first.error?.includes("OPENAI_API_KEY") &&
     !first.error?.includes("HTTP 401") &&
     !first.error?.includes("HTTP 403");
@@ -135,13 +188,16 @@ async function chatJson(input: {
   return chatJsonOnce(input);
 }
 
-function openaiKeyPresent(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+function aiKeyPresent(): boolean {
+  return Boolean(
+    process.env.OPENROUTER_API_KEY?.trim() ||
+      process.env.OPENAI_API_KEY?.trim(),
+  );
 }
 
 function mockFallbackMessage(reason: string): string {
-  if (!openaiKeyPresent()) {
-    return "Não consegui gerar com a IA agora. Confira OPENAI_API_KEY e tente de novo.";
+  if (!aiKeyPresent()) {
+    return "Não consegui gerar com a IA agora. Confira OPENROUTER_API_KEY no .env e tente de novo.";
   }
   return `A IA não concluiu a narrativa (${reason}). Tente de novo em instantes.`;
 }
@@ -150,22 +206,33 @@ function friendGenderBrief(cast: StoryCast): string {
   const name = cast.friendName;
   const kind =
     cast.friendKind === "toy"
-      ? "brinquedo/pelúcia"
-      : "pet companheiro";
+      ? "companheiro de brinquedo/pelúcia (seguir avatar)"
+      : "pet companheiro (seguir avatar)";
+  const lock = cast.companionVisualLock || "";
   if (cast.friendGender === "female") {
     return [
       `Co-protagonista: ${name} (${kind}, GÊNERO FEMININO).`,
-      `Concordância OBRIGATÓRIA em português: "a ${name}", "ela", "sua ${cast.friendKind === "toy" ? "pelúcia" : "amiguinha"}", "a bixinha" — NUNCA "o ${name}", "ele", "seu bixinho", "o ursinho" se o gênero for feminino.`,
-      `Se for pelúcia ursa/coelha/etc., use forma feminina ("ursinha", "coelhinha").`,
-    ].join(" ");
+      `Concordância OBRIGATÓRIA: "a ${name}", "ela", "sua amiga ${name}" — NUNCA "o ${name}" / "ele".`,
+      `PROIBIDO escrever "coelhinho/coelho/ursinho" para "${name}" se o avatar não for isso.`,
+      `No texto use o nome "${name}" e a espécie/forma do avatar (nunca invente outro bicho).`,
+      lock,
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
   if (cast.friendGender === "male") {
     return [
       `Co-protagonista: ${name} (${kind}, GÊNERO MASCULINO).`,
-      `Concordância OBRIGATÓRIA: "o ${name}", "ele", "seu ${cast.friendKind === "toy" ? "brinquedo" : "amigo"}".`,
-    ].join(" ");
+      `Concordância OBRIGATÓRIA: "o ${name}", "ele".`,
+      `NÃO invente espécie diferente do avatar. Traits/SPECIES LOCK vencem a prosa.`,
+      lock,
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
-  return `Co-protagonista: ${name} (${kind}). Prefira o nome próprio; evite assumir gênero sem pista.`;
+  return [`Co-protagonista: ${name} (${kind}). Prefira o nome próprio.`, lock]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function coPlayBrief(cast: StoryCast, opts?: PipelineOptions): string {
@@ -270,6 +337,24 @@ function clarifyBrief(opts?: PipelineOptions): string {
   ].join("\n");
 }
 
+function settingBrief(opts?: PipelineOptions): string {
+  const s = opts?.settingPreference?.trim();
+  if (!s) {
+    return "settingPreference: (nenhum) — escolha o melhor ambiente para o tema e MANTENHA-O coerente (escala estável).";
+  }
+  return [
+    `settingPreference OBRIGATÓRIO: "${s}".`,
+    "Toda a história (texto + image_prompts) deve ocorrer nesse ambiente (ou transição explícita e breve).",
+    "Mantenha escala e identidade do lugar estáveis entre os atos.",
+  ].join(" ");
+}
+
+function feedbackBrief(opts?: PipelineOptions): string {
+  const raw = opts?.feedbackStoryRules?.trim();
+  if (!raw) return "";
+  return raw.slice(0, 1800);
+}
+
 type OutlineResult =
   | { ok: true; title: string; moral: string; beats: string[] }
   | { ok: false; error: string };
@@ -301,6 +386,8 @@ ${typeBrief(opts)}
 ${languageBrief(opts)}
 ${christianBrief(opts)}
 ${clarifyBrief(opts)}
+${settingBrief(opts)}
+${feedbackBrief(opts)}
 
 Tema: """${theme}"""
 
@@ -358,6 +445,8 @@ ${typeBrief(opts)}
 ${languageBrief(opts)}
 ${christianBrief(opts)}
 ${clarifyBrief(opts)}
+${settingBrief(opts)}
+${feedbackBrief(opts)}
 
 Tema: """${theme}"""
 Título outline: ${outline.title}
@@ -467,17 +556,27 @@ Cada ato: ~${TARGET_WORDS_PER_PAGE} palavras (±40), com começo/meio/fim de cen
 diálogos quando couber, e um image_prompt em INGLÊS para ilustração Walt Disney/Pixar 3D.
 
 Regras do image_prompt (CRÍTICO):
+- ALINHAMENTO TEXTO↔IMAGEM (máxima prioridade): o image_prompt deve ilustrar
+  APENAS o que o texto DESTE ato descreve (lugar, pessoas presentes, ação, roupa).
+  PROIBIDO antecipar o dia seguinte, trazer personagens que o texto não menciona
+  neste ato, ou mudar o cenário (ex.: texto em casa → imagem no parque).
 - Cada ato tem batida visual ÚNICA: lugar, pose, framing/câmera e emoção diferentes.
 - Atribua a cada ato um ângulo distinto (wide / medium two-shot / over-shoulder /
   close-up emotion / low-angle / high-angle / side-profile / seated conversation).
 - NUNCA repita o mesmo close-up da criança abraçando o amigo.
 - Ato 1 = emoção do INÍCIO da história (ex.: medo à distância), NÃO o clímax.
-- Citar visualmente a criança "${opts?.protagonistName || cast.childName}" e o amigo "${cast.friendName}" (${cast.friendKind}).
+- Citar visualmente a criança "${opts?.protagonistName || cast.childName}" e o amigo "${cast.friendName}" (${cast.friendKind}) quando o texto do ato os incluir.
+- ${cast.companionVisualLock || `Amigo "${cast.friendName}": seguir avatar — nunca coelho/urso genérico.`}
 - No image_prompt, descreva a ROUPA coerente com o beat (pijama na cama, chapéu/casaco no parque, outra roupa em visitas) — NÃO a blusa fixa do avatar sheet.
+- NPCs: aparência ÚNICA e FIXA (nunca clone da protagonista). Cite 2–3 traços no image_prompt de TODOS os atos em que o NPC aparece — os MESMOS traços sempre.
+- Ambiente: âncora estável entre atos; transições só se o texto mudar de lugar.
+- Escola: pátio/banco/quadra — NÃO invente caixa de areia/castelo de areia na escola.
+- Roupa: no mesmo dia escolar, a MESMA outfit em todos os atos escolares (uniforme estável).
+- Cada image_prompt deve ser visualmente ÚNICO (câmera/pose/props) — nunca reaproveitar o frame de outro ato.
 - Se a cena for pública/com desconhecido: incluir pai/mãe/cuidador presente na imagem.
 - Pais/irmãos SEM avatar na plataforma: body-only (de costas / rosto oculto) — nunca inventar rosto.
 - Estilo: "Walt Disney / Pixar 3D animated still, cinematic soft lighting, wholesome"
-- Explicit: "do not repeat previous framing; match this beat exactly; clothing matches scene not avatar sheet"
+- Explicit: "do not repeat previous framing; match THIS page text exactly; clothing matches scene not avatar sheet"
 - Sem texto na imagem, sem watermark, family-friendly.
 
 Responda SOMENTE JSON:
@@ -500,7 +599,13 @@ HISTÓRIA FINAL:
 ${reviewed.fullText}
 """
 
-Fracione agora. Garanta image_prompts distintos por ato.`,
+${settingBrief(opts)}
+${feedbackBrief(opts)}
+
+Elenco/companion:
+${cast.companionVisualLock || ""}
+
+Fracione agora. Cada image_prompt = cena LITERAL do texto daquele ato; NPCs travados; ambiente/escala estáveis; companion = avatar.`,
     timeoutMs: 120_000,
   });
   if (!parsed) return null;
@@ -523,7 +628,33 @@ Fracione agora. Garanta image_prompts distintos por ato.`,
     });
   }
   if (chapters.length < MIN_STORY_PAGES) return null;
-  return chapters.slice(0, MAX_STORY_PAGES);
+  return reinforceTextImageAlignment(
+    chapters.slice(0, MAX_STORY_PAGES),
+    cast,
+  );
+}
+
+/** Reforça: image_prompt espelha o texto da página + companion lock. */
+function reinforceTextImageAlignment(
+  chapters: StoryChapter[],
+  cast: StoryCast,
+): StoryChapter[] {
+  return chapters.map((c, i) => {
+    const excerpt = c.text.replace(/\s+/g, " ").trim().slice(0, 420);
+    const aligned = [
+      `LITERAL PAGE ${i + 1} ILLUSTRATION — show ONLY what this page text describes:`,
+      excerpt,
+      `---`,
+      c.imagePrompt,
+      cast.companionVisualLock ||
+        `Companion "${cast.friendName}" must match avatar reference exactly.`,
+      `FORBIDDEN: foreshadow later pages; wrong location; people/props absent from this page text; generic rabbit replacing ${cast.friendName}.`,
+      `NPC appearance must stay locked across pages; environment scale stays stable.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    return { ...c, imagePrompt: aligned };
+  });
 }
 
 export type GeneratePipelineResult = {
@@ -535,8 +666,59 @@ export type GeneratePipelineResult = {
 };
 
 /**
+ * Align + Continuity Bible + diretor de página (também no path de template).
+ */
+async function polishChaptersForImages(input: {
+  cast: StoryCast;
+  title: string;
+  chapters: StoryChapter[];
+  opts?: PipelineOptions;
+  settingPreference?: string;
+}): Promise<StoryChapter[]> {
+  let chapters = input.chapters.map((c) => ({
+    ...c,
+    text: enforceCompanionSpeciesInText(c.text, input.cast),
+  }));
+
+  try {
+    chapters = await realignChaptersToPageText({
+      userId: input.opts?.userId,
+      cast: input.cast,
+      chapters,
+    });
+  } catch {
+    /* mantém */
+  }
+
+  const bible = await buildSceneContinuityBible({
+    userId: input.opts?.userId,
+    cast: input.cast,
+    title: input.title,
+    chapters,
+    settingPreference: input.settingPreference ?? input.opts?.settingPreference,
+  });
+  chapters = applyBibleToChapters(chapters, bible);
+
+  try {
+    chapters = await directPageImagePrompts({
+      userId: input.opts?.userId,
+      cast: input.cast,
+      title: input.title,
+      chapters,
+    });
+  } catch {
+    /* mantém bible prompts */
+  }
+
+  return chapters.map((c) => ({
+    ...c,
+    text: enforceCompanionSpeciesInText(c.text, input.cast),
+  }));
+}
+
+/**
  * Pipeline custo-otimizado:
- * template hit → personaliza; senão outline(mini) → expand(forte) → review(mini) → split(mini).
+ * template hit → personaliza + align/bible/diretor; senão outline → expand → review → split → polish.
  */
 export async function generateStoryPipeline(input: {
   cast: StoryCast;
@@ -545,11 +727,17 @@ export async function generateStoryPipeline(input: {
 }): Promise<GeneratePipelineResult> {
   const theme = input.theme.trim();
   const cast = input.cast;
-  const opts = input.options;
+  const baseOpts = input.options;
+  const lessons = await loadFeedbackLessons(baseOpts?.userId);
+  const opts: PipelineOptions | undefined = {
+    ...baseOpts,
+    feedbackStoryRules:
+      baseOpts?.feedbackStoryRules?.trim() || lessons.storyRules || undefined,
+  };
   const childName = opts?.protagonistName?.trim() || cast.childName;
   const friendName = cast.friendName;
 
-  // 1) Cache de template
+  // 1) Cache de template — NÃO pula align + bible + diretor
   const matched = await findMatchingTemplate({
     theme,
     userId: opts?.userId,
@@ -561,7 +749,7 @@ export async function generateStoryPipeline(input: {
       friendName,
       matched.title,
     );
-    const chapters: StoryChapter[] = personalized.pages.map((p) => ({
+    let chapters: StoryChapter[] = personalized.pages.map((p) => ({
       index: p.index,
       title: p.title,
       text: p.text,
@@ -570,16 +758,23 @@ export async function generateStoryPipeline(input: {
         `Walt Disney / Pixar 3D still of ${childName} and ${friendName}, beat ${p.index + 1}, unique framing, no text`,
     }));
     if (chapters.length >= MIN_STORY_PAGES) {
+      chapters = await polishChaptersForImages({
+        cast,
+        title: personalized.title,
+        chapters: chapters.slice(0, MAX_STORY_PAGES),
+        opts,
+        settingPreference: opts?.settingPreference,
+      });
       return packResult(
         {
           title: personalized.title,
           moral: personalized.moral,
           fullText: personalized.fullText,
-          reviewNotes: `template cache hit (score ${matched.score.toFixed(2)})`,
+          reviewNotes: `template cache hit (score ${matched.score.toFixed(2)}) + align/bible/director`,
           templateId: matched.id,
           fromTemplate: true,
         },
-        chapters.slice(0, MAX_STORY_PAGES),
+        chapters,
         "openai-storyteller-template",
       );
     }
@@ -646,14 +841,13 @@ export async function generateStoryPipeline(input: {
       });
     })();
 
-  // Scene Continuity Bible → injeta props/expressões nos image_prompts
-  const bible = await buildSceneContinuityBible({
-    userId: opts?.userId,
+  finalChapters = await polishChaptersForImages({
     cast,
     title: reviewed.title,
     chapters: finalChapters,
+    opts,
+    settingPreference: opts?.settingPreference,
   });
-  finalChapters = applyBibleToChapters(finalChapters, bible);
 
   // 3) Salvar template anonimizado (inédito)
   let templateId: string | null = null;

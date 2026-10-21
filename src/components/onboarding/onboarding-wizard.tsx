@@ -53,8 +53,7 @@ import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { MagicalLoading } from "@/components/ui/magical-loading";
 import type { OnboardingState } from "@/lib/auth/types";
 import {
-  FAMILY_SUBSCRIPTION,
-  STARTER_SUBSCRIPTION,
+  SUBSCRIPTION_PLANS,
 } from "@/lib/billing/plans";
 import {
   parseSelectedPlanId,
@@ -62,6 +61,7 @@ import {
 } from "@/lib/billing/selected-plan";
 import { formatBrl } from "@/lib/billing/character-packs";
 import { startPlanCheckoutAction } from "@/lib/stripe/checkout-actions";
+import { goToCheckout } from "@/lib/stripe/go-checkout";
 
 const PREFERRED_PLAN_KEY = "euzim_preferred_plan";
 
@@ -325,7 +325,7 @@ export function OnboardingWizard({
       !isPixarGeneratedUrl(gen.friendAvatarUrl)
     ) {
       setError(
-        "A IA não devolveu avatares Pixar. Confira OPENAI_API_KEY e tente Refazer.",
+        "A IA não devolveu avatares Pixar. Confira a chave de IA (OpenRouter) e tente Refazer.",
       );
       return false;
     }
@@ -611,11 +611,8 @@ export function OnboardingWizard({
         autoCheckoutRef.current = false;
         return;
       }
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
-      setError("Checkout sem URL.");
+      if (goToCheckout(result)) return;
+      setError("Checkout sem sessão Stripe.");
       autoCheckoutRef.current = false;
     });
   }
@@ -1069,9 +1066,8 @@ export function OnboardingWizard({
             <CardDescription>
               {lockedPlan
                 ? `Suas fotos já estão salvas. Vamos direto para o checkout de ${
-                    lockedPlan === "starter"
-                      ? STARTER_SUBSCRIPTION.name
-                      : FAMILY_SUBSCRIPTION.name
+                    SUBSCRIPTION_PLANS.find((p) => p.planId === lockedPlan)
+                      ?.name ?? lockedPlan
                   }.`
                 : "Suas fotos já estão salvas. Assine para liberar a geração dos avatares Pixar."}
             </CardDescription>
@@ -1086,55 +1082,40 @@ export function OnboardingWizard({
                 ]}
               />
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => choosePlan("starter")}
-                  className="flex h-full flex-col rounded-2xl border border-border/70 p-5 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
-                >
-                  <p className="font-heading text-lg font-semibold">
-                    {STARTER_SUBSCRIPTION.name}
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">
-                    {formatBrl(STARTER_SUBSCRIPTION.priceBrl)}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      /mês
+              <div className="grid gap-3 md:grid-cols-3">
+                {SUBSCRIPTION_PLANS.map((plan) => (
+                  <button
+                    key={plan.planId}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => choosePlan(plan.planId as SelectedPlanId)}
+                    className="flex h-full flex-col rounded-2xl border border-border/70 p-5 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
+                  >
+                    <p className="font-heading text-lg font-semibold">
+                      {plan.name}
+                    </p>
+                    <p className="mt-1 text-2xl font-semibold tracking-tight">
+                      {formatBrl(plan.priceBrl)}
+                      <span className="text-sm font-normal text-muted-foreground">
+                        /mês
+                      </span>
+                    </p>
+                    <ul className="mt-4 flex-1 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                      <li>2 avatares Pixar (criança + amigo)</li>
+                      <li>{plan.storiesPerMonth} histórias por mês</li>
+                      <li>
+                        {plan.planId === "plus"
+                          ? "Máximo de histórias por mês"
+                          : plan.planId === "family"
+                            ? "Ritmo semanal confortável"
+                            : "Estúdio mágico e controle parental"}
+                      </li>
+                    </ul>
+                    <span className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background">
+                      Assinar
                     </span>
-                  </p>
-                  <ul className="mt-4 flex-1 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
-                    <li>2 avatares Pixar (criança + amigo)</li>
-                    <li>{STARTER_SUBSCRIPTION.storiesPerMonth} histórias por mês</li>
-                    <li>Estúdio mágico e controle parental</li>
-                  </ul>
-                  <span className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background">
-                    Assinar
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => choosePlan("family")}
-                  className="flex h-full flex-col rounded-2xl border border-border/70 p-5 text-left transition hover:border-foreground/30 hover:bg-muted/40 disabled:opacity-60"
-                >
-                  <p className="font-heading text-lg font-semibold">
-                    {FAMILY_SUBSCRIPTION.name}
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold tracking-tight">
-                    {formatBrl(FAMILY_SUBSCRIPTION.priceBrl)}
-                    <span className="text-sm font-normal text-muted-foreground">
-                      /mês
-                    </span>
-                  </p>
-                  <ul className="mt-4 flex-1 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
-                    <li>2 avatares Pixar (criança + amigo)</li>
-                    <li>{FAMILY_SUBSCRIPTION.storiesPerMonth} histórias por mês</li>
-                    <li>Mais espaço para criar sem freio</li>
-                  </ul>
-                  <span className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-foreground px-4 text-sm font-medium text-background">
-                    Assinar
-                  </span>
-                </button>
+                  </button>
+                ))}
               </div>
             )}
             {error ? (

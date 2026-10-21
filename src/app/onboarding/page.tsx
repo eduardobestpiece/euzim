@@ -8,6 +8,7 @@ import { OnboardingWizard } from "@/components/onboarding/onboarding-wizard";
 import { Button } from "@/components/ui/button";
 import { signOutAction } from "@/lib/auth/actions";
 import { getCurrentUser } from "@/lib/auth/get-user";
+import { resolveAppHomePath } from "@/lib/auth/routing";
 import { readMockOnboarding } from "@/lib/auth/mock-session";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
@@ -36,6 +37,8 @@ async function OnboardingPageInner({
   await connection();
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  // Admin não usa onboarding.
+  if (user.role === "admin") redirect("/app/admin");
   const params = await searchParams;
   const preferredPlan = parseSelectedPlanId(params.plan);
   const resumeAfterPay =
@@ -51,8 +54,19 @@ async function OnboardingPageInner({
     const bootstrap = await loadOnboardingBootstrap(user.id);
     if (bootstrap.resetMode) resetMode = bootstrap.resetMode;
 
-    if (user.onboardingCompleted && resetMode !== "reuse") {
-      redirect("/app/parent");
+    // Avatar Pixar já gerado = onboarding feito (exceto reset explícito reuse/full).
+    const hasPixarReady = Boolean(
+      bootstrap.initialState?.childAvatarUrl ||
+        bootstrap.initialState?.friendAvatarUrl,
+    );
+    const inExplicitReset = resetMode === "reuse" || resetMode === "full";
+    if ((user.onboardingCompleted || hasPixarReady) && !inExplicitReset) {
+      redirect(
+        resolveAppHomePath({
+          role: user.role,
+          onboardingCompleted: true,
+        }),
+      );
     }
 
     if (bootstrap.initialState) {
@@ -84,11 +98,9 @@ async function OnboardingPageInner({
         wizardStep: fromDb.wizardStep || fromCookie?.wizardStep || null,
         completed: false,
       };
-    } else if (user.onboardingCompleted) {
-      redirect("/app/parent");
     }
   } else if (user.onboardingCompleted) {
-    redirect("/app/parent");
+    redirect(resolveAppHomePath(user));
   }
 
   return (

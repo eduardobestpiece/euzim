@@ -3,16 +3,20 @@
 import { headers } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import {
-  EXTRA_STORY_PRODUCT,
+  EXTRA_STORY_PLUS,
   FAMILY_SUBSCRIPTION,
-  STARTER_SUBSCRIPTION,
   customAvatarPriceCents,
+  extraStoryForPlan,
   packPriceCents,
   resolveCharacterPack,
   resolveStoryPlan,
+  resolveSubscriptionPlan,
   type StoryPlan,
 } from "@/lib/billing/plans";
-import { STRIPE_PRICE_IDS } from "@/lib/billing/stripe-price-ids";
+import {
+  resolveStripePriceId,
+  type StripePriceKey,
+} from "@/lib/billing/stripe-price-ids";
 import { formatBrl, priceForAvatarCount } from "@/lib/billing/character-packs";
 import {
   describeStripeKeyIssue,
@@ -23,10 +27,17 @@ import {
 import { getStripe } from "@/lib/stripe/client";
 import { ensureStripeCustomer } from "@/lib/stripe/customers";
 import { mockFulfillCheckout } from "@/lib/stripe/fulfillment";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export type CheckoutActionResult = {
   error?: string;
   url?: string;
+  /** Stripe Embedded Checkout */
+  clientSecret?: string;
+  sessionId?: string;
+  planId?: string;
+  kind?: string;
   mock?: boolean;
   missingKeys?: string[];
   keyIssue?: string | null;
@@ -56,10 +67,27 @@ function gateSecret(): CheckoutActionResult | null {
 }
 
 function planPriceId(plan: StoryPlan): string | null {
-  if (plan.planId === "starter") return STRIPE_PRICE_IDS.starter;
-  if (plan.planId === "family") return STRIPE_PRICE_IDS.family;
-  if (plan.planId === "extra_story") return STRIPE_PRICE_IDS.extra_story;
+  if (plan.kind === "extra_story") {
+    const key = (plan.stripePriceKey || plan.planId) as StripePriceKey;
+    return resolveStripePriceId(key);
+  }
+  if (plan.planId === "starter") return resolveStripePriceId("starter");
+  if (plan.planId === "family") return resolveStripePriceId("family");
+  if (plan.planId === "plus") return resolveStripePriceId("plus");
   return null;
+}
+
+async function readUserSubscriptionPlanId(
+  userId: string,
+): Promise<string | null> {
+  const db = createAdminClient() ?? (await createClient());
+  if (!db) return null;
+  const { data } = await db
+    .from("users")
+    .select("subscription_plan_id")
+    .eq("id", userId)
+    .maybeSingle();
+  return data?.subscription_plan_id ?? null;
 }
 
 export type SubscriptionCheckoutOptions = {
@@ -94,8 +122,10 @@ async function createSubscriptionCheckout(
   const resume = Boolean(options.resumeOnboarding);
 
   try {
+    const returnUrl = `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=subscription&plan_id=${plan.planId}${resume ? "&resume_onboarding=1&wizard_step=generating" : ""}`;
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
+      ui_mode: "embedded",
       customer: customerId,
       client_reference_id: user.id,
       metadata: {
@@ -128,16 +158,19 @@ async function createSubscriptionCheckout(
               },
             },
       ],
-      // Stripe substitui {CHECKOUT_SESSION_ID} literal — não encode o placeholder
-      success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=subscription&plan_id=${plan.planId}${resume ? "&resume_onboarding=1&wizard_step=generating" : ""}`,
-      cancel_url: resume
-        ? `${origin}/app/parent/billing/cancel?resume_onboarding=1`
-        : `${origin}/app/parent/billing/cancel`,
+      return_url: returnUrl,
       locale: "pt-BR",
     });
 
-    if (!session.url) return { error: "Checkout sem URL de redirecionamento." };
-    return { url: session.url };
+    if (!session.client_secret) {
+      return { error: "Checkout embutido sem client_secret." };
+    }
+    return {
+      clientSecret: session.client_secret,
+      sessionId: session.id,
+      planId: plan.planId,
+      kind: "subscription",
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha no Checkout.";
     return { error: message, missingKeys: stripeMissingKeys() };
@@ -158,6 +191,9 @@ export async function startPlanCheckoutAction(
   if (plan.kind === "extra_story") {
     return startExtraStoryCheckoutAction();
   }
+  if (!resolveSubscriptionPlan(plan.planId)) {
+    return { error: "Plano de assinatura inválido." };
+  }
   return createSubscriptionCheckout(plan, options);
 }
 
@@ -165,11 +201,15 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
   const user = await getCurrentUser();
   if (!user) return { error: "Faça login." };
 
+  const activePlanId = await readUserSubscriptionPlanId(user.id);
+  const plan = extraStoryForPlan(activePlanId);
+  const priceKey = (plan.stripePriceKey || plan.planId) as StripePriceKey;
+
   const gated = gateSecret();
   if (gated) {
     return {
       ...gated,
-      error: `${gated.error} Produto: ${EXTRA_STORY_PRODUCT.name} (${formatBrl(EXTRA_STORY_PRODUCT.priceBrl)}).`,
+      error: `${gated.error} Produto: ${plan.name} (${formatBrl(plan.priceBrl)}).`,
     };
   }
 
@@ -186,27 +226,35 @@ export async function startExtraStoryCheckoutAction(): Promise<CheckoutActionRes
   }
 
   const origin = await appOrigin();
-  const plan = EXTRA_STORY_PRODUCT;
-  const priceId = STRIPE_PRICE_IDS.extra_story;
+  const priceId = resolveStripePriceId(priceKey);
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      ui_mode: "embedded",
       customer: customerId,
       client_reference_id: user.id,
       metadata: {
         supabase_user_id: user.id,
         kind: "extra_story",
         plan_id: plan.planId,
+        for_plan: plan.forPlanId || activePlanId || EXTRA_STORY_PLUS.forPlanId || "plus",
         stories: "1",
+        price_brl: String(plan.priceBrl),
       },
       line_items: [{ quantity: 1, price: priceId }],
-      success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=extra_story`,
-      cancel_url: `${origin}/app/parent/billing/cancel`,
+      return_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=extra_story`,
       locale: "pt-BR",
     });
-    if (!session.url) return { error: "Checkout sem URL." };
-    return { url: session.url };
+    if (!session.client_secret) {
+      return { error: "Checkout embutido sem client_secret." };
+    }
+    return {
+      clientSecret: session.client_secret,
+      sessionId: session.id,
+      planId: plan.planId,
+      kind: "extra_story",
+    };
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Falha no Checkout.",
@@ -245,12 +293,13 @@ export async function startCharacterPackCheckoutAction(
   }
 
   const origin = await appOrigin();
-  const priceKey = pack.id as keyof typeof STRIPE_PRICE_IDS;
-  const priceId = STRIPE_PRICE_IDS[priceKey];
+  const priceKey = pack.id as StripePriceKey;
+  const priceId = resolveStripePriceId(priceKey);
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      ui_mode: "embedded",
       customer: customerId,
       client_reference_id: user.id,
       metadata: {
@@ -268,19 +317,25 @@ export async function startCharacterPackCheckoutAction(
                 currency: "brl",
                 unit_amount: cents,
                 product_data: {
-                  name: `Euzim — ${pack.name}`,
+                  name: `Euzim - ${pack.name}`,
                   description: pack.description,
                 },
               },
             },
           ],
-      success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=character_pack&pack_id=${pack.id}`,
-      cancel_url: `${origin}/app/parent/billing/cancel`,
+      return_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=character_pack&pack_id=${pack.id}`,
       locale: "pt-BR",
     });
 
-    if (!session.url) return { error: "Checkout sem URL de redirecionamento." };
-    return { url: session.url };
+    if (!session.client_secret) {
+      return { error: "Checkout embutido sem client_secret." };
+    }
+    return {
+      clientSecret: session.client_secret,
+      sessionId: session.id,
+      planId: pack.id,
+      kind: "character_pack",
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Falha no Checkout.";
     return { error: message, missingKeys: stripeMissingKeys() };
@@ -324,6 +379,7 @@ export async function startCustomAvatarsCheckoutAction(
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      ui_mode: "embedded",
       customer: customerId,
       client_reference_id: user.id,
       metadata: {
@@ -334,15 +390,21 @@ export async function startCustomAvatarsCheckoutAction(
       line_items: [
         {
           quantity: count,
-          price: STRIPE_PRICE_IDS.avatar_unit,
+          price: resolveStripePriceId("avatar_unit"),
         },
       ],
-      success_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=custom_avatars&count=${count}`,
-      cancel_url: `${origin}/app/parent/billing/cancel`,
+      return_url: `${origin}/app/parent/billing/success?session_id={CHECKOUT_SESSION_ID}&kind=custom_avatars&count=${count}`,
       locale: "pt-BR",
     });
-    if (!session.url) return { error: "Checkout sem URL." };
-    return { url: session.url };
+    if (!session.client_secret) {
+      return { error: "Checkout embutido sem client_secret." };
+    }
+    return {
+      clientSecret: session.client_secret,
+      sessionId: session.id,
+      planId: `custom_${count}`,
+      kind: "custom_avatars",
+    };
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Falha no Checkout.",

@@ -1,8 +1,6 @@
+import { modelForActivity } from "@/lib/ai/model-registry";
 import type { StoryCast } from "@/lib/stories/story-cast";
-import {
-  STORY_AUX_MODEL,
-  STORYTELLER_SKILL,
-} from "@/lib/stories/storyteller-skill";
+import { STORYTELLER_SKILL } from "@/lib/stories/storyteller-skill";
 import { meteredChatCompletion } from "@/lib/usage/openai-meter";
 
 type ChapterLike = {
@@ -36,9 +34,19 @@ export type SceneBibleEntry = {
   propLocks: string[];
 };
 
+export type NpcRosterEntry = {
+  name: string;
+  role: string;
+  /** Aparência travada (inglês) para image prompts — nunca clone da protagonista. */
+  appearance: string;
+};
+
 export type ContinuityBible = {
   acts: SceneBibleEntry[];
   cumulativeLocks: string[];
+  npcRoster: NpcRosterEntry[];
+  /** Âncora de ambiente/escala (ex.: sandbox com castelo de balde). */
+  environmentAnchor: string;
 };
 
 function parseBoolish(v: unknown): boolean | null {
@@ -114,15 +122,47 @@ function parseAct(raw: unknown, index: number): SceneBibleEntry | null {
   };
 }
 
+function parseJsonLoose(raw: string): Record<string, unknown> | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    /* continue */
+  }
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    try {
+      return JSON.parse(fenced[1].trim()) as Record<string, unknown>;
+    } catch {
+      /* continue */
+    }
+  }
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(trimmed.slice(start, end + 1)) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      /* continue */
+    }
+  }
+  return null;
+}
+
 /**
  * Após o split dos atos, gera a Scene Continuity Bible (JSON por ato)
- * com wardrobe explícito + prop locks acumulados.
+ * com wardrobe explícito, NPC roster travado e âncora de ambiente.
  */
 export async function buildSceneContinuityBible(input: {
   userId?: string | null;
   cast: StoryCast;
   title: string;
   chapters: ChapterLike[];
+  settingPreference?: string;
 }): Promise<ContinuityBible | null> {
   const digest = input.chapters
     .map(
@@ -131,12 +171,16 @@ export async function buildSceneContinuityBible(input: {
     )
     .join("\n\n");
 
+  const settingLine =
+    input.settingPreference?.trim() ||
+    "(nenhum — escolha e ancore o melhor ambiente para o tema)";
+
   const result = await meteredChatCompletion({
     userId: input.userId,
     category: "story_text",
     operation: "scene_continuity_bible",
     body: {
-      model: STORY_AUX_MODEL,
+      model: modelForActivity("story_continuity"),
       temperature: 0.35,
       response_format: { type: "json_object" },
       messages: [
@@ -150,23 +194,43 @@ Para CADA ato, produza um JSON estruturado que a ilustração DEVE obedecer.
 ## Identidade vs roupa (CRÍTICO)
 - O avatar Pixar define ROSTO, CABELO, CORPO e identidade — NÃO a roupa do turnaround/sheet.
 - A ROUPA (wardrobe.outfit) DEVE seguir o beat/texto do ato e o contexto da cena.
-  Exemplos: chapéu + casaco no parque; pijama na cama; outra roupa em visitas/lanche; roupa de passeio na rua.
 - NUNCA force "sempre a mesma blusa do avatar". Se o texto muda de cena/contexto, mude a roupa.
 - Se o texto mantém a mesma saída/atividade, use keepFromPrevious=true e a MESMA outfit.
+- DIA ESCOLAR: todos os atos de escola/pátio/recreio DEVEM usar a MESMA outfit (uniforme ou roupa escolar estável). Não alterne vestido floral / camiseta rosa / outra roupa no mesmo dia.
+- Ambiente escolar: pátio/banco/quadra — NÃO invente caixa de areia na escola.
+
+## ANTI-CLONE + NPC LOCK (CRÍTICO)
+- Qualquer outra criança/NPC NUNCA pode parecer a protagonista "${input.cast.childName}".
+- Defina npc_roster no JSON raiz: lista de {name, role, appearance} com aparência ÚNICA
+  (cabelo diferente, roupa diferente, traços distintos) em inglês.
+- Em CADA ato onde o NPC aparece: npc_notes DEVE repetir a MESMA appearance do roster.
+- Proibido mudar o NPC de uma página para outra (cabelo/roupa/rosto).
+
+## AMBIENTE / ESCALA
+- environment_anchor no JSON raiz: lugar + escala estável
+  (ex.: "neighborhood sandbox, child-sized sandcastle from a bucket mold").
+- Castelo de areia NÃO cresce para fortaleza monumental sem o texto pedir.
+- Se settingPreference vier preenchido, o ambiente DEVE segui-lo.
+- must_not_show: incluir "protagonist twin/clone NPC" e "same framing as previous page".
 
 ## Outras regras
 - beat = ação literal do texto (não invente).
 - expression: preocupada | resistente | atenta | alegre | curiosa | corajosa | emocionada…
 - wardrobe.outfit: descrição CURTA em inglês da roupa completa do ato (cores + peças).
-- wardrobe: hat, backpack, companionInsideBag (pet/toy dentro/fora da bolsa).
-- Se o texto coloca o chapéu no ato N, permanece nos atos seguintes até o texto dizer o contrário.
-- NPCs vulneráveis (ex.: morador de rua): realistas — cobertores, pertences, aparência desgastada; NÃO "vovô limpo".
-- must_show / must_not_show: props e elementos obrigatórios / proibidos.
-- Último ato: cena rica se o texto cobrir (parque, lanche, alegria) — não só close-up na cama.
-- Não invente detalhes de rosto/cabelo que contradigam o avatar.
+- companion "${input.cast.friendName}": fidelidade TOTAL ao avatar Pixar (espécie/cores/forma). NUNCA substitua por coelho/urso genérico.
+- ${input.cast.companionVisualLock || ""}
+- beat e must_show DEVEM refletir SÓ o texto daquele ato (sem antecipar a cena do dia seguinte).
+- Anatomia: poses claras; 2 braços/2 pernas; sem ângulos que quebrem articulações (exceto avatar com deficiência/cadeira).
+- must_not_show: incluir "extra arms", "impossible limb bend", "back-view torso with front-view hug arm".
+- Pais/irmãos sem avatar: body-only.
+- Não invente detalhes de rosto/cabelo que contradigam o avatar da protagonista.
 
 Responda SOMENTE JSON:
 {
+  "environment_anchor": string,
+  "npc_roster": [
+    { "name": string, "role": string, "appearance": string }
+  ],
   "acts": [
     {
       "actIndex": 0,
@@ -192,14 +256,20 @@ Responda SOMENTE JSON:
         },
         {
           role: "user",
-          content: `Criança: ${input.cast.childName}
+          content: `Criança protagonista: ${input.cast.childName} (avatar Pixar — NÃO clonar em NPCs).
 Amigo (${input.cast.friendKind}, gender=${input.cast.friendGender}): ${input.cast.friendName}
+${input.cast.companionVisualLock || ""}
 Título: ${input.title}
+settingPreference: ${settingLine}
 
 ATOS:
 ${digest}
 
-Gere a Continuity Bible agora. Outfit por ato coerente com o texto (não a blusa fixa do sheet).`,
+Gere a Continuity Bible agora.
+- npc_roster com aparências únicas (nunca iguais à protagonista) e TRAVADAS em todos os atos.
+- environment_anchor com escala estável; cada act.environment herda a âncora.
+- Outfit por ato coerente com o texto LITERAL (não a blusa fixa do sheet).
+- must_show só o que o texto daquele ato menciona (lugar, pessoas, ação).`,
         },
       ],
     },
@@ -208,7 +278,8 @@ Gere a Continuity Bible agora. Outfit por ato coerente com o texto (não a blusa
 
   if (!result.ok || !result.content) return null;
   try {
-    const parsed = JSON.parse(result.content) as { acts?: unknown };
+    const parsed = parseJsonLoose(result.content);
+    if (!parsed) return null;
     const rawActs = Array.isArray(parsed.acts) ? parsed.acts : [];
     const acts: SceneBibleEntry[] = [];
     for (let i = 0; i < rawActs.length; i++) {
@@ -217,12 +288,87 @@ Gere a Continuity Bible agora. Outfit por ato coerente com o texto (não a blusa
     }
     if (acts.length === 0) return null;
 
-    // Acumula locks de wardrobe / outfit ao longo dos atos
+    const npcRoster: NpcRosterEntry[] = [];
+    const rawRoster = Array.isArray(parsed.npc_roster)
+      ? parsed.npc_roster
+      : Array.isArray(parsed.npcRoster)
+        ? parsed.npcRoster
+        : [];
+    for (const row of rawRoster) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const name = String(r.name ?? "").trim();
+      const appearance = String(r.appearance ?? r.look ?? "").trim();
+      if (!name || !appearance) continue;
+      npcRoster.push({
+        name,
+        role: String(r.role ?? "npc").trim() || "npc",
+        appearance,
+      });
+    }
+    if (npcRoster.length === 0) {
+      for (const act of acts) {
+        if (act.npcNotes && act.npcNotes.length > 12) {
+          npcRoster.push({
+            name: "story-npc",
+            role: "secondary child",
+            appearance: act.npcNotes.slice(0, 220),
+          });
+          break;
+        }
+      }
+    }
+
+    let environmentAnchor = String(
+      parsed.environment_anchor ?? parsed.environmentAnchor ?? "",
+    ).trim();
+    if (!environmentAnchor) {
+      environmentAnchor =
+        input.settingPreference?.trim() ||
+        acts.find((a) => a.environment)?.environment ||
+        "match story setting with stable child-scale props";
+    }
+    if (input.settingPreference?.trim()) {
+      environmentAnchor = `${input.settingPreference.trim()} — keep this place and scale`;
+    }
+
     const cumulativeLocks: string[] = [];
     let hatOn: boolean | null = null;
     let backpackOn: boolean | null = null;
     let companionIn: boolean | null = null;
     let lockedOutfit: string | null = null;
+    let schoolDayOutfit: string | null = null;
+
+    function isHomeSleepContext(act: SceneBibleEntry): boolean {
+      const blob = `${act.environment} ${act.beat}`.toLowerCase();
+      return (
+        blob.includes("bed") ||
+        blob.includes("cama") ||
+        blob.includes("pijama") ||
+        blob.includes("pajama") ||
+        blob.includes("dorm") ||
+        blob.includes("quarto") ||
+        blob.includes("bedroom")
+      );
+    }
+
+    function isSchoolDayContext(act: SceneBibleEntry): boolean {
+      const blob = `${act.environment} ${act.beat} ${act.mustShow.join(" ")}`.toLowerCase();
+      return (
+        blob.includes("school") ||
+        blob.includes("escola") ||
+        blob.includes("pátio") ||
+        blob.includes("patio") ||
+        blob.includes("recreio") ||
+        blob.includes("recess") ||
+        blob.includes("classroom") ||
+        blob.includes("sala de aula") ||
+        blob.includes("bench") ||
+        blob.includes("banco") ||
+        blob.includes("lápis") ||
+        blob.includes("pencil")
+      );
+    }
 
     for (let i = 0; i < acts.length; i++) {
       const act = acts[i];
@@ -232,34 +378,34 @@ Gere a Continuity Bible agora. Outfit por ato coerente com o texto (não a blusa
         companionIn = act.wardrobe.companionInsideBag;
       }
 
-      // Outfit: lock se keepFromPrevious ou se texto não trocou e já havia outfit
-      if (act.wardrobe.keepFromPrevious && lockedOutfit) {
+      // Dia escolar: uma única roupa/uniforme em TODOS os atos escolares.
+      if (isSchoolDayContext(act) && !isHomeSleepContext(act)) {
+        if (schoolDayOutfit) {
+          act.wardrobe.outfit = schoolDayOutfit;
+          act.wardrobe.keepFromPrevious = true;
+        } else if (act.wardrobe.outfit) {
+          schoolDayOutfit = act.wardrobe.outfit;
+          lockedOutfit = act.wardrobe.outfit;
+        } else {
+          schoolDayOutfit =
+            "consistent school-day outfit or uniform (same colors/pieces all school acts)";
+          act.wardrobe.outfit = schoolDayOutfit;
+          lockedOutfit = schoolDayOutfit;
+        }
+      } else if (act.wardrobe.keepFromPrevious && lockedOutfit) {
         act.wardrobe.outfit = lockedOutfit;
       } else if (act.wardrobe.outfit) {
         lockedOutfit = act.wardrobe.outfit;
-      } else if (lockedOutfit) {
+      } else if (lockedOutfit && !isHomeSleepContext(act)) {
         act.wardrobe.outfit = lockedOutfit;
         act.wardrobe.keepFromPrevious = true;
       } else if (!act.wardrobe.outfit) {
-        // Fallback mínimo por ambiente se o modelo omitir
-        const env = act.environment.toLowerCase();
-        const beat = act.beat.toLowerCase();
-        if (
-          env.includes("bed") ||
-          env.includes("cama") ||
-          beat.includes("pijama") ||
-          beat.includes("pajama") ||
-          beat.includes("dorm")
-        ) {
+        if (isHomeSleepContext(act)) {
           act.wardrobe.outfit = "cozy striped pajamas";
-        } else if (
-          env.includes("park") ||
-          env.includes("parque") ||
-          beat.includes("chapéu") ||
-          beat.includes("hat")
-        ) {
+        } else if (isSchoolDayContext(act)) {
           act.wardrobe.outfit =
-            "casual outdoor play clothes with a matching hat";
+            "consistent school-day outfit or uniform (same colors/pieces all school acts)";
+          schoolDayOutfit = act.wardrobe.outfit;
         } else {
           act.wardrobe.outfit =
             "age-appropriate casual clothes matching this scene (not the default avatar shirt)";
@@ -296,7 +442,51 @@ Gere a Continuity Bible agora. Outfit por ato coerente com o texto (não a blusa
       }
     }
 
-    return { acts, cumulativeLocks };
+    for (const act of acts) {
+      if (!act.environment || act.environment.length < 4) {
+        act.environment = environmentAnchor;
+      } else {
+        act.environment = `${environmentAnchor}; beat detail: ${act.environment}`;
+      }
+      if (npcRoster.length > 0) {
+        const rosterLine = npcRoster
+          .map(
+            (n) =>
+              `${n.name} (${n.role}): ${n.appearance} — MUST NOT resemble protagonist ${input.cast.childName}`,
+          )
+          .join(" | ");
+        act.npcNotes = act.npcNotes
+          ? `${rosterLine}. Beat note: ${act.npcNotes}`
+          : rosterLine;
+        act.mustNotShow = Array.from(
+          new Set([
+            ...act.mustNotShow,
+            `NPC looking like twin/clone of ${input.cast.childName}`,
+            "same framing as any previous page",
+            "monumental oversized sandcastle unless text demands it",
+            `generic rabbit/bear plush replacing companion ${input.cast.friendName}`,
+            "characters or locations not present in THIS act's text",
+            "extra arms or duplicated limbs",
+            "impossible arm bend / back-view torso with front-view hug arm",
+          ]),
+        );
+        act.mustShow = Array.from(
+          new Set([
+            ...act.mustShow,
+            ...npcRoster.map(
+              (n) => `${n.name} with locked look: ${n.appearance}`,
+            ),
+          ]),
+        );
+      }
+    }
+
+    return {
+      acts,
+      cumulativeLocks,
+      npcRoster,
+      environmentAnchor,
+    };
   } catch {
     return null;
   }
@@ -321,7 +511,9 @@ export function applyBibleToChapters<T extends ChapterLike>(
     const mustNot = act.mustNotShow.length
       ? `MUST NOT SHOW: ${act.mustNotShow.join("; ")}.`
       : "";
-    const npc = act.npcNotes ? `NPC NOTES: ${act.npcNotes}.` : "";
+    const npc = act.npcNotes
+      ? `NPC NOTES / LOCKED NPC APPEARANCE: ${act.npcNotes}.`
+      : "";
     const outfitLine = act.wardrobe.outfit
       ? `WARDROBE OUTFIT: ${act.wardrobe.outfit}.${
           act.wardrobe.keepFromPrevious
@@ -334,13 +526,24 @@ export function applyBibleToChapters<T extends ChapterLike>(
       `EXPRESSION: ${act.expression}`,
       outfitLine,
       `ENVIRONMENT: ${act.environment || "match story text"}`,
+      bible.environmentAnchor
+        ? `ENVIRONMENT ANCHOR (stable scale): ${bible.environmentAnchor}.`
+        : "",
       `CAST VISIBLE: ${act.castVisible.join(", ") || "as in text"}`,
+      bible.npcRoster.length
+        ? `LOCKED NPC ROSTER: ${bible.npcRoster
+            .map((n) => `${n.name}=${n.appearance}`)
+            .join("; ")}.`
+        : "",
       lockLine,
       must,
       mustNot,
       npc,
       "Identity from avatar refs (face, hair, body). Clothing from WARDROBE OUTFIT for this act.",
-      "Match the literal story beat; do not invent contradictory avatar face/hair details.",
+      "Match the literal story beat of THIS page text only; do not invent contradictory avatar face/hair details.",
+      "Companion must match uploaded companion avatar reference — never a generic rabbit/bear substitute.",
+      "ANTI-CLONE: other children must not share the protagonist's face/hair/outfit.",
+      "UNIQUE FRAME: do not reuse a previous page's composition.",
     ]
       .filter(Boolean)
       .join(" ");
@@ -363,8 +566,9 @@ export function biblePromptFragment(
   return [
     `Continuity beat: ${act.beat}.`,
     `Child expression: ${act.expression}.`,
-    act.wardrobe.outfit
-      ? `Wardrobe outfit: ${act.wardrobe.outfit}.`
+    act.wardrobe.outfit ? `Wardrobe outfit: ${act.wardrobe.outfit}.` : "",
+    bible.environmentAnchor
+      ? `Environment anchor: ${bible.environmentAnchor}.`
       : "",
     act.propLocks.length ? `Locked props: ${act.propLocks.join("; ")}.` : "",
     act.mustShow.length ? `Must show: ${act.mustShow.join("; ")}.` : "",

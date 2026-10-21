@@ -13,9 +13,16 @@ import {
   writeMockSession,
 } from "@/lib/auth/mock-session";
 import type { OnboardingPhotoDraft } from "@/lib/auth/types";
+import {
+  fetchProfileViaRest,
+  hasPixarAvatarViaRest,
+} from "@/lib/auth/profile-rest";
+import { resolvePostAuthPath } from "@/lib/auth/routing";
 import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
+import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { applyReferralAttribution } from "@/lib/referral/attribution";
 import { ensureReferralCode } from "@/lib/referral/codes";
+import { fireTrackingEvent } from "@/lib/tracking/dispatch";
 
 export type AuthActionResult = {
   error?: string;
@@ -26,6 +33,57 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
+/** Mensagem amigável para falhas de rede / undici "fetch failed". */
+function mapAuthNetworkError(err: unknown, fallback?: string): string {
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : fallback || "Erro de autenticação.";
+  if (
+    /fetch failed|failed to fetch|networkerror|econnreset|etimedout|enotfound|socket|aborted|timeout/i.test(
+      msg,
+    )
+  ) {
+    return "Não foi possível conectar ao servidor de login (rede/Supabase). Aguarde alguns segundos e tente de novo.";
+  }
+  return msg || fallback || "Erro de autenticação.";
+}
+
+async function signInWithPasswordRetry(
+  supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>,
+  email: string,
+  password: string,
+) {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await supabase.auth.signInWithPassword({ email, password });
+      if (!result.error) return result;
+      lastError = result.error;
+      if (
+        !/fetch failed|failed to fetch|network|timeout|econnreset/i.test(
+          result.error.message,
+        )
+      ) {
+        return result;
+      }
+    } catch (err) {
+      lastError = err;
+    }
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  return {
+    data: { user: null, session: null },
+    error: {
+      message: mapAuthNetworkError(lastError, "Falha ao entrar."),
+    },
+  };
+}
+
 export async function signUpAction(
   _prev: AuthActionResult,
   formData: FormData,
@@ -33,14 +91,21 @@ export async function signUpAction(
   const email = normalizeEmail(String(formData.get("email") ?? ""));
   const password = String(formData.get("password") ?? "");
   const fullName = String(formData.get("fullName") ?? "").trim();
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const phoneDigits = phoneRaw.replace(/\D/g, "");
+  const phone =
+    phoneDigits && phoneDigits.length >= 8 && phoneDigits.length <= 20
+      ? phoneDigits
+      : null;
 
   if (!email || !password || password.length < 6) {
     return { error: "Informe e-mail e senha (mín. 6 caracteres)." };
   }
 
   if (!isSupabaseConfigured()) {
+    const mockId = createMockUserId();
     await writeMockSession({
-      id: createMockUserId(),
+      id: mockId,
       email,
       role: "parent",
       fullName: fullName || undefined,
@@ -53,6 +118,10 @@ export async function signUpAction(
       friend: null,
       friendPhotos: [],
       completed: false,
+    });
+    fireTrackingEvent({
+      event: "Lead",
+      user: { email, fullName, phone, userId: mockId },
     });
     const nextMock = String(formData.get("next") ?? "").trim();
     redirect(nextMock.startsWith("/") ? nextMock : "/onboarding");
@@ -69,7 +138,10 @@ export async function signUpAction(
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName || undefined },
+      user_metadata: {
+        full_name: fullName || undefined,
+        phone: phone || undefined,
+      },
     });
 
   if (createError) {
@@ -86,11 +158,15 @@ export async function signUpAction(
     return { error: createError.message };
   }
 
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (signInError) {
+  try {
+    const signed = await signInWithPasswordRetry(supabase, email, password);
+    if (signed.error) {
+      return {
+        error:
+          "Conta criada, mas não foi possível iniciar a sessão. Tente entrar.",
+      };
+    }
+  } catch {
     return {
       error:
         "Conta criada, mas não foi possível iniciar a sessão. Tente entrar.",
@@ -99,8 +175,26 @@ export async function signUpAction(
 
   const newUserId = created.user?.id;
   if (newUserId) {
+    if (phone || fullName) {
+      await admin
+        .from("users")
+        .update({
+          ...(fullName ? { full_name: fullName, display_name: fullName } : {}),
+          ...(phone ? { phone } : {}),
+        })
+        .eq("id", newUserId);
+    }
     await ensureReferralCode(newUserId);
     await applyReferralAttribution(newUserId);
+    fireTrackingEvent({
+      event: "Lead",
+      user: {
+        email,
+        fullName,
+        phone,
+        userId: newUserId,
+      },
+    });
   }
 
   const next = String(formData.get("next") ?? "").trim();
@@ -122,47 +216,122 @@ export async function signInAction(
     const existing = await readMockSession();
     if (existing && existing.email === email) {
       redirect(
-        existing.onboardingCompleted ? "/app/parent" : "/onboarding",
+        resolvePostAuthPath(
+          {
+            role: existing.role === "admin" ? "admin" : "parent",
+            onboardingCompleted: Boolean(existing.onboardingCompleted),
+          },
+          String(formData.get("next") ?? ""),
+        ),
       );
     }
 
+    const role = email.includes("admin") ? "admin" : "parent";
     await writeMockSession({
       id: createMockUserId(),
       email,
-      role: email.includes("admin") ? "admin" : "parent",
-      onboardingCompleted: false,
+      role,
+      onboardingCompleted: role === "admin",
     });
-    redirect("/onboarding");
+    redirect(
+      resolvePostAuthPath(
+        { role, onboardingCompleted: role === "admin" },
+        String(formData.get("next") ?? ""),
+      ),
+    );
   }
 
   const supabase = await createClient();
   if (!supabase) return { error: "Supabase indisponível." };
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: error.message };
+  let signInData: {
+    user: { id: string } | null;
+    session: unknown;
+  };
+  try {
+    const result = await signInWithPasswordRetry(supabase, email, password);
+    if (result.error) {
+      return { error: mapAuthNetworkError(result.error.message) };
+    }
+    signInData = result.data;
+  } catch (err) {
+    return { error: mapAuthNetworkError(err) };
+  }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const user = signInData.user;
   if (user) {
-    await ensureReferralCode(user.id);
-    await applyReferralAttribution(user.id);
+    // Referral não bloqueia o redirect do login (evita timeout / fetch failed).
+    void Promise.all([
+      ensureReferralCode(user.id),
+      applyReferralAttribution(user.id),
+    ]).catch(() => {});
 
-    const { data: profile } = await supabase
-      .from("users")
-      .select("onboarding_completed, role")
-      .eq("id", user.id)
-      .maybeSingle();
+    let profile: { onboarding_completed?: boolean; role?: string } | null =
+      await fetchProfileViaRest(user.id);
 
-    const next = String(formData.get("next") ?? "").trim();
-    if (next.startsWith("/")) {
-      redirect(next);
+    if (!profile) {
+      const db = createAdminClient() ?? supabase;
+      try {
+        const profileRes = await db
+          .from("users")
+          .select("onboarding_completed, role")
+          .eq("id", user.id)
+          .maybeSingle();
+        profile = profileRes.data;
+      } catch {
+        /* segue com destino padrão */
+      }
     }
-    if (!profile?.onboarding_completed) {
-      redirect("/onboarding");
+
+    const role = (profile?.role as "admin" | "parent" | undefined) ?? "parent";
+    let onboardingCompleted = Boolean(profile?.onboarding_completed);
+    if (role === "admin") onboardingCompleted = true;
+
+    if (!onboardingCompleted && role !== "admin") {
+      try {
+        if (await hasPixarAvatarViaRest(user.id)) {
+          onboardingCompleted = true;
+          const db = createAdminClient() ?? supabase;
+          void db
+            .from("users")
+            .update({
+              onboarding_completed: true,
+              onboarding_reset_mode: null,
+            })
+            .eq("id", user.id);
+        } else {
+          const db = createAdminClient() ?? supabase;
+          const { data: children } = await db
+            .from("children")
+            .select("avatar_url")
+            .eq("parent_id", user.id)
+            .limit(8);
+          if (
+            children?.some((c) =>
+              isPixarGeneratedUrl(c.avatar_url as string | null),
+            )
+          ) {
+            onboardingCompleted = true;
+            void db
+              .from("users")
+              .update({
+                onboarding_completed: true,
+                onboarding_reset_mode: null,
+              })
+              .eq("id", user.id);
+          }
+        }
+      } catch {
+        /* ignore */
+      }
     }
-    redirect(profile?.role === "admin" ? "/app/admin" : "/app/parent");
+
+    redirect(
+      resolvePostAuthPath(
+        { role, onboardingCompleted },
+        String(formData.get("next") ?? ""),
+      ),
+    );
   }
 
   redirect("/app/parent");

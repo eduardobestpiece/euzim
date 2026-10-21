@@ -99,6 +99,7 @@ export function NewStoryForm({
   const [wordVolume, setWordVolume] = useState<WordVolume>(recommended);
   const [languageLevel, setLanguageLevel] = useState<LanguageLevel>("moderada");
   const [christianValues, setChristianValues] = useState<boolean | null>(null);
+  const [settingPreference, setSettingPreference] = useState("");
 
   const [withFriends, setWithFriends] = useState(false);
   const [friends, setFriends] = useState<FriendOption[]>([]);
@@ -428,6 +429,7 @@ export function NewStoryForm({
             wordTarget: WORD_VOLUME_TARGETS[wordVolume].words,
             languageLevel,
             christianValues: Boolean(christianValues),
+            settingPreference: settingPreference.trim() || undefined,
             answers: answersPayload,
             characterIds: Array.from(selectedIds).slice(0, MAX_CAST),
             protagonistId,
@@ -703,6 +705,28 @@ export function NewStoryForm({
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="settingPreference">
+                Ambiente específico?{" "}
+                <span className="font-normal text-muted-foreground">
+                  (opcional)
+                </span>
+              </Label>
+              <textarea
+                id="settingPreference"
+                value={settingPreference}
+                onChange={(e) => setSettingPreference(e.target.value)}
+                rows={2}
+                maxLength={280}
+                placeholder='Ex.: "parquinho de areia do condomínio", "quarto da Serena", "fazenda da vovó"'
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none ring-amber-600/30 placeholder:text-muted-foreground focus:ring-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se preencher, a história acontece nesse lugar. Se deixar em
+                branco, a IA escolhe o melhor ambiente para o tema.
+              </p>
             </div>
 
             <div className="space-y-2">

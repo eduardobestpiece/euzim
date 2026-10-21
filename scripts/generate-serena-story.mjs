@@ -16,9 +16,19 @@ const env = Object.fromEntries(
     }),
 );
 
-const OPENAI_KEY = env.OPENAI_API_KEY;
-const STORY_MODEL = env.OPENAI_STORY_MODEL || "gpt-4o";
-const IMAGE_MODEL = env.OPENAI_IMAGE_MODEL || "gpt-image-2";
+const OPENAI_KEY = env.OPENROUTER_API_KEY || env.OPENAI_API_KEY;
+const USE_OPENROUTER = Boolean(env.OPENROUTER_API_KEY);
+const AI_BASE = USE_OPENROUTER
+  ? "https://openrouter.ai/api/v1"
+  : "https://api.openai.com/v1";
+const STORY_MODEL =
+  env.OPENROUTER_STORY_MODEL ||
+  env.OPENAI_STORY_MODEL ||
+  (USE_OPENROUTER ? "anthropic/claude-sonnet-4.5" : "gpt-4o");
+const IMAGE_MODEL =
+  env.OPENROUTER_IMAGE_MODEL ||
+  env.OPENAI_IMAGE_MODEL ||
+  (USE_OPENROUTER ? "openai/gpt-image-2" : "gpt-image-2");
 const USER_ID = "1615adf6-fbe2-4caf-99f1-577915f5c7b9";
 const THEME =
   "Uma menina que tinha medo de moradores de rua e venceu esse medo com compaixão, coragem e amizade — profunda, com diálogos e parábolas leves, adequada a crianças.";
@@ -32,11 +42,17 @@ Escreva em português do Brasil. Protagonistas obrigatórios: Serena (criança) 
 História profunda, oral, com diálogos, analogias e arco completo. Sem violência. Empatia com pessoas em situação de rua.`;
 
 async function chatJson(system, user, temperature = 0.7) {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetch(`${AI_BASE}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENAI_KEY}`,
       "Content-Type": "application/json",
+      ...(USE_OPENROUTER
+        ? {
+            "HTTP-Referer": env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:5050",
+            "X-Title": "Euzim",
+          }
+        : {}),
     },
     body: JSON.stringify({
       model: STORY_MODEL,
@@ -74,6 +90,36 @@ async function prepare(bytes) {
 }
 
 async function imageEdit(prompt, images) {
+  if (USE_OPENROUTER) {
+    const body = {
+      model: IMAGE_MODEL,
+      prompt,
+      n: 1,
+      aspect_ratio: "1:1",
+      quality: "medium",
+      input_references: images.map((buf) => ({
+        type: "image_url",
+        image_url: {
+          url: `data:image/jpeg;base64,${buf.toString("base64")}`,
+        },
+      })),
+    };
+    const res = await fetch(`${AI_BASE}/images`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": env.NEXT_PUBLIC_APP_URL || "http://127.0.0.1:5050",
+        "X-Title": "Euzim",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(180000),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error?.message || `img ${res.status}`);
+    return Buffer.from(json.data[0].b64_json, "base64");
+  }
+
   const form = new FormData();
   form.set("model", IMAGE_MODEL);
   form.set("prompt", prompt);
@@ -86,7 +132,7 @@ async function imageEdit(prompt, images) {
       new File([buf], `ref-${i}.jpg`, { type: "image/jpeg" }),
     ),
   );
-  const res = await fetch("https://api.openai.com/v1/images/edits", {
+  const res = await fetch(`${AI_BASE}/images/edits`, {
     method: "POST",
     headers: { Authorization: `Bearer ${OPENAI_KEY}` },
     body: form,

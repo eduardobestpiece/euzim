@@ -3,12 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0 -p 5050",
+    "dev": "NODE_OPTIONS='--dns-result-order=ipv4first' next dev -H 0.0.0.0 -p 5050",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 5050",
+    "start": "NODE_OPTIONS='--dns-result-order=ipv4first' next start -H 0.0.0.0 -p 5050",
     "lint": "eslint"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^7.0.0",
+    "@stripe/stripe-js": "^10.1.0",
     "@supabase/server": "^1.9.2",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",

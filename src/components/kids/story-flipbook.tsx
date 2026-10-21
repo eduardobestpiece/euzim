@@ -11,7 +11,10 @@ import { ArrowLeft, Check, ChevronLeft, ChevronRight, Share2 } from "lucide-reac
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { Button } from "@/components/ui/button";
 import { QuizTherapy } from "@/components/kids/quiz-therapy";
-import { WallpaperDialog } from "@/components/parent/wallpaper-dialog";
+import {
+  PageFeedbackBar,
+  type PageFeedbackState,
+} from "@/components/kids/page-feedback-bar";
 import { useImagePalette } from "@/hooks/use-image-palette";
 import {
   paletteBackgroundStyle,
@@ -33,7 +36,7 @@ type Page = {
 export function StoryFlipbook({
   storyId,
   title,
-  pages,
+  pages: initialPages,
   questions,
   initialQuizScore,
   shareToken,
@@ -42,7 +45,9 @@ export function StoryFlipbook({
   backHref,
   backLabel = "Voltar para a biblioteca",
   showShare = false,
-  showWallpaper = true,
+  showWallpaper: _showWallpaper = false,
+  enablePageFeedback = false,
+  initialPageFeedback = [],
 }: {
   storyId: string;
   title: string;
@@ -56,16 +61,24 @@ export function StoryFlipbook({
   backHref?: string | null;
   backLabel?: string;
   showShare?: boolean;
-  /** Mostra botão Wallpaper (última página portrait). */
+  /** Deprecated: wallpaper sai pela biblioteca — mantido só por compat. */
   showWallpaper?: boolean;
+  /** Joinha / não gostei + regenerar imagem (dono da história). */
+  enablePageFeedback?: boolean;
+  initialPageFeedback?: { pageIndex: number; rating: "like" | "dislike"; comment: string | null }[];
 }) {
   const [index, setIndex] = useState(0);
+  const [pages, setPages] = useState(initialPages);
   const [shareState, setShareState] = useState<"idle" | "copied" | "shared">(
     "idle",
   );
   const textScrollRef = useRef<HTMLDivElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+
+  useEffect(() => {
+    setPages(initialPages);
+  }, [initialPages]);
 
   const quizIndex = pages.length;
   const hasQuiz = questions.length > 0;
@@ -132,8 +145,20 @@ export function StoryFlipbook({
   const nextDisabled =
     turn !== "idle" || isQuiz || (!hasQuiz && atLastStoryPage);
   const prevDisabled = turn !== "idle" || index === 0;
-  const wallpaperUrl =
-    [...pages].reverse().find((p) => p.imageUrl)?.imageUrl || "";
+  const feedbackByPage = new Map<number, PageFeedbackState>(
+    initialPageFeedback.map((f) => [
+      f.pageIndex,
+      { rating: f.rating, comment: f.comment },
+    ]),
+  );
+
+  function onImageReplaced(pageIndex: number, imageUrl: string) {
+    setPages((prev) =>
+      prev.map((p) =>
+        p.pageIndex === pageIndex ? { ...p, imageUrl } : p,
+      ),
+    );
+  }
 
   return (
     <div
@@ -276,62 +301,70 @@ export function StoryFlipbook({
                   {page.text}
                 </p>
 
-                {/* Última página: CTA wallpaper imediatamente acima de Anterior/Quiz */}
-                {atLastStoryPage && showWallpaper && wallpaperUrl ? (
-                  <div className="mt-6 space-y-3">
-                    <WallpaperDialog
-                      imageUrl={wallpaperUrl}
-                      title={title}
-                      triggerLabel="Baixar wallpaper do celular"
-                      variant="default"
-                      size="default"
-                      triggerClassName="font-story-body h-11 w-full border-0 text-base font-semibold shadow-md"
-                      triggerStyle={{
-                        background: palette.accent,
-                        color: palette.paper,
-                      }}
-                    />
-                    <p
-                      className="text-center font-story-body text-xs"
-                      style={{ color: palette.textMuted }}
-                    >
-                      Última página em retrato — ver e salvar no celular
-                    </p>
-                  </div>
-                ) : null}
+                {(() => {
+                  const navControls = (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="font-story-body h-8 gap-1 border-0 px-2.5 shadow-sm"
+                        style={{
+                          background: palette.soft,
+                          color: palette.text,
+                        }}
+                        disabled={prevDisabled}
+                        onClick={goPrev}
+                      >
+                        <ChevronLeft className="size-4" />
+                        <span className="hidden sm:inline">Anterior</span>
+                      </Button>
+                      <p
+                        className="font-story-body min-w-[3.25rem] text-center text-xs font-bold tracking-[0.14em] uppercase"
+                        style={{ color: palette.textMuted }}
+                      >
+                        {index + 1} / {pages.length}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="font-story-body h-8 gap-1 border-0 px-2.5 shadow-md"
+                        style={{
+                          background: palette.deep,
+                          color: palette.paper,
+                        }}
+                        onClick={goNext}
+                        disabled={nextDisabled && !hasQuiz}
+                      >
+                        <span className="hidden sm:inline">
+                          {atLastStoryPage && hasQuiz ? "Quiz" : "Próxima"}
+                        </span>
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </>
+                  );
 
-                <div className="mt-6 flex items-center justify-between gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="font-story-body gap-1 border-0 shadow-sm"
-                    style={{
-                      background: palette.soft,
-                      color: palette.text,
-                    }}
-                    disabled={prevDisabled}
-                    onClick={goPrev}
-                  >
-                    <ChevronLeft className="size-4" />
-                    Anterior
-                  </Button>
-                  <p
-                    className="font-story-body text-xs font-bold tracking-[0.18em] uppercase"
-                    style={{ color: palette.textMuted }}
-                  >
-                    {index + 1} / {pages.length}
-                  </p>
-                  <Button
-                    type="button"
-                    className="font-story-body gap-1 border-0 shadow-md"
-                    style={{ background: palette.deep, color: palette.paper }}
-                    onClick={goNext}
-                    disabled={nextDisabled && !hasQuiz}
-                  >
-                    {atLastStoryPage && hasQuiz ? "Quiz" : "Próxima"}
-                    <ChevronRight className="size-4" />
-                  </Button>
-                </div>
+                  if (enablePageFeedback) {
+                    return (
+                      <PageFeedbackBar
+                        compact
+                        storyId={storyId}
+                        pageIndex={page.pageIndex}
+                        imageUrl={page.imageUrl}
+                        initial={feedbackByPage.get(page.pageIndex) ?? null}
+                        palette={palette}
+                        onImageReplaced={onImageReplaced}
+                        toolbarEnd={navControls}
+                      />
+                    );
+                  }
+
+                  return (
+                    <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+                      {navControls}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </PageTurnStage>

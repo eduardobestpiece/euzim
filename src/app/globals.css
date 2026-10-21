@@ -1451,8 +1451,8 @@ h2 .inline-brand,
 
 @media (min-width: 800px) {
   .landing-offer-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.25rem;
   }
 }
 
@@ -1474,7 +1474,8 @@ h2 .inline-brand,
 }
 
 .landing-offer-card.is-starter,
-.landing-offer-card.is-family {
+.landing-offer-card.is-family,
+.landing-offer-card.is-plus {
   background:
     linear-gradient(165deg, #fffdf8 0%, #f8f5ff 55%, #fff8ef 100%);
 }

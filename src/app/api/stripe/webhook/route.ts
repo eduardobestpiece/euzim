@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import {
   getStripeWebhookSecret,
+  getStripeMode,
   isStripeSecretValid,
   isStripeWebhookConfigured,
   describeStripeKeyIssue,
+  stripeModeLabel,
 } from "@/lib/stripe/config";
 import { getStripe } from "@/lib/stripe/client";
 import {
@@ -12,7 +14,97 @@ import {
   fulfillExtraStory,
   fulfillSubscription,
 } from "@/lib/stripe/fulfillment";
+import { subscriptionPeriodEndIso } from "@/lib/stripe/subscription-period";
 import { grantReferralRewardOnFirstSubscription } from "@/lib/referral/rewards";
+import { fireTrackingEvent } from "@/lib/tracking/dispatch";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  customAvatarPriceCents,
+  extraStoryForPlan,
+  resolveCharacterPack,
+  resolveStoryPlan,
+} from "@/lib/billing/plans";
+
+async function trackPurchaseFromSession(session: Stripe.Checkout.Session) {
+  if (session.payment_status && session.payment_status !== "paid") return;
+
+  const userId =
+    session.metadata?.supabase_user_id || session.client_reference_id || null;
+  if (!userId) return;
+
+  const kind = session.metadata?.kind;
+  let product = "Euzim";
+  let planId = session.metadata?.plan_id || null;
+  let value =
+    typeof session.amount_total === "number"
+      ? session.amount_total / 100
+      : null;
+
+  if (kind === "subscription" || session.mode === "subscription") {
+    const plan = resolveStoryPlan(planId || "family");
+    if (plan) {
+      product = plan.name;
+      planId = plan.planId;
+      value = value ?? plan.priceBrl;
+    }
+  } else if (kind === "extra_story") {
+    const extra = resolveStoryPlan(planId || "") ||
+      extraStoryForPlan(session.metadata?.for_plan);
+    product = extra.name;
+    planId = extra.planId;
+    value = value ?? extra.priceBrl;
+  } else if (kind === "character_pack") {
+    const pack = resolveCharacterPack(session.metadata?.pack_id || "");
+    if (pack) {
+      product = pack.name;
+      planId = pack.id;
+      value = value ?? pack.priceBrl;
+    }
+  } else if (kind === "custom_avatars") {
+    const count = Number.parseInt(session.metadata?.characters || "0", 10);
+    product = `${count} avatares`;
+    planId = `custom_${count}`;
+    const cents = customAvatarPriceCents(count);
+    value = value ?? (cents != null ? cents / 100 : null);
+  }
+
+  let email =
+    session.customer_details?.email ||
+    session.customer_email ||
+    null;
+  let fullName = session.customer_details?.name || null;
+  let phone = session.customer_details?.phone || null;
+
+  const admin = createAdminClient();
+  if (admin) {
+    const { data } = await admin
+      .from("users")
+      .select("email, full_name, phone")
+      .eq("id", userId)
+      .maybeSingle();
+    if (data) {
+      email = email || data.email;
+      fullName = fullName || data.full_name;
+      phone = phone || data.phone;
+    }
+  }
+
+  fireTrackingEvent({
+    event: "Purchase",
+    eventId: `purchase_${session.id}`,
+    user: { userId, email, fullName, phone },
+    commerce: {
+      product,
+      planId,
+      value,
+      currency: (session.currency || "brl").toUpperCase(),
+      stripeSessionId: session.id,
+      contents: planId
+        ? [{ id: planId, quantity: 1, item_price: value ?? undefined }]
+        : undefined,
+    },
+  });
+}
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId =
@@ -22,7 +114,27 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const kind = session.metadata?.kind;
   if (kind === "subscription" || session.mode === "subscription") {
     const planId = session.metadata?.plan_id || "family";
-    const result = await fulfillSubscription(userId, planId);
+    let stripeSubscriptionId: string | null = null;
+    let stripeCurrentPeriodEnd: string | null = null;
+    const subRef = session.subscription;
+    const subId =
+      typeof subRef === "string" ? subRef : subRef?.id ?? null;
+    if (subId) {
+      stripeSubscriptionId = subId;
+      try {
+        const stripe = getStripe();
+        if (stripe) {
+          const sub = await stripe.subscriptions.retrieve(subId);
+          stripeCurrentPeriodEnd = subscriptionPeriodEndIso(sub);
+        }
+      } catch {
+        /* best-effort */
+      }
+    }
+    const result = await fulfillSubscription(userId, planId, {
+      stripeSubscriptionId,
+      stripeCurrentPeriodEnd,
+    });
     // Só 1ª assinatura (idempotente via referral_rewarded_at / unique referee)
     const referral = result.ok
       ? await grantReferralRewardOnFirstSubscription({
@@ -30,20 +142,27 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           planId,
         })
       : { ok: false, skipped: true };
+    if (result.ok) await trackPurchaseFromSession(session);
     return { ...result, referral };
   }
   if (kind === "extra_story") {
-    return fulfillExtraStory(userId);
+    const result = await fulfillExtraStory(userId);
+    if (result.ok) await trackPurchaseFromSession(session);
+    return result;
   }
   if (kind === "custom_avatars") {
     const count = Number.parseInt(session.metadata?.characters || "0", 10);
     if (!count) return { ok: false, error: "characters ausente" };
-    return fulfillCharacterPack(userId, "custom", count);
+    const result = await fulfillCharacterPack(userId, "custom", count);
+    if (result.ok) await trackPurchaseFromSession(session);
+    return result;
   }
   if (kind === "character_pack") {
     const packId = session.metadata?.pack_id;
     if (!packId) return { ok: false, error: "pack_id ausente" };
-    return fulfillCharacterPack(userId, packId);
+    const result = await fulfillCharacterPack(userId, packId);
+    if (result.ok) await trackPurchaseFromSession(session);
+    return result;
   }
   return { skipped: true, reason: "unknown kind" };
 }
@@ -63,9 +182,16 @@ export async function POST(request: Request) {
   if (!isStripeWebhookConfigured()) {
     return NextResponse.json(
       {
-        error: "STRIPE_WEBHOOK_SECRET ausente ou inválido (whsec_…)",
+        error:
+          getStripeMode() === "test"
+            ? "STRIPE_WEBHOOK_SECRET_TEST ausente ou inválido (whsec_…)"
+            : "STRIPE_WEBHOOK_SECRET ausente ou inválido (whsec_…)",
         ready: false,
-        hint: "Configure o endpoint /api/stripe/webhook no Dashboard Stripe e cole o signing secret.",
+        mode: getStripeMode(),
+        hint:
+          getStripeMode() === "test"
+            ? "Local: stripe listen --forward-to localhost:5050/api/stripe/webhook e cole whsec_ em STRIPE_WEBHOOK_SECRET_TEST. Ver docs/stripe-listen-local.md"
+            : "Configure o endpoint /api/stripe/webhook no Dashboard Stripe e cole o signing secret.",
       },
       { status: 503 },
     );
@@ -120,6 +246,8 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     endpoint: "/api/stripe/webhook",
+    mode: getStripeMode(),
+    label: stripeModeLabel(),
     secretConfigured: isStripeWebhookConfigured(),
     stripeSecretValid: isStripeSecretValid(),
     keyIssue: describeStripeKeyIssue(),

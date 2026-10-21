@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/get-user";
-import { STORY_AUX_MODEL } from "@/lib/stories/storyteller-skill";
+import { modelForActivity } from "@/lib/ai/model-registry";
 import { meteredChatCompletion } from "@/lib/usage/openai-meter";
 
 export const maxDuration = 60;
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     category: "story_clarify",
     operation: "clarify_theme",
     body: {
-      model: STORY_AUX_MODEL,
+      model: modelForActivity("story_clarify"),
       temperature: 0.3,
       max_tokens: 350,
       response_format: { type: "json_object" },

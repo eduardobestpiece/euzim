@@ -769,7 +769,7 @@ export async function generateAvatarsAction(input?: {
   if (!childPixar.url || !friendPixar.url) {
     return {
       error:
-        "Não foi possível gerar os avatares. Confira OPENAI_API_KEY e as fotos enviadas.",
+        "Não foi possível gerar os avatares. Confira OPENROUTER_API_KEY e as fotos enviadas.",
     };
   }
 

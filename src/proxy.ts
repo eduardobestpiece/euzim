@@ -9,7 +9,10 @@ import {
   referralCookieOptions,
 } from "@/lib/referral/cookie";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
-import { updateSupabaseSession } from "@/lib/supabase/proxy";
+import {
+  hasSupabaseAuthCookie,
+  updateSupabaseSession,
+} from "@/lib/supabase/proxy";
 
 function decodeMockSession(raw: string | undefined): {
   onboardingCompleted: boolean;
@@ -89,12 +92,23 @@ export async function proxy(request: NextRequest) {
   let onboardingCompleted = false;
   let role = "parent";
 
-  if (isSupabaseConfigured()) {
+  // APIs validam auth no handler. Evita getUser() (rede) em heartbeat/poll/tracking
+  // — isso engolia a :5050 e derrubava o WebSocket do HMR.
+  const isApi = pathname.startsWith("/api/");
+  const isAuthPageEarly = pathname === "/login" || pathname === "/signup";
+  // Login/signup: zero rede Auth no proxy (página precisa abrir na hora).
+  const skipSessionRefresh = isApi || isAuthPageEarly;
+
+  if (isSupabaseConfigured() && !skipSessionRefresh) {
     const result = await updateSupabaseSession(request);
     response = result.response;
     hasUser = Boolean(result.user);
     // Perfil completo é validado nas páginas; no proxy só sessão.
-  } else {
+  } else if (isSupabaseConfigured() && isAuthPageEarly) {
+    response = NextResponse.next({ request: { headers: request.headers } });
+    // Só cookie — se já logado, redireciona sem bater no GoTrue.
+    hasUser = hasSupabaseAuthCookie(request);
+  } else if (!isSupabaseConfigured()) {
     response = NextResponse.next({ request: { headers: request.headers } });
     const mock = decodeMockSession(
       request.cookies.get(MOCK_SESSION_COOKIE)?.value,
@@ -102,6 +116,8 @@ export async function proxy(request: NextRequest) {
     hasUser = Boolean(mock);
     onboardingCompleted = Boolean(mock?.onboardingCompleted);
     role = mock?.role ?? "parent";
+  } else {
+    response = NextResponse.next({ request: { headers: request.headers } });
   }
 
   // Referral last-click (antes dos redirects de auth)
@@ -129,10 +145,13 @@ export async function proxy(request: NextRequest) {
   }
 
   if (hasUser && isAuthPage) {
+    // Hub /app resolve admin vs parent vs onboarding com getCurrentUser.
     const url = request.nextUrl.clone();
-    url.pathname = onboardingCompleted || isSupabaseConfigured()
-      ? "/app/parent"
-      : "/onboarding";
+    if (isSupabaseConfigured()) {
+      url.pathname = "/app";
+    } else {
+      url.pathname = onboardingCompleted ? "/app/parent" : "/onboarding";
+    }
     return NextResponse.redirect(url);
   }
 
@@ -171,6 +190,11 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    /*
+     * Exclui estáticos + HMR. APIs ainda passam pelo proxy, mas sem getUser
+     * (ver isApi acima) — só páginas renovam sessão Supabase.
+     */
+    "/((?!_next/static|_next/image|_next/webpack-hmr|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };
+

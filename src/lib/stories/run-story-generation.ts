@@ -5,15 +5,18 @@ import { generateStoryPipeline } from "@/lib/stories/generate-pipeline";
 import { generateStoryPageImages } from "@/lib/stories/generate-story-images";
 import { generateStoryQuiz } from "@/lib/stories/generate-story-quiz";
 import { loadStoryCast, type CoPlayMember } from "@/lib/stories/story-cast";
+import { ensureCompanionVisualTraits } from "@/lib/stories/companion-traits";
+import { PLATFORM_BUILD } from "@/lib/platform-build";
 import {
   LANGUAGE_LEVELS,
+  STORY_AUX_MODEL,
+  STORY_TEXT_MODEL,
   STORY_TYPES,
   WORD_VOLUME_TARGETS,
   type LanguageLevel,
   type StoryType,
   type WordVolume,
 } from "@/lib/stories/storyteller-skill";
-import { PLATFORM_BUILD } from "@/lib/platform-build";
 import {
   readMockStories,
   writeMockStories,
@@ -36,6 +39,8 @@ export type GeneratePayload = {
   protagonistId?: string;
   /** Conta amiga (users.id) cujo elenco pode entrar na história. */
   friendParentId?: string;
+  /** Ambiente livre opcional (ex.: "parquinho de areia"). */
+  settingPreference?: string;
 };
 
 export type GenerateResult = {
@@ -108,6 +113,12 @@ export function parseGeneratePayload(body: Record<string, unknown>): {
   ) {
     payload.friendParentId = body.friendParentId.trim();
   }
+  if (
+    typeof body.settingPreference === "string" &&
+    body.settingPreference.trim()
+  ) {
+    payload.settingPreference = body.settingPreference.trim().slice(0, 280);
+  }
   return { payload };
 }
 
@@ -145,12 +156,17 @@ export async function runStoryGeneration(input: {
   };
 
   await notify("Preparando o elenco…");
-  const cast = await loadStoryCast(userId);
+  let cast = await loadStoryCast(userId);
   if (!cast) {
     return {
       ok: false,
       error: "Cadastre a criança no onboarding antes de gerar.",
     };
+  }
+  try {
+    cast = await ensureCompanionVisualTraits({ userId, cast });
+  } catch {
+    /* segue com lock atual */
   }
 
   let castNames: string[] | undefined;
@@ -204,6 +220,7 @@ export async function runStoryGeneration(input: {
         languageLevel: payload.languageLevel,
         christianValues: payload.christianValues,
         clarifyAnswers: payload.answers,
+        settingPreference: payload.settingPreference,
         castNames,
         protagonistName,
       },
@@ -309,8 +326,8 @@ export async function runStoryGeneration(input: {
           coPlayNames: castNames ?? [],
           moral: pipeline.moral,
           stamp: PLATFORM_BUILD,
-          auxModel: "gpt-4o-mini",
-          textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
+          auxModel: STORY_AUX_MODEL,
+          textModel: STORY_TEXT_MODEL,
           jobId: input.jobId ?? null,
           generationKey: storyKey,
         },
@@ -352,8 +369,8 @@ export async function runStoryGeneration(input: {
               coPlayNames: castNames ?? [],
               moral: pipeline.moral,
               stamp: PLATFORM_BUILD,
-              auxModel: "gpt-4o-mini",
-              textModel: process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o",
+              auxModel: STORY_AUX_MODEL,
+              textModel: STORY_TEXT_MODEL,
               jobId: input.jobId ?? null,
               generationKey: storyKey,
               estimatedUsd: costs.usd,

@@ -118,18 +118,38 @@ export async function processStoryJob(jobId: string): Promise<{
     }
   }
 
-  await client
+  // Claim atômico: só 1 worker passa de pending→running (evita after + /jobs/run
+  // gerarem 2 histórias no mesmo job — caso Tesouro Compartilhado).
+  const startedAt = new Date().toISOString();
+  let claimQuery = client
     .from("story_jobs")
     .update({
       status: "running",
-      started_at: new Date().toISOString(),
+      started_at: startedAt,
       progress: "Gerando…",
       error: null,
     })
-    .eq("id", jobId);
+    .eq("id", jobId)
+    .eq("status", job.status === "running" ? "running" : "pending");
 
-  const payload = (job.payload ?? {}) as GeneratePayload;
-  if (!payload.theme) payload.theme = job.theme;
+  // Reclaim só se o running anterior estiver stale (>8 min).
+  if (job.status === "running" && job.started_at) {
+    claimQuery = claimQuery.lt("started_at", new Date(Date.now() - 8 * 60_000).toISOString());
+  }
+
+  const { data: claimed } = await claimQuery.select("id, payload, theme").maybeSingle();
+
+  if (!claimed) {
+    const { data: again } = await client
+      .from("story_jobs")
+      .select("status")
+      .eq("id", jobId)
+      .maybeSingle();
+    return { ok: true, status: again?.status ?? "running" };
+  }
+
+  const payload = (claimed.payload ?? job.payload ?? {}) as GeneratePayload;
+  if (!payload.theme) payload.theme = claimed.theme || job.theme;
 
   try {
     const result = await runWithUsageContext({ jobId }, () =>

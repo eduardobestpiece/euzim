@@ -1,3 +1,4 @@
+import { modelForActivity } from "@/lib/ai/model-registry";
 /**
  * Skill do Contador Sábio  -  base de estilo, ética e craft para histórias infantis.
  * Usada como system prompt nas etapas de rascunho, revisão e fracionamento.
@@ -87,15 +88,55 @@ Nunca sacrifique clareza oral nem invente detalhes visuais que contradigam o ava
   mostre apenas o CORPO (de costas, ombro, fora de foco, rosto virado/oculto).
 - Só mostre o rosto de pai/mãe/irmão se existir avatar correspondente na plataforma.
 - A criança protagonista e o amigo (pet/brinquedo) SEMPRE podem mostrar o rosto (têm avatar).
+
+## Personagens secundários (ANTI-CLONE — CRÍTICO)
+- Toda criança/NPC que NÃO seja a protagonista DEVE ter aparência ÚNICA e claramente distinta:
+  cabelo (cor/comprimento/estilo), roupa, traços faciais e, se couber, tom de pele diferente.
+- NUNCA descreva nem ilustrações que façam o amigo novo parecer gêmeo/clone da protagonista.
+- Assim que um NPC ganha nome (ex.: Lívia), MANTENHA a mesma aparência em TODOS os atos seguintes.
+- No texto e nos image_prompts, cite 2–3 traços fixos do NPC (ex.: "cabelo cacheado curto castanho-claro, vestido amarelo").
+
+## Ambiente e escala (consistência)
+- Se a história começa num parquinho/caixa de areia, MANTENHA esse ambiente (ou transição clara).
+- Castelos de areia, brinquedos e cenário devem ter escala infantil coerente — não "explodir"
+  de um castelinho de balde para uma fortaleza monumental sem o texto justificar.
+- Se os pais pedirem um ambiente específico (settingPreference), USE-O em toda a trama.
+- Escola realista (BR): recreio = pátio, bancos, quadra, escorregador/brinquedos tipicos —
+  NÃO invente “caixa de areia / castelo de areia” na escola a menos que os pais peçam
+  explicitamente esse ambiente.
+
+## Amigo pet/brinquedo (fidelidade ao avatar — prioridade máxima)
+- O companheiro cadastrado (nome + avatar Pixar) é a ÚNICA aparência permitida.
+- SPECIES LOCK: traits/avatar vencem a prosa. Se traits dizem dog/cão e o rascunho
+  escrever "macaco" ou "coelho", IGNORE a prosa e use a espécie dos traits.
+- Descreva e ilustre EXATAMENTE a espécie/cores/forma do avatar — nunca invente
+  coelho, urso, macaco ou pelúcia genérica "parecida".
+- PROIBIDO no texto chamar o companheiro de "coelhinho", "coelho", "ursinho", "macaco"
+  se o avatar for outra espécie (ex.: Bingo = cachorrinho conforme traits).
+- Prefira o nome próprio ("Bingo") + 1 traço visual do avatar.
+- Se o avatar do usuário parece um personagem conhecido (ex.: chama-se Bingo),
+  AINDA ASSIM use o avatar dele: é a referência oficial desta história.
+
+## Roupa / uniforme (continuidade do dia)
+- No mesmo dia escolar (pátio, recreio, sala, saída): MANTENHA a MESMA roupa/uniforme
+  da criança em TODOS os atos — não alterne vestido floral → camiseta rosa → outra roupa.
+- Só mude roupa se o texto mudar claramente de contexto (casa de manhã → escola;
+  pijama; dia seguinte com troca explícita).
+- Se a história for na escola, prefira um uniforme ou roupa escolar estável e cite-o.
+
+## Anatomia e ângulos (CRÍTICO nas image_prompts)
+- Crianças/adultos típicos: EXATAMENTE 2 braços e 2 pernas — sem membro extra, sem braço duplicado.
+- Poses devem ser anatomicamente possíveis: ombros/cotovelos coerentes com a orientação do tronco.
+- Vista de costas: braços saem dos ombros corretamente; proibido “abraço impossível” (tronco de costas + braço dobrado como se estivesse de frente).
+- Prefira poses claras a ângulos tortos que quebrem membros.
+- Exceção: avatar de criança com deficiência / cadeira de rodas / diferença de membros — respeitar o avatar.
 `.trim();
 
-/** Narrativa final (expansão densa)  -  modelo forte. */
-export const STORY_TEXT_MODEL =
-  process.env.OPENAI_STORY_MODEL?.trim() || "gpt-4o";
+/** Narrativa final (expansão densa) — modelo forte via OpenRouter. */
+export const STORY_TEXT_MODEL = modelForActivity("story_text");
 
 /** Auxiliar barato: clarify, quiz, outline, revisão leve, split. */
-export const STORY_AUX_MODEL =
-  process.env.OPENAI_STORY_AUX_MODEL?.trim() || "gpt-4o-mini";
+export const STORY_AUX_MODEL = modelForActivity("story_aux");
 
 export const MIN_STORY_PAGES = 5;
 export const MAX_STORY_PAGES = 10;

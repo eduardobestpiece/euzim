@@ -68,9 +68,11 @@ export function AppShellNav({
               size="header"
               href={kidsMode ? "/app/kids" : "/app/parent"}
             />
-            <span className="hidden truncate text-sm text-muted-foreground lg:inline">
-              / {title}
-            </span>
+            {title.trim() ? (
+              <span className="hidden truncate text-sm text-muted-foreground lg:inline">
+                / {title}
+              </span>
+            ) : null}
           </div>
 
           <nav className="hidden items-center gap-1 md:flex">

@@ -13,9 +13,11 @@ import {
   hashPrompt,
   normalizePromptForHash,
 } from "@/lib/stories/prompt-hash";
+import { modelForActivity } from "@/lib/ai/model-registry";
+import { imageViaOpenRouter } from "@/lib/ai/openrouter-client";
 import {
   estimateImageUsd,
-  recordUsageEvent,
+  recordImageUsage,
 } from "@/lib/usage/openai-meter";
 import {
   imageSizeForStoryPage,
@@ -23,17 +25,29 @@ import {
   STORY_SAFE_FRAME_HINT,
   type StoryImageSize,
 } from "@/lib/stories/image-formats";
+import {
+  feedbackBoostFromComment,
+  loadFeedbackLessons,
+} from "@/lib/stories/page-feedback";
+import { ensureCompanionVisualTraits } from "@/lib/stories/companion-traits";
+import { visionCheckStoryPage } from "@/lib/stories/vision-page-check";
+import { speciesLockPromptLine } from "@/lib/stories/story-cast";
 
-const IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL?.trim() || "gpt-image-2";
+const IMAGE_MODEL = modelForActivity("story_image");
 /** Qualidade intermediária = custo↓ sem matar fidelidade dos avatares. */
 const IMAGE_QUALITY =
+  (process.env.OPENROUTER_IMAGE_QUALITY?.trim() as "low" | "medium" | "high") ||
   (process.env.OPENAI_IMAGE_QUALITY?.trim() as "low" | "medium" | "high") ||
   "low";
 const REF_EDGE = 768;
+/** Cap de custo: no máximo 2 retries de unicidade (+ 1 last resort). */
 const MAX_UNIQUENESS_RETRIES = 2;
 
-function apiKey(): string | null {
-  return process.env.OPENAI_API_KEY?.trim() || null;
+function apiKeyPresent(): boolean {
+  return Boolean(
+    process.env.OPENROUTER_API_KEY?.trim() ||
+      process.env.OPENAI_API_KEY?.trim(),
+  );
 }
 
 async function fetchBuf(url: string): Promise<Buffer | null> {
@@ -90,28 +104,6 @@ async function loadRefs(cast: StoryCast): Promise<Buffer[]> {
   return out;
 }
 
-async function findCachedImageUrl(
-  userId: string,
-  promptHash: string,
-): Promise<string | null> {
-  const db = createAdminClient() ?? (await createClient());
-  if (!db) return null;
-  try {
-    const { data } = await db
-      .from("story_images")
-      .select("image_url, prompt_used")
-      .eq("parent_id", userId)
-      .like("prompt_used", `ph:${promptHash}|%`)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const url = data?.image_url;
-    return url && url.length > 8 ? url : null;
-  } catch {
-    return null;
-  }
-}
-
 async function callImageEdit(
   prompt: string,
   images: Buffer[],
@@ -119,62 +111,36 @@ async function callImageEdit(
   pageIndex?: number,
   size: StoryImageSize = "1536x1024",
 ): Promise<Buffer> {
-  const key = apiKey();
-  if (!key) throw new Error("OPENAI_API_KEY ausente.");
+  if (!apiKeyPresent()) throw new Error("OPENROUTER_API_KEY ausente.");
 
-  const form = new FormData();
-  form.set("model", IMAGE_MODEL);
-  form.set("prompt", prompt);
-  form.set("size", size);
-  form.set("quality", IMAGE_QUALITY);
-  form.set("output_format", "jpeg");
-  if (IMAGE_MODEL.includes("gpt-image-1")) {
-    form.set("input_fidelity", "high");
-  }
-  images.forEach((buf, i) => {
-    form.append(
-      "image[]",
-      new File([new Uint8Array(buf)], `ref-${i}.jpg`, { type: "image/jpeg" }),
-    );
+  const result = await imageViaOpenRouter({
+    model: IMAGE_MODEL,
+    prompt,
+    referenceImages: images,
+    size,
+    quality: IMAGE_QUALITY,
   });
+  if (!result.ok || !result.buffer) {
+    throw new Error(result.error || "IA images/edits falhou.");
+  }
 
-  const res = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-    signal: AbortSignal.timeout(180_000),
-  });
-  const json = (await res.json()) as {
-    error?: { message?: string };
-    data?: { b64_json?: string; url?: string }[];
-  };
-  if (!res.ok) {
-    throw new Error(json.error?.message || `OpenAI images/edits ${res.status}`);
-  }
-  // low ≈ custo OpenAI de edits 1536×1024 (antes 0.5 subestimava vs fatura real)
   const qualityMul =
     IMAGE_QUALITY === "low" ? 0.65 : IMAGE_QUALITY === "high" ? 1.5 : 1;
-  await recordUsageEvent({
+  await recordImageUsage({
     userId,
     category: "story_image",
     model: IMAGE_MODEL,
     operation:
       size === "1024x1536" ? "story_wallpaper_image" : "story_page_image",
     estimatedUsd: estimateImageUsd(IMAGE_MODEL, 1) * qualityMul,
+    nativeCostUsd: result.nativeCostUsd,
     meta: {
       pageIndex: pageIndex ?? null,
       quality: IMAGE_QUALITY,
       size,
     },
   });
-  const b64 = json.data?.[0]?.b64_json;
-  if (b64) return Buffer.from(b64, "base64");
-  const url = json.data?.[0]?.url;
-  if (url) {
-    const remote = await fetchBuf(url);
-    if (remote) return remote;
-  }
-  throw new Error("Resposta da OpenAI sem imagem.");
+  return result.buffer;
 }
 
 async function uploadStoryJpeg(input: {
@@ -223,6 +189,11 @@ function scenePrompt(
   totalPages: number,
   previousSummaries: string[],
   retryBoost = 0,
+  extras?: {
+    learnedRules?: string;
+    dislikeFix?: string;
+    pageSalt?: string;
+  },
 ): string {
   const base =
     page.imagePrompt?.trim() ||
@@ -243,9 +214,10 @@ function scenePrompt(
     : "";
   const wardrobeHint = page.imagePrompt?.includes("WARDROBE OUTFIT")
     ? [
-        `WARDROBE RULE: dress "${cast.childName}" in the WARDROBE OUTFIT specified for THIS act.`,
+        `WARDROBE RULE: dress "${cast.childName}" EXACTLY in the WARDROBE OUTFIT specified for THIS act.`,
         `Reference images are for FACE, HAIR, BODY SHAPE and Pixar identity ONLY — do NOT copy the default shirt/clothes from the turnaround sheet.`,
-        `If the story beat is park/outdoors, use outdoor clothes (and hat if locked); if bedtime, pajamas; if visits/snack, a different casual outfit — clothing must match the scene text.`,
+        `If continuity says keep/same outfit, do NOT invent a different dress or shirt color.`,
+        `School-day acts (patio/recess/classroom): keep the SAME school outfit across pages — never swap floral dress ↔ pink tee ↔ other casual mid-day.`,
       ].join(" ")
     : [
         `WARDROBE RULE: clothing must match this story beat/scene, not the default outfit on the avatar reference sheet.`,
@@ -256,8 +228,13 @@ function scenePrompt(
     base,
     continuityHint,
     wardrobeHint,
+    extras?.learnedRules || "",
+    extras?.dislikeFix || "",
+    extras?.pageSalt
+      ? `PAGE UNIQUE ID: ${extras.pageSalt} — this frame must be visually unique to this page.`
+      : "",
     `Mandatory camera: ${shot}.`,
-    `This is beat ${pageIndex + 1} of ${totalPages} — unique composition required.`,
+    `This is beat ${pageIndex + 1} of ${totalPages} — unique composition required. NEVER reuse a previous page's framing or composition.`,
     avoid,
     uniqueness,
     `Walt Disney / Pixar quality 3D animated cinematic still.`,
@@ -267,6 +244,20 @@ function scenePrompt(
     `Preserve Pixar face, hair, skin tone, and body identity from the references with high fidelity.`,
     `Do NOT lock clothing to the reference sheet blouse — change outfit when the story context changes.`,
     `Do not invent avatar face/hair details that contradict the reference sheets.`,
+    `ANTI-CLONE RULE (CRITICAL): any OTHER child/NPC in the frame MUST look clearly different from "${cast.childName}" — different hair color OR length/style, different clothes colors, different face shape. NEVER twin/clone the protagonist.`,
+    `If NPC NOTES / LOCKED NPC APPEARANCE is in the prompt, obey it exactly across this beat.`,
+    speciesLockPromptLine(cast),
+    cast.companionVisualLock ||
+      `COMPANION FIDELITY: "${cast.friendName}" must match the companion avatar reference (species, colors, shape) EXACTLY — never replace with a generic rabbit/bear/plush.`,
+    `ENVIRONMENT SCALE: keep the same location scale as the story beat (e.g. a normal sandbox sandcastle stays child-sized — do not magically enlarge into a monumental fortress unless the text says so).`,
+    `HARD UNIQUE FRAME: this still must NOT look like any previous page — change camera, pose, foreground props, and partial layout even if the location is the same park.`,
+    [
+      `ANATOMY LOCK (CRITICAL): every able-bodied human/child has EXACTLY 2 arms and 2 legs — never 3 arms, never duplicated limbs, never melted extra hands.`,
+      `Joints must be physically plausible: elbows/shoulders connect correctly for the body orientation.`,
+      `If the character is seen from the BACK, arms wrap naturally from the back view — NEVER bend an arm as if the torso were facing the camera while the head/back face away (no impossible over-the-shoulder hug anatomy).`,
+      `Prefer clear, readable poses over twisted angles that break limbs.`,
+      `EXCEPTION only if the character avatar is explicitly a child with disability / wheelchair / limb difference — then respect that avatar; otherwise assume typical anatomy.`,
+    ].join(" "),
     familyFaceRule(cast),
     isWallpaperStoryPage(pageIndex, totalPages)
       ? [
@@ -287,7 +278,8 @@ export function promptUsedTag(promptHash: string, prompt: string): string {
 
 /**
  * Gera 1 imagem Pixar por página (qualidade intermediária).
- * Reusa URL se hash de prompt idêntico; rejeita quase-duplicatas via dHash.
+ * Sem cache entre páginas; dHash + máx. 2 retries. Vision QA NÃO roda aqui
+ * (só em regenerate / Não gostei — ver regenerateStoryPageImage).
  */
 export async function generateStoryPageImages(input: {
   userId: string;
@@ -301,52 +293,32 @@ export async function generateStoryPageImages(input: {
   const out: GeneratedPage[] = [];
   const hashes: string[] = [];
   const framingNotes: string[] = [];
+  const usedUrls = new Set<string>();
   const names = [input.cast.childName, input.cast.friendName];
+  const lessons = await loadFeedbackLessons(input.userId);
 
   for (let i = 0; i < input.pages.length; i++) {
     const page = input.pages[i];
     let imageUrl = page.imageUrl || "";
     let promptUsed = "";
     try {
-      if (apiKey() && refs.length > 0) {
-        const basePrompt = scenePrompt(
-          input.cast,
-          page,
-          input.storyTitle,
-          i,
-          input.pages.length,
-          framingNotes,
-          0,
-        );
-        const ph = hashPrompt(normalizePromptForHash(basePrompt, names));
-
-        // Cache: prompt hash idêntico → reusa URL (sem nova chamada OpenAI)
-        const cached = await findCachedImageUrl(input.userId, ph);
-        if (cached) {
-          // Ainda checa dHash visual se já temos bytes… mas só temos URL.
-          // Evita reuso se a mesma URL já foi usada nesta história (anti-repeat).
-          const alreadyInStory = out.some((p) => p.imageUrl === cached);
-          if (!alreadyInStory) {
-            imageUrl = cached;
-            promptUsed = promptUsedTag(ph, basePrompt);
-            framingNotes.push(`beat${i + 1}:cache-hit`);
-            out.push({
-              ...page,
-              imageUrl,
-              imagePrompt: page.imagePrompt
-                ? `${promptUsed} :: ${page.imagePrompt}`
-                : promptUsed,
-            });
-            input.onProgress?.(i + 1, input.pages.length);
-            continue;
-          }
-        }
-
+      if (apiKeyPresent() && refs.length > 0) {
+        const pageSalt = `${input.storyKey}-p${i}`;
+        const promptExtras = {
+          learnedRules: lessons.imageRules,
+          pageSalt,
+        };
+        const size = imageSizeForStoryPage(i, input.pages.length);
         let jpeg: Buffer | null = null;
         let chosenHash = "";
-        let usedPrompt = basePrompt;
-        const size = imageSizeForStoryPage(i, input.pages.length);
+        let usedPrompt = "";
+        let uniqFix = "";
+
         for (let attempt = 0; attempt <= MAX_UNIQUENESS_RETRIES; attempt++) {
+          const extras = {
+            ...promptExtras,
+            dislikeFix: uniqFix || undefined,
+          };
           const prompt = scenePrompt(
             input.cast,
             page,
@@ -355,6 +327,7 @@ export async function generateStoryPageImages(input: {
             input.pages.length,
             framingNotes,
             attempt,
+            extras,
           );
           usedPrompt = prompt;
           const candidate = await callImageEdit(
@@ -365,23 +338,70 @@ export async function generateStoryPageImages(input: {
             size,
           );
           const hash = await differenceHash(candidate);
-          if (
-            !isNearDuplicate(hash, hashes) ||
-            attempt === MAX_UNIQUENESS_RETRIES
-          ) {
-            jpeg = candidate;
-            chosenHash = hash;
-            break;
+          if (isNearDuplicate(hash, hashes)) {
+            console.warn(
+              `[story-images] near-duplicate rejected page=${i} attempt=${attempt}`,
+            );
+            uniqFix =
+              "FORCE UNIQUE FRAME: previous attempt looked like an earlier page — change camera, pose, foreground props, and composition completely.";
+            continue;
           }
+
+          const tempUrl = await uploadStoryJpeg({
+            userId: input.userId,
+            storyKey: input.storyKey,
+            pageIndex: page.pageIndex,
+            jpeg: candidate,
+            attempt: attempt + 100 + i * 10,
+          });
+          if (usedUrls.has(tempUrl)) {
+            uniqFix =
+              "Previous upload URL already used in this story — regenerate a brand-new unique still.";
+            continue;
+          }
+
+          jpeg = candidate;
+          chosenHash = hash;
+          imageUrl = tempUrl;
+          break;
         }
-        if (jpeg) {
+
+        if (!jpeg) {
+          const prompt = scenePrompt(
+            input.cast,
+            page,
+            input.storyTitle,
+            i,
+            input.pages.length,
+            framingNotes,
+            MAX_UNIQUENESS_RETRIES + 2,
+            {
+              ...promptExtras,
+              dislikeFix:
+                "LAST RESORT UNIQUE: brand-new camera and props; coherent anatomy; outfit from WARDROBE; match page text only.",
+            },
+          );
+          usedPrompt = prompt;
+          const candidate = await callImageEdit(
+            prompt,
+            refs.slice(0, 4),
+            input.userId,
+            page.pageIndex,
+            size,
+          );
+          jpeg = candidate;
+          chosenHash = await differenceHash(candidate);
           imageUrl = await uploadStoryJpeg({
             userId: input.userId,
             storyKey: input.storyKey,
             pageIndex: page.pageIndex,
             jpeg,
-            attempt: hashes.length,
+            attempt: Date.now() % 10_000,
           });
+        }
+
+        if (jpeg && imageUrl) {
+          usedUrls.add(imageUrl);
           hashes.push(chosenHash);
           framingNotes.push(`beat${i + 1}:${shotForPage(i).slice(0, 48)}`);
           const finalHash = hashPrompt(
@@ -404,4 +424,108 @@ export async function generateStoryPageImages(input: {
   }
 
   return out;
+}
+
+/**
+ * Regenera uma única página com boost do feedback do usuário + aprendizados.
+ */
+export async function regenerateStoryPageImage(input: {
+  userId: string;
+  storyKey: string;
+  storyTitle: string;
+  cast: StoryCast;
+  page: GeneratedPage;
+  pageIndex: number;
+  totalPages: number;
+  dislikeComment?: string | null;
+  avoidImageUrls?: string[];
+}): Promise<{ imageUrl: string; promptUsed: string } | null> {
+  if (!apiKeyPresent()) return null;
+  let cast = input.cast;
+  try {
+    cast = await ensureCompanionVisualTraits({
+      userId: input.userId,
+      cast,
+    });
+  } catch {
+    /* segue */
+  }
+  const refs = await loadRefs(cast);
+  if (refs.length === 0) return null;
+
+  const lessons = await loadFeedbackLessons(input.userId);
+  const names = [cast.childName, cast.friendName];
+  const size = imageSizeForStoryPage(input.pageIndex, input.totalPages);
+  const framingNotes = [
+    `regen-page-${input.pageIndex + 1}:force-new-composition`,
+  ];
+
+  async function renderOnce(dislikeFix: string): Promise<{
+    imageUrl: string;
+    promptUsed: string;
+  } | null> {
+    const extras = {
+      learnedRules: lessons.imageRules,
+      dislikeFix,
+    };
+    const prompt = scenePrompt(
+      cast,
+      input.page,
+      input.storyTitle,
+      input.pageIndex,
+      input.totalPages,
+      framingNotes,
+      3,
+      extras,
+    );
+    const jpeg = await callImageEdit(
+      prompt,
+      refs.slice(0, 4),
+      input.userId,
+      input.page.pageIndex,
+      size,
+    );
+    const imageUrl = await uploadStoryJpeg({
+      userId: input.userId,
+      storyKey: input.storyKey,
+      pageIndex: input.page.pageIndex,
+      jpeg,
+      attempt: Date.now() % 10_000,
+    });
+    const finalHash = hashPrompt(normalizePromptForHash(prompt, names));
+    return {
+      imageUrl,
+      promptUsed: promptUsedTag(finalHash, prompt),
+    };
+  }
+
+  const firstFix = feedbackBoostFromComment(input.dislikeComment);
+  let generated = await renderOnce(firstFix);
+  if (!generated) return null;
+
+  try {
+    const check = await visionCheckStoryPage({
+      userId: input.userId,
+      pageText: input.page.text || "",
+      imageUrl: generated.imageUrl,
+      companionName: cast.friendName,
+      companionLock: cast.companionVisualLock,
+    });
+    if (!check.ok) {
+      const retryFix = [
+        firstFix,
+        "VISION RETRY — previous image failed page-text match:",
+        check.fixHint || check.issues.join("; "),
+        "Redraw to match the page text location, people, and action exactly.",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const retry = await renderOnce(retryFix);
+      if (retry) generated = retry;
+    }
+  } catch {
+    /* mantém primeira imagem */
+  }
+
+  return generated;
 }

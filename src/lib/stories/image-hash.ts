@@ -30,7 +30,8 @@ export function hammingDistance(a: string, b: string): number {
 }
 
 /** Distância baixa = imagens visualmente muito parecidas. */
-export const DUPLICATE_HAMMING_THRESHOLD = 14;
+/** Mais estrito: 10 ainda deixava passar frames quase iguais entre páginas. */
+export const DUPLICATE_HAMMING_THRESHOLD = 7;
 
 export function isNearDuplicate(
   candidate: string,
@@ -52,6 +53,8 @@ export const UNIQUE_SHOTS = [
   "characters seated in conversation with asymmetric framing",
   "environmental storytelling: location dominates, characters mid-ground",
   "warm backlight silhouette moment with readable poses",
+  "dutch-tilt-free but dynamic diagonal composition with strong foreground prop",
+  "three-quarter tracking feel: characters mid-stride, motion implied",
 ] as const;
 
 export function shotForPage(pageIndex: number): string {

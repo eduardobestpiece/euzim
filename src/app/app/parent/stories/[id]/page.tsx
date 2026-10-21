@@ -6,6 +6,7 @@ import { StoryFlipbook } from "@/components/kids/story-flipbook";
 import { getCurrentUser } from "@/lib/auth/get-user";
 import { loadStoryForParent } from "@/lib/stories/load-story";
 import { getQuizProgress } from "@/lib/stories/games-store";
+import { loadPageFeedbackVotes } from "@/lib/stories/page-feedback";
 
 async function StoryReaderPageInner({ id }: { id: string }) {
   await connection();
@@ -16,6 +17,7 @@ async function StoryReaderPageInner({ id }: { id: string }) {
   if (!story) notFound();
 
   const progress = await getQuizProgress(story.id, user.id);
+  const pageFeedback = await loadPageFeedbackVotes(story.id, user.id);
 
   return (
     <StoryFlipbook
@@ -29,6 +31,8 @@ async function StoryReaderPageInner({ id }: { id: string }) {
       backHref="/app/parent"
       backLabel="Voltar para a biblioteca"
       showShare={false}
+      enablePageFeedback
+      initialPageFeedback={pageFeedback}
     />
   );
 }

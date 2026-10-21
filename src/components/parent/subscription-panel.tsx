@@ -13,9 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
-  EXTRA_STORY_PRODUCT,
-  FAMILY_SUBSCRIPTION,
-  STARTER_SUBSCRIPTION,
+  SUBSCRIPTION_PLANS,
+  extraStoryForPlan,
 } from "@/lib/billing/plans";
 import { formatBrl } from "@/lib/billing/character-packs";
 import {
@@ -24,6 +23,7 @@ import {
   startExtraStoryCheckoutAction,
   startPlanCheckoutAction,
 } from "@/lib/stripe/checkout-actions";
+import { goToCheckout } from "@/lib/stripe/go-checkout";
 
 export type BillingSnapshot = {
   subscriptionStatus?: string | null;
@@ -49,10 +49,7 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     setInfo(null);
     startTransition(async () => {
       const result = await startPlanCheckoutAction(planId);
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
+      if (goToCheckout(result)) return;
       if (result.error) setError(result.error);
       if (result.missingKeys?.length) {
         setInfo(`Keys faltando: ${result.missingKeys.join(" · ")}`);
@@ -65,10 +62,7 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     setInfo(null);
     startTransition(async () => {
       const result = await startExtraStoryCheckoutAction();
-      if (result.url) {
-        window.location.href = result.url;
-        return;
-      }
+      if (goToCheckout(result)) return;
       if (result.error) setError(result.error);
     });
   }
@@ -103,7 +97,8 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
     });
   }
 
-  const plans = [STARTER_SUBSCRIPTION, FAMILY_SUBSCRIPTION];
+  const plans = SUBSCRIPTION_PLANS;
+  const extra = extraStoryForPlan(billing.planId);
 
   return (
     <div className="space-y-6">
@@ -123,7 +118,7 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
         </p>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
         {plans.map((plan) => {
           const current = active && billing.planId === plan.planId;
           return (
@@ -184,20 +179,31 @@ export function SubscriptionPanel({ billing }: { billing: BillingSnapshot }) {
 
       <Card className="shadow-none">
         <CardHeader>
-          <CardTitle>{EXTRA_STORY_PRODUCT.name}</CardTitle>
-          <CardDescription>{EXTRA_STORY_PRODUCT.description}</CardDescription>
+          <CardTitle>{extra.name}</CardTitle>
+          <CardDescription>
+            {active
+              ? `Preço do seu plano (${billing.planId || "—"}): ${formatBrl(extra.priceBrl)} · 1 história`
+              : "Assine um plano para comprar história extra com o preço do seu tier."}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="font-heading text-2xl font-semibold">
-            {formatBrl(EXTRA_STORY_PRODUCT.priceBrl)}
+            {formatBrl(extra.priceBrl)}
             <span className="text-sm font-normal text-muted-foreground">
               {" "}
               · pagamento único
             </span>
           </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Aventureiros R$ 11,90 · Realizadores R$ 9,90 · Plus R$ 7,90
+          </p>
         </CardContent>
         <CardFooter>
-          <Button variant="secondary" onClick={buyExtra} disabled={pending}>
+          <Button
+            variant="secondary"
+            onClick={buyExtra}
+            disabled={pending || !active}
+          >
             Comprar história extra
           </Button>
         </CardFooter>

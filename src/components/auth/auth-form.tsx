@@ -78,6 +78,23 @@ export function AuthForm({
               />
             </div>
           ) : null}
+          {mode === "signup" ? (
+            <div className="space-y-2">
+              <Label htmlFor="phone">
+                Telefone{" "}
+                <span className="font-normal text-muted-foreground">
+                  (opcional)
+                </span>
+              </Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                placeholder="11999998888"
+              />
+            </div>
+          ) : null}
           <div className="space-y-2">
             <Label htmlFor="email">E-mail</Label>
             <Input
@@ -104,7 +121,9 @@ export function AuthForm({
           </div>
           {state.error ? (
             <p className="text-sm text-destructive" role="alert">
-              {state.error}
+              {/fetch failed/i.test(state.error)
+                ? "Não foi possível conectar ao servidor de login (rede/Supabase). Aguarde alguns segundos e tente de novo."
+                : state.error}
             </p>
           ) : null}
         </CardContent>
