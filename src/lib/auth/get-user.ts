@@ -7,6 +7,7 @@ import {
   readMockOnboarding,
   readMockSession,
 } from "@/lib/auth/mock-session";
+import { knownAccountForEmail } from "@/lib/auth/known-accounts";
 import {
   fetchProfileViaRest,
   hasPixarAvatarViaRest,
@@ -101,8 +102,11 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
     }
   }
 
+  const known = knownAccountForEmail(user.email);
   const role =
-    (profile?.role as "parent" | "admin" | undefined) ?? "parent";
+    (profile?.role as "parent" | "admin" | undefined) ||
+    known?.role ||
+    "parent";
 
   // Admin: nunca exige onboarding no app.
   if (role === "admin") {
@@ -117,6 +121,9 @@ async function getCurrentUserUncached(): Promise<AuthUser | null> {
   }
 
   let onboardingCompleted = Boolean(profile?.onboarding_completed);
+  if (!onboardingCompleted && known?.onboardingCompleted) {
+    onboardingCompleted = true;
+  }
 
   if (!onboardingCompleted) {
     try {

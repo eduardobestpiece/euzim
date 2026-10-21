@@ -17,6 +17,7 @@ import {
   fetchProfileViaRest,
   hasPixarAvatarViaRest,
 } from "@/lib/auth/profile-rest";
+import { knownAccountForEmail } from "@/lib/auth/known-accounts";
 import { resolvePostAuthPath } from "@/lib/auth/routing";
 import { finishAvatarOnboardingAction } from "@/lib/onboarding/actions";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
@@ -213,29 +214,36 @@ export async function signInAction(
   }
 
   if (!isSupabaseConfigured()) {
+    const known = knownAccountForEmail(email);
     const existing = await readMockSession();
     if (existing && existing.email === email) {
+      const role =
+        known?.role ||
+        (existing.role === "admin" ? "admin" : "parent");
+      const onboardingCompleted =
+        known?.onboardingCompleted ??
+        (Boolean(existing.onboardingCompleted) || role === "admin");
       redirect(
         resolvePostAuthPath(
-          {
-            role: existing.role === "admin" ? "admin" : "parent",
-            onboardingCompleted: Boolean(existing.onboardingCompleted),
-          },
+          { role, onboardingCompleted },
           String(formData.get("next") ?? ""),
         ),
       );
     }
 
-    const role = email.includes("admin") ? "admin" : "parent";
+    const role =
+      known?.role || (email.includes("admin") ? "admin" : "parent");
+    const onboardingCompleted =
+      known?.onboardingCompleted ?? role === "admin";
     await writeMockSession({
       id: createMockUserId(),
       email,
       role,
-      onboardingCompleted: role === "admin",
+      onboardingCompleted,
     });
     redirect(
       resolvePostAuthPath(
-        { role, onboardingCompleted: role === "admin" },
+        { role, onboardingCompleted },
         String(formData.get("next") ?? ""),
       ),
     );
@@ -285,9 +293,16 @@ export async function signInAction(
       }
     }
 
-    const role = (profile?.role as "admin" | "parent" | undefined) ?? "parent";
+    const known = knownAccountForEmail(email);
+    const role =
+      (profile?.role as "admin" | "parent" | undefined) ||
+      known?.role ||
+      "parent";
     let onboardingCompleted = Boolean(profile?.onboarding_completed);
     if (role === "admin") onboardingCompleted = true;
+    if (!onboardingCompleted && known?.onboardingCompleted) {
+      onboardingCompleted = true;
+    }
 
     if (!onboardingCompleted && role !== "admin") {
       try {
