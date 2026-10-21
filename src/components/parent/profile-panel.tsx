@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +26,7 @@ export type ProfileSnapshot = {
   cpf: string;
   storiesCount: number;
   charactersCount: number;
+  friendsCount: number;
 };
 
 export function ProfilePanel({
@@ -56,20 +58,10 @@ export function ProfilePanel({
 
   return (
     <div className="space-y-8">
-      <div className="space-y-1">
-        <h1 className="font-heading text-3xl font-semibold tracking-tight">
-          Perfil
-        </h1>
-        <p className="text-muted-foreground">
-          Dados da conta, senha e assinatura.
-        </p>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <Card className="shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Histórias</CardTitle>
-            <CardDescription>Total na biblioteca</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="font-heading text-3xl font-semibold">
@@ -80,7 +72,6 @@ export function ProfilePanel({
         <Card className="shadow-none">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Personagens</CardTitle>
-            <CardDescription>Avatares da família</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="font-heading text-3xl font-semibold">
@@ -88,6 +79,18 @@ export function ProfilePanel({
             </p>
           </CardContent>
         </Card>
+        <Link href="/app/social" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Card className="h-full shadow-none transition hover:border-foreground/40">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Amigos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="font-heading text-3xl font-semibold">
+                {profile.friendsCount}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <Card className="shadow-none">
