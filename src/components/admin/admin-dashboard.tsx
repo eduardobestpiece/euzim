@@ -31,7 +31,7 @@ import {
   PLAN_SOURCE_LABELS,
   type PlanSource,
 } from "@/lib/billing/plan-source";
-import type { PlanCatalogRow } from "@/lib/billing/plan-catalog";
+import type { PlanCatalogRow } from "@/lib/billing/plan-catalog-shared";
 import { SUBSCRIPTION_PLANS } from "@/lib/billing/plans";
 import { formatBrl } from "@/lib/billing/character-packs";
 

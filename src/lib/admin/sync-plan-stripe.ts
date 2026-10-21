@@ -1,7 +1,10 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import Stripe from "stripe";
-import type { PlanCatalogKey, PlanCatalogRow } from "@/lib/billing/plan-catalog";
+import type {
+  PlanCatalogKey,
+  PlanCatalogRow,
+} from "@/lib/billing/plan-catalog-shared";
 import {
   STRIPE_PRICE_IDS,
   STRIPE_PRODUCT_IDS,

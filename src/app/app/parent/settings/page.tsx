@@ -19,7 +19,7 @@ import {
   isStripeCheckoutReady,
   stripeMissingKeys,
 } from "@/lib/stripe/config";
-import { loadSubscriptionPlans } from "@/lib/billing/plans";
+import { loadSubscriptionPlans } from "@/lib/billing/plans-catalog-load";
 
 async function ParentSettingsPageInner() {
   await connection();

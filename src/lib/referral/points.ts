@@ -1,8 +1,8 @@
+import { getPlanCatalogRow } from "@/lib/billing/plan-catalog";
 import {
   avatarPointsCost,
-  getPlanCatalogRow,
   storyPointsCost,
-} from "@/lib/billing/plan-catalog";
+} from "@/lib/billing/plan-catalog-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**

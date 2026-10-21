@@ -6,15 +6,16 @@ import {
   EXTRA_STORY_PLUS,
   FAMILY_SUBSCRIPTION,
   customAvatarPriceCents,
-  extraStoryForPlan,
-  extraStoryForPlanAsync,
   packPriceCents,
   resolveCharacterPack,
   resolveStoryPlan,
   resolveSubscriptionPlan,
-  resolveSubscriptionPlanAsync,
   type StoryPlan,
 } from "@/lib/billing/plans";
+import {
+  extraStoryForPlanAsync,
+  resolveSubscriptionPlanAsync,
+} from "@/lib/billing/plans-catalog-load";
 import {
   resolveStripePriceId,
   type StripePriceKey,

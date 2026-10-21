@@ -3,8 +3,8 @@ import { MONTHLY_STORY_LIMIT } from "@/lib/billing/character-packs";
 import {
   FAMILY_SUBSCRIPTION,
   resolveSubscriptionPlan,
-  resolveSubscriptionPlanAsync,
 } from "@/lib/billing/plans";
+import { resolveSubscriptionPlanAsync } from "@/lib/billing/plans-catalog-load";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/config";

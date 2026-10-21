@@ -11,7 +11,7 @@ import {
 import {
   formatCentsBrl,
   type PlanCatalogRow,
-} from "@/lib/billing/plan-catalog";
+} from "@/lib/billing/plan-catalog-shared";
 
 function draftFromRow(row: PlanCatalogRow): PlanCatalogDraft {
   return {

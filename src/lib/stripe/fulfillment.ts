@@ -3,8 +3,8 @@ import {
   FAMILY_SUBSCRIPTION,
   resolveCharacterPack,
   resolveStoryPlan,
-  resolveSubscriptionPlanAsync,
 } from "@/lib/billing/plans";
+import { resolveSubscriptionPlanAsync } from "@/lib/billing/plans-catalog-load";
 import {
   planSourceFromStripeMode,
   type PlanSource,

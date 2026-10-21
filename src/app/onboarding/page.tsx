@@ -15,7 +15,7 @@ import { loadOnboardingBootstrap } from "@/lib/onboarding/load-reuse-state";
 import { ONBOARDING_BUILD } from "@/lib/onboarding/build";
 import { normalizeSecurityPin } from "@/lib/onboarding/pin-format";
 import { parseSelectedPlanId } from "@/lib/billing/selected-plan";
-import { loadSubscriptionPlans } from "@/lib/billing/plans";
+import { loadSubscriptionPlans } from "@/lib/billing/plans-catalog-load";
 import type { OnboardingState } from "@/lib/auth/types";
 
 /** Geração Pixar no fluxo pode passar de 60s. */

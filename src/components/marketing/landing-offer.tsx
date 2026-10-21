@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { BookOpen, Check, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getPlanCatalog } from "@/lib/billing/plan-catalog";
 import {
   formatCentsBrl,
-  getPlanCatalog,
   type PlanCatalogRow,
-} from "@/lib/billing/plan-catalog";
+} from "@/lib/billing/plan-catalog-shared";
 import { subscriptionPlansFromCatalog } from "@/lib/billing/plans-from-catalog";
 import type { StoryPlan } from "@/lib/billing/plans";
 import { signupPathForPlan } from "@/lib/billing/selected-plan";

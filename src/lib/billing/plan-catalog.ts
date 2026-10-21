@@ -1,3 +1,7 @@
+/**
+ * Fetch do catálogo no DB — SERVER ONLY.
+ * Client Components devem importar de plan-catalog-shared.ts.
+ */
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -5,102 +9,24 @@ import {
   STRIPE_PRODUCT_IDS,
 } from "@/lib/billing/stripe-price-ids";
 import { readStripeTestPriceMap } from "@/lib/billing/stripe-price-map";
+import {
+  DEFAULT_PLAN_CATALOG,
+  isPlanCatalogKey,
+  type PlanCatalogKey,
+  type PlanCatalogRow,
+} from "@/lib/billing/plan-catalog-shared";
 
-export type PlanCatalogKey = "starter" | "family" | "plus";
-
-export type PlanCatalogRow = {
-  planKey: PlanCatalogKey;
-  name: string;
-  priceCents: number;
-  priceBrl: number;
-  storiesPerMonth: number;
-  avatarsIncluded: number;
-  extraStoryCents: number;
-  extraAvatarCents: number;
-  giftPointsFirst: number;
-  giftPointsRecur: number;
-  stripePriceIdLive: string | null;
-  stripePriceIdTest: string | null;
-  stripeProductIdLive: string | null;
-  stripeProductIdTest: string | null;
-  description: string;
-  sortOrder: number;
-};
-
-/** Fallbacks = catálogo histórico (pré-Admin Planos). */
-export const DEFAULT_PLAN_CATALOG: PlanCatalogRow[] = [
-  {
-    planKey: "starter",
-    name: "Para Aventureiros",
-    priceCents: 2490,
-    priceBrl: 24.9,
-    storiesPerMonth: 2,
-    avatarsIncluded: 2,
-    extraStoryCents: 1190,
-    extraAvatarCents: 990,
-    giftPointsFirst: 2,
-    giftPointsRecur: 2,
-    stripePriceIdLive: STRIPE_PRICE_IDS.starter,
-    stripePriceIdTest: null,
-    stripeProductIdLive: STRIPE_PRODUCT_IDS.starter,
-    stripeProductIdTest: null,
-    description:
-      "2 personagens e 2 histórias por mês para começar a aventura.",
-    sortOrder: 1,
-  },
-  {
-    planKey: "family",
-    name: "Para Realizadores",
-    priceCents: 4990,
-    priceBrl: 49.9,
-    storiesPerMonth: 5,
-    avatarsIncluded: 2,
-    extraStoryCents: 990,
-    extraAvatarCents: 990,
-    giftPointsFirst: 4,
-    giftPointsRecur: 4,
-    stripePriceIdLive: STRIPE_PRICE_IDS.family,
-    stripePriceIdTest: null,
-    stripeProductIdLive: STRIPE_PRODUCT_IDS.family,
-    stripeProductIdTest: null,
-    description:
-      "2 avatares e 5 histórias por mês para criar com regularidade.",
-    sortOrder: 2,
-  },
-  {
-    planKey: "plus",
-    name: "Para Exploradores Plus",
-    priceCents: 7990,
-    priceBrl: 79.9,
-    storiesPerMonth: 10,
-    avatarsIncluded: 2,
-    extraStoryCents: 790,
-    extraAvatarCents: 990,
-    giftPointsFirst: 4,
-    giftPointsRecur: 4,
-    stripePriceIdLive: STRIPE_PRICE_IDS.plus,
-    stripePriceIdTest: null,
-    stripeProductIdLive: STRIPE_PRODUCT_IDS.plus,
-    stripeProductIdTest: null,
-    description: "2 avatares e 10 histórias por mês para criar sem freio.",
-    sortOrder: 3,
-  },
-];
-
-const POINTS_STORY = 1;
-const POINTS_AVATAR = 2;
-
-export function storyPointsCost(stories: number): number {
-  return Math.max(0, Math.floor(stories)) * POINTS_STORY;
-}
-
-export function avatarPointsCost(avatars: number): number {
-  return Math.max(0, Math.floor(avatars)) * POINTS_AVATAR;
-}
-
-export function isPlanCatalogKey(value: string): value is PlanCatalogKey {
-  return value === "starter" || value === "family" || value === "plus";
-}
+export type {
+  PlanCatalogKey,
+  PlanCatalogRow,
+} from "@/lib/billing/plan-catalog-shared";
+export {
+  DEFAULT_PLAN_CATALOG,
+  avatarPointsCost,
+  formatCentsBrl,
+  isPlanCatalogKey,
+  storyPointsCost,
+} from "@/lib/billing/plan-catalog-shared";
 
 function rowFromDb(raw: Record<string, unknown>): PlanCatalogRow | null {
   const key = String(raw.plan_key || "");
@@ -151,6 +77,7 @@ export function invalidatePlanCatalogCache() {
   cache = null;
 }
 
+/** Só Server Components / server actions / route handlers. */
 export async function getPlanCatalog(options?: {
   force?: boolean;
 }): Promise<PlanCatalogRow[]> {
@@ -197,11 +124,4 @@ export async function getPlanCatalogRow(
   if (!isPlanCatalogKey(planKey)) return null;
   const rows = await getPlanCatalog();
   return rows.find((r) => r.planKey === planKey) ?? null;
-}
-
-export function formatCentsBrl(cents: number): string {
-  return (cents / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 }

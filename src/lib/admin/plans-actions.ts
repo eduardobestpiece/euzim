@@ -6,10 +6,12 @@ import { syncPlansToStripe } from "@/lib/admin/sync-plan-stripe";
 import {
   getPlanCatalog,
   invalidatePlanCatalogCache,
+} from "@/lib/billing/plan-catalog";
+import {
   isPlanCatalogKey,
   type PlanCatalogKey,
   type PlanCatalogRow,
-} from "@/lib/billing/plan-catalog";
+} from "@/lib/billing/plan-catalog-shared";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type PlanCatalogDraft = {

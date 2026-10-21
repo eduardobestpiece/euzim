@@ -1,10 +1,14 @@
+/**
+ * Catálogo estático + helpers sync — seguro para Client Components.
+ * Para DB vivo: importar getPlanCatalog / loadSubscriptionPlans dos módulos server.
+ */
 import {
   CHARACTER_PACKS,
   EXTRA_AVATAR_UNIT_BRL,
   MONTHLY_STORY_LIMIT,
   priceForAvatarCount,
 } from "@/lib/billing/character-packs";
-import { DEFAULT_PLAN_CATALOG } from "@/lib/billing/plan-catalog";
+import { DEFAULT_PLAN_CATALOG } from "@/lib/billing/plan-catalog-shared";
 import {
   extraStoryPlansFromCatalog,
   subscriptionPlansFromCatalog,
@@ -16,7 +20,7 @@ export type { StoryPlan };
 const defaultSubs = subscriptionPlansFromCatalog(DEFAULT_PLAN_CATALOG);
 const defaultExtras = extraStoryPlansFromCatalog(DEFAULT_PLAN_CATALOG);
 
-/** Fallbacks sync (client / imports estáticos). Preferir getPlanCatalog no server. */
+/** Fallbacks sync (client / imports estáticos). Preferir loadSubscriptionPlans no server. */
 export const STARTER_SUBSCRIPTION: StoryPlan = defaultSubs[0]!;
 export const FAMILY_SUBSCRIPTION: StoryPlan = defaultSubs[1]!;
 export const PLUS_SUBSCRIPTION: StoryPlan = defaultSubs[2]!;
@@ -106,12 +110,3 @@ export {
   MONTHLY_STORY_LIMIT,
   priceForAvatarCount,
 };
-
-export {
-  loadSubscriptionPlans,
-  loadExtraStoryByPlan,
-  resolveSubscriptionPlanAsync,
-  extraStoryForPlanAsync,
-} from "@/lib/billing/plans-from-catalog";
-
-export { getPlanCatalog, getPlanCatalogRow } from "@/lib/billing/plan-catalog";

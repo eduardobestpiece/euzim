@@ -1,9 +1,11 @@
-import type { PlanCatalogRow } from "@/lib/billing/plan-catalog";
+/**
+ * Transformações sync catálogo → StoryPlan (client-safe).
+ * Loaders async ficam em plans-catalog-load.ts (server).
+ */
 import {
   DEFAULT_PLAN_CATALOG,
-  getPlanCatalog,
-} from "@/lib/billing/plan-catalog";
-import type { StripePriceKey } from "@/lib/billing/stripe-price-ids";
+  type PlanCatalogRow,
+} from "@/lib/billing/plan-catalog-shared";
 
 export type StoryPlan = {
   id: string;
@@ -16,7 +18,9 @@ export type StoryPlan = {
   includedCharacters: number;
   description: string;
   kind: "subscription" | "extra_story";
-  stripePriceKey?: StripePriceKey;
+  /** Price key Stripe (quando distinto de planId). */
+  stripePriceKey?: string;
+  /** Plano de assinatura ao qual o extra se aplica. */
   forPlanId?: string;
 };
 
@@ -36,7 +40,6 @@ function subscriptionFromRow(row: PlanCatalogRow): StoryPlan {
 }
 
 function extraStoryFromRow(row: PlanCatalogRow): StoryPlan {
-  const stripeKey = `extra_story_${row.planKey}` as StripePriceKey;
   return {
     id: `extra-story-${row.planKey}`,
     planId: `extra_story_${row.planKey}`,
@@ -48,7 +51,7 @@ function extraStoryFromRow(row: PlanCatalogRow): StoryPlan {
     includedCharacters: 0,
     description: `1 história extra (assinantes ${row.name}).`,
     kind: "extra_story",
-    stripePriceKey: stripeKey,
+    stripePriceKey: `extra_story_${row.planKey}`,
     forPlanId: row.planKey,
   };
 }
@@ -70,36 +73,4 @@ export function extraStoryPlansFromCatalog(
   return out;
 }
 
-export async function loadSubscriptionPlans(): Promise<StoryPlan[]> {
-  const rows = await getPlanCatalog();
-  return subscriptionPlansFromCatalog(rows);
-}
-
-export async function loadExtraStoryByPlan(): Promise<
-  Record<string, StoryPlan>
-> {
-  const rows = await getPlanCatalog();
-  return extraStoryPlansFromCatalog(rows);
-}
-
-export async function resolveSubscriptionPlanAsync(
-  planId: string,
-): Promise<StoryPlan | null> {
-  const plans = await loadSubscriptionPlans();
-  return plans.find((p) => p.planId === planId || p.id === planId) ?? null;
-}
-
-export async function extraStoryForPlanAsync(
-  planId: string | null | undefined,
-): Promise<StoryPlan> {
-  const map = await loadExtraStoryByPlan();
-  if (planId && map[planId]) return map[planId];
-  return map.plus ?? extraStoryFromRow(DEFAULT_PLAN_CATALOG[2]!);
-}
-
-/** Preço unitário de avatar extra (usa family como referência; fallback 9,90). */
-export async function extraAvatarUnitBrl(): Promise<number> {
-  const rows = await getPlanCatalog();
-  const row = rows.find((r) => r.planKey === "family") ?? rows[0];
-  return row ? row.extraAvatarCents / 100 : 9.9;
-}
+export { extraStoryFromRow };
