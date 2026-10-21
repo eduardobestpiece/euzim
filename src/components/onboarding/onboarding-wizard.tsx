@@ -51,6 +51,7 @@ import {
 } from "@/lib/onboarding/child-profile";
 import { isPixarGeneratedUrl } from "@/lib/onboarding/pixar-url";
 import { MagicalLoading } from "@/components/ui/magical-loading";
+import { trackBrowserEvent } from "@/lib/tracking/client-browser";
 import type { OnboardingState } from "@/lib/auth/types";
 import {
   SUBSCRIPTION_PLANS,
@@ -463,10 +464,17 @@ export function OnboardingWizard({
     const confirmPin = String(new FormData(form).get("confirmPin") ?? "").trim();
     startTransition(async () => {
       try {
+        const registrationEventId = crypto.randomUUID();
+        await trackBrowserEvent({
+          event: "CompleteRegistration",
+          eventId: registrationEventId,
+          mirrorServer: false,
+          commerce: { product: "Onboarding Euzim" },
+        });
         const res = await fetch("/api/onboarding/complete-pin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pin, confirmPin }),
+          body: JSON.stringify({ pin, confirmPin, registrationEventId }),
         });
         const body = (await res.json()) as {
           error?: string;
